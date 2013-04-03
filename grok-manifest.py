@@ -21,6 +21,8 @@ import time
 
 import grokmirror
 
+from git import Repo
+
 logger = logging.getLogger(__name__)
 
 def update_manifest(manifest, toplevel, gitdir, usenow):
@@ -39,8 +41,8 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         repo = Repo(gitdir)
         assert repo.bare == True
     except:
-        sys.stdout.write('Error opening %s.\n' % gitdir)
-        sys.stdout.write('Make sure it is a bare git repository.\n')
+        logger.critical('Error opening %s.' % gitdir)
+        logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
     modified = 0

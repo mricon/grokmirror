@@ -17,7 +17,6 @@
 import os
 import sys
 
-from git import Repo
 import json
 
 import logging
