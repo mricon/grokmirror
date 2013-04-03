@@ -234,7 +234,13 @@ def pull_mirror(name, config, opts):
     for gitdir in to_clone_first:
         clone_repo(toplevel, gitdir, config['site'])
 
-    # we use this to track which existing repos can be used as references
+    # we use "existing" to track which repos can be used as references
+    # XXX: This doesn't work for fork-of-a-fork repositories, which
+    # must be cloned according to the dependency map.
+    # E.g. repA is a shared clone of repB, repC is shared clone of repB
+    # Currently, we'll clone repC fully, but it should be improved.
+    # Instead of using "to_clone_first" and "to_clone_second" we should be
+    # using a dependency resolver.
     existing.extend(to_pull)
     existing.extend(to_clone_first)
 
