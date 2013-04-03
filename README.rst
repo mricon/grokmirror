@@ -28,8 +28,12 @@ the manifest file is as follows::
     {
       "/path/to/bare/repository.git": {
         "description": "Repository description",
-        "reference":   [null, or "/path/to/reference/repository.git"],
+        "reference":   "/path/to/reference/repository.git",
         "modified":    timestamp,
+        "symlinks": [
+            "/location/to/symlink",
+            ...
+        ],
        }
        ...
     }
