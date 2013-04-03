@@ -79,6 +79,8 @@ SERVER SETUP
 ------------
 Install grokmirror on the server using your preferred way.
 
+**IMPORTANT: Currently, only bare git repositories are supported.**
+
 You will need to add a hook to each one of your repositories that would
 update the manifest upon repository modification. This can either be a
 post-receive hook, or a post-update hook. The hook must call the
