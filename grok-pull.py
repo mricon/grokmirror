@@ -199,7 +199,7 @@ def pull_mirror(name, config, opts):
     to_clone_first  = []
     to_clone_second = []
     existing        = []
-    to_pull = []
+    to_pull         = []
 
     toplevel = config['toplevel']
     for gitdir in culled.keys():
@@ -245,6 +245,15 @@ def pull_mirror(name, config, opts):
         else:
             # We don't carry the reference to this repo, so clone fully
             clone_repo(toplevel, gitdir, config['site'])
+
+    # loop through all entries and find any symlinks we need to set
+    for gitdir in culled.keys():
+        if symlinks in culled[gitdir].keys():
+            source = os.path.join(config['toplevel'], gitdir.lstrip('/'))
+            for symlink in culled[gitdir]['symlinks']:
+                target = os.path.join(config['toplevel'], symlink.lstrip('/'))
+                logger.info('Symlinking %s -> %s' % (target, source))
+                os.symlink(source, target)
 
     if opts.purge:
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):

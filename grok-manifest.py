@@ -79,6 +79,34 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
 
     manifest[path] = entry
 
+def set_symlinks(manifest, toplevel, symlinks):
+    for symlink in symlinks:
+        target = os.path.realpath(symlink)
+        if target.find(toplevel) < 0:
+            logger.info('Symlink %s points outside toplevel, ignored' % symlink)
+            continue
+        tgtgitdir = target.replace(toplevel, '')
+        if tgtgitdir not in manifest.keys():
+            logger.info('Symlink %s points to %s, which we do not recognize'
+                    % (symlink, target))
+            continue
+        relative = symlink.replace(toplevel, '')
+        if 'symlinks' in manifest[tgtgitdir].keys():
+            if relative not in manifest[tgtgitdir]['symlinks']:
+                logger.info('Recording symlink %s->%s' % (relative, tgtgitdir))
+                manifest[tgtgitdir]['symlinks'].append(relative)
+        else:
+            manifest[tgtgitdir]['symlinks'] = [relative]
+            logger.info('Recording symlink %s to %s' % (relative, tgtgitdir))
+
+        # Now go through all repos and fix any references pointing to the
+        # symlinked location.
+        for gitdir in manifest.keys():
+            if manifest[gitdir]['reference'] == relative:
+                logger.info('Adjusted symlinked reference for %s: %s->%s'
+                        % (gitdir, relative, tgtgitdir))
+                manifest[gitdir]['reference'] == tgtgitdir
+
 def purge_manifest(manifest, toplevel, gitdirs):
     for oldrepo in manifest.keys():
         if os.path.join(toplevel, oldrepo.lstrip('/')) not in gitdirs:
@@ -143,8 +171,15 @@ if __name__ == '__main__':
         # whole file when there is nothing in it or it can't be parsed.
         gitdirs = args
 
+    symlinks = []
     for gitdir in gitdirs:
-        update_manifest(manifest, opts.toplevel, gitdir, opts.usenow)
+        if os.path.islink(gitdir):
+            symlinks.append(gitdir)
+        else:
+            update_manifest(manifest, opts.toplevel, gitdir, opts.usenow)
+
+    if len(symlinks):
+        set_symlinks(manifest, opts.toplevel, symlinks)
 
     grokmirror.write_manifest(opts.manifile, manifest)
 
