@@ -34,14 +34,14 @@ def find_all_gitdirs(toplevel):
         torm = []
         for name in dirs:
             if name.find('.git') > 0:
+                logger.info('Found %s' % os.path.join(root, name))
                 gitdirs.append(os.path.join(root, name))
                 torm.append(name)
 
         for name in torm:
-            # don't recurse into .git dirs
+            # don't recurse into the found *.git dirs
             dirs.remove(name)
 
-    logger.debug('Found %d dirs' % len(gitdirs))
     return gitdirs
 
 def read_manifest(manifile):
