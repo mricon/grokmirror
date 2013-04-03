@@ -1,0 +1,4 @@
+include COPYING
+include *.rst
+include *.conf
+include *.spec

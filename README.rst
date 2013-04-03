@@ -1,0 +1,160 @@
+GROKMIRROR
+==========
+--------------------------------------------
+Framework to smartly mirror git repositories
+--------------------------------------------
+
+:Author:    mricon@kernel.org
+:Date:      2013-04-03
+:Copyright: The Linux Foundation and contributors
+:License:   GPLv3+
+:Version:   0.1
+
+DESCRIPTION
+-----------
+Grokmirror was written to make mirroring large git repository
+collections more efficient. Grokmirror uses the manifest file published
+by the master mirror in order to figure out which repositories to
+clone, and to track which repositories require updating. The process is
+extremely lightweight and efficient both for the master and for the
+mirrors.
+
+CONCEPTS
+--------
+Grokmirror master publishes a json-formatted manifest file containing
+information about all git repositories that it carries. The format of
+the manifest file is as follows::
+
+    {
+      "/path/to/bare/repository.git": {
+        "description": "Repository description",
+        "reference":   [null, or "/path/to/reference/repository.git"],
+        "modified":    timestamp,
+       }
+       ...
+    }
+
+The manifest file is usually gzip-compressed to preserve bandwidth.
+
+Each time a commit is made to one of the git repositories, it
+automatically updates the manifest file using an appropriate git hook,
+so the manifest.js file always contains the most up-to-date information
+about the repositories provided by the git server and their
+last-modified date.
+
+The mirroring clients will constantly poll the manifest.js file and
+download the updated manifest if it is newer than the locally stored
+copy (using ``Last-Modified`` and ``If-Modified-Since`` http headers).
+After downloading the updated manifest.js file, the mirrors will parse
+it to find out which repositories have been updated and which new
+repositories have been added.
+
+For all newly-added repositories, the clients will do::
+
+    git clone --mirror git://server/path/to/repository.git \
+        /local/path/to/repository.git
+
+For all updated repositories, the clients will do::
+
+    GIT_DIR=/local/path/to/repository.git git remote update
+
+When run with ``--purge``, the clients will also purge any repositories
+no longer present in the manifest file received from the server.
+
+Shared repositories
+~~~~~~~~~~~~~~~~~~~
+Grokmirror will automatically recognize when repositories share objects
+via alternates. E.g. if repositoryB is a shared clone of repositoryA
+(that is, it's been cloned using ``git clone -s repositoryA``), the
+manifest will mention the referencing repository, so grokmirror will
+mirror repositoryA first, and then mirror repositoryB with a
+``--reference`` flag. This greatly reduces the bandwidth and disk use
+for large repositories.
+
+See man git-clone_ for more info.
+
+.. _git-clone: https://www.kernel.org/pub/software/scm/git/docs/git-clone.html
+
+SERVER SETUP
+------------
+Install grokmirror on the server using your preferred way.
+
+You will need to add a hook to each one of your repositories that would
+update the manifest upon repository modification. This can either be a
+post-receive hook, or a post-update hook. The hook must call the
+following command::
+
+    /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -n `pwd`
+
+The **-m** flag is the path to the manifest.js file. The git process must be
+able to write to it and to the directory the file is in (it creates a
+manifest.js.randomstring file first, and then moves it in place of the
+old one for atomicity).
+
+The **-t** flag is to help grokmirror trim the irrelevant toplevel disk
+path. E.g. if your repository is in /var/lib/git/repository.git, but it
+is exported as git://server/repository.git, then you specify ``-t
+/var/lib/git``.
+
+The **-n** flag tells grokmirror to use the current timestamp instead of the
+exact timestamp of the commit (much faster this way).
+
+Before enabling the hook, you will need to generate the manifest.js of
+all your git repositories. In order to do that, run the same command,
+but omit the -n and the \`pwd\` argument. E.g.::
+
+    /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos
+
+The last component you need to set up is to automatically purge deleted
+repositories from the manifest. As this can't be added to a git hook,
+you can either run the ``--purge`` command from cron, or add it to your
+gitolite's ``rm`` ADC::
+
+    /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -p
+
+MIRROR SETUP
+------------
+Install grokmirror on the mirror using your preferred way.
+
+Locate repos.conf and modify it to reflect your needs. The default
+configuration file is heavily commented.
+
+Add a cronjob to run as frequently as you like. For example, add the
+following to ``/etc/cron.d/grokmirror.cron``::
+
+    # Run grok-pull every minute as user "mirror"
+    * * * * * mirror /usr/bin/grok-pull -p -c /etc/grokmirror/repos.conf
+
+Make sure the user "mirror" (or whichever user you specified) is able to
+write to the toplevel, log and lock locations specified in repos.conf.
+
+FAQ
+---
+Why is it called "grok mirror"?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Because it's developed at kernel.org and "grok" is a mirror of "korg".
+Also, because it groks git mirroring.
+
+Why not just use rsync?
+~~~~~~~~~~~~~~~~~~~~~~~
+Rsync is extremely inefficient for the purpose of mirroring git trees
+that mostly consist of a lot of small files that very rarely change.
+Since rsync must calculate checksums on each file during each run, it
+mostly results in a lot of disk thrashing.
+
+Additionally, if several repositories share objects between each-other,
+unless the disk paths are exactly the same on both the remote and local
+mirror, this will result in broken git repositories.
+
+It is also a bit silly, considering git provides its own extremely
+efficient mechanism for specifying what changed between revision X and
+revision Y.
+
+Why not just run "git pull" from cron every minute?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This is not a complete mirroring strategy, as this won't notify you when
+the remote mirror adds new repositories. It is also not very nice to the
+remote server, especially the one that carries hundreds of repositories.
+
+Additionally, this will not automatically take care of shared
+repositories for you. See "Shared repositories" under "CONCEPTS".
