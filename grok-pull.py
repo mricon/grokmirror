@@ -280,23 +280,26 @@ def pull_mirror(name, config, opts):
     for gitdir in to_pull:
         pull_repo(toplevel, gitdir)
 
-    # we use "existing" to track which repos can be used as references
-    existing.extend(to_pull)
+    if to_clone:
+        # we use "existing" to track which repos can be used as references
+        existing.extend(to_pull)
 
-    to_clone_sorted = []
-    clone_order(to_clone, manifest, to_clone_sorted, existing)
+        to_clone_sorted = []
+        clone_order(to_clone, manifest, to_clone_sorted, existing)
 
-    for gitdir in to_clone_sorted:
-        reference = culled[gitdir]['reference']
-        if reference is not None and reference in existing:
-            clone_repo(toplevel, gitdir, config['site'], reference=reference)
-        else:
-            clone_repo(toplevel, gitdir, config['site'])
+        for gitdir in to_clone_sorted:
+            reference = culled[gitdir]['reference']
+            if reference is not None and reference in existing:
+                clone_repo(toplevel, gitdir, config['site'],
+                        reference=reference)
+            else:
+                clone_repo(toplevel, gitdir, config['site'])
 
-        # check dir to make sure cloning succeeded and then add to existing
-        if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
-            logger.debug('Cloning of %s succeeded, adding to existing' % gitdir)
-            existing.append(gitdir)
+            # check dir to make sure cloning succeeded and then add to existing
+            if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
+                logger.debug('Cloning of %s succeeded, adding to existing'
+                        % gitdir)
+                existing.append(gitdir)
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
