@@ -44,8 +44,23 @@ def pull_repo(toplevel, gitdir):
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, env=env).communicate()
 
-    if error.strip():
-        logger.warning('Stderr: %s' % error.strip())
+    error = error.strip()
+
+    if error:
+        # Put things we recognize into debug
+        debug = []
+        warn  = []
+        for line in error.split('\n'):
+            if line.find('From ') == 0:
+                debug.append(line)
+            elif line.find('-> ') > 0:
+                debug.append(line)
+            else:
+                warn.append(line)
+        if debug:
+            logger.debug('Stderr: %s' % '\n'.join(debug))
+        if warn:
+            logger.warning('Stderr: %s' % '\n'.join(warn))
 
 def clone_repo(toplevel, gitdir, site, reference=None):
     source = os.path.join(site, gitdir.lstrip('/'))
@@ -69,8 +84,22 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE).communicate()
 
-    if error.strip():
-        logger.warning('Stderr: %s' % error.strip())
+    error = error.strip()
+
+    if error:
+        # Put things we recognize into debug
+        debug = []
+        warn  = []
+        for line in error.split('\n'):
+            if line.find('cloned an empty repository') > 0:
+                debug.append(line)
+            else:
+                warn.append(line)
+        if debug:
+            logger.debug('Stderr: %s' % '\n'.join(debug))
+        if warn:
+            logger.warning('Stderr: %s' % '\n'.join(warn))
+
 
 def clone_order(to_clone, manifest, to_clone_sorted, existing):
     # recursively go through the list and resolve dependencies
@@ -141,7 +170,7 @@ def pull_mirror(name, config, opts):
     except IOError, ex:
         logger.info('Could not obtain exclusive lock on %s' % config['lock'])
         logger.info('Assuming another process is running.')
-        return
+        return 0
 
     mymanifest = config['mymanifest']
     logger.info('Fetching remote manifest from %s' % config['manifest'])
@@ -165,18 +194,18 @@ def pull_mirror(name, config, opts):
             logger.info('Server says we have the latest manifest. Quitting.')
             flock(flockh, LOCK_UN)
             flockh.close()
-            return
+            return 0
         logger.critical('Could not fetch %s' % config['manifest'])
         logger.critical('Server returned: %s' % ex)
         flock(flockh, LOCK_UN)
         flockh.close()
-        return
+        return 1
     except urllib2.URLError, ex:
         logger.critical('Could not fetch %s' % config['manifest'])
         logger.critical('Error was: %s' % ex)
         flock(flockh, LOCK_UN)
         flockh.close()
-        return
+        return 1
 
     last_modified = ufh.headers.get('Last-Modified')
     last_modified = time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z')
@@ -196,7 +225,7 @@ def pull_mirror(name, config, opts):
         logger.critical('Failed to parse %s' % config['manifest'])
         flock(flockh, LOCK_UN)
         flockh.close()
-        return
+        return 1
 
     mymanifest = grokmirror.read_manifest(mymanifest)
 
@@ -236,7 +265,7 @@ def pull_mirror(name, config, opts):
                             > mymanifest[gitdir]['modified']):
                         to_pull.append(gitdir)
                     else:
-                        logger.info('Repo %s unchanged in manifest' % gitdir)
+                        logger.debug('Repo %s unchanged in manifest' % gitdir)
                         existing.append(gitdir)
                 continue
 
@@ -270,26 +299,37 @@ def pull_mirror(name, config, opts):
             existing.append(gitdir)
 
     # loop through all entries and find any symlinks we need to set
+    # We also collect all symlinks to do purging correctly
+    symlinks = []
     for gitdir in culled.keys():
         if 'symlinks' in culled[gitdir].keys():
             source = os.path.join(config['toplevel'], gitdir.lstrip('/'))
             for symlink in culled[gitdir]['symlinks']:
+                if symlink not in symlinks:
+                    symlinks.append(symlink)
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
-                logger.info('Symlinking %s -> %s' % (target, source))
-                os.symlink(source, target)
+                if not os.path.exists(target):
+                    logger.info('Symlinking %s -> %s' % (target, source))
+                    os.symlink(source, target)
 
     if opts.purge:
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
             gitdir = founddir.replace(config['toplevel'], '')
-            if gitdir not in culled.keys():
-                logger.info('Purging %s' % gitdir)
-                shutil.rmtree(founddir)
+            if gitdir not in culled.keys() and gitdir not in symlinks:
+                if os.path.islink(gitdir):
+                    logger.info('Removing unreferenced synlink %s' % gitdir)
+                    os.unlink(gitdir)
+                else:
+                    logger.info('Purging %s' % gitdir)
+                    shutil.rmtree(founddir)
 
     # Once we're done, save culled as our new manifest
     grokmirror.write_manifest(config['mymanifest'], culled, last_modified)
     logger.debug('Unlocking %s' % config['lock'])
     flock(flockh, LOCK_UN)
     flockh.close()
+
+    return 127
 
 
 if __name__ == '__main__':
@@ -321,9 +361,20 @@ if __name__ == '__main__':
 
     ini = ConfigParser()
     ini.read(opts.config)
+
+    retval = 0
+
     for section in ini.sections():
         config = {}
         for (option, value) in ini.items(section):
             config[option] = value
 
-        pull_mirror(section, config, opts)
+        sect_retval = pull_mirror(section, config, opts)
+        if sect_retval == 1:
+            # Fatal error encountered at some point
+            retval = 1
+        elif sect_retval == 127:
+            # Successful run with contents modified
+            retval = 127
+
+    sys.exit(retval)
