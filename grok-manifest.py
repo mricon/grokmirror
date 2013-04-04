@@ -105,7 +105,7 @@ def set_symlinks(manifest, toplevel, symlinks):
             if manifest[gitdir]['reference'] == relative:
                 logger.info('Adjusted symlinked reference for %s: %s->%s'
                         % (gitdir, relative, tgtgitdir))
-                manifest[gitdir]['reference'] == tgtgitdir
+                manifest[gitdir]['reference'] = tgtgitdir
 
 def purge_manifest(manifest, toplevel, gitdirs):
     for oldrepo in manifest.keys():

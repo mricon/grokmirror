@@ -72,6 +72,33 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     if error.strip():
         logger.warning('Stderr: %s' % error.strip())
 
+def clone_order(to_clone, manifest, to_clone_sorted, existing):
+    # recursively go through the list and resolve dependencies
+    new_to_clone = []
+    num_received = len(to_clone)
+    logger.debug('Another clone_order loop')
+    for gitdir in to_clone:
+        reference = manifest[gitdir]['reference']
+        logger.debug('reference: %s' % reference)
+        if (reference in existing
+                or reference in to_clone_sorted
+                or reference is None):
+            logger.debug('%s: reference found in existing' % gitdir)
+            to_clone_sorted.append(gitdir)
+        else:
+            logger.debug('%s: reference not found' % gitdir)
+            new_to_clone.append(gitdir)
+    if len(new_to_clone) == 0 or len(new_to_clone) == num_received:
+        # we can resolve no more dependencies, break out
+        logger.debug('Finished resolving dependencies, quitting')
+        if len(to_clone):
+            logger.debug('Unresolved: %s' % new_to_clone)
+        to_clone_sorted.extend(to_clone)
+        return
+
+    logger.debug('Going for another clone_order loop')
+    clone_order(new_to_clone, manifest, to_clone_sorted, existing)
+
 def pull_mirror(name, config, opts):
     global logger
     logger = logging.getLogger(name)
@@ -194,12 +221,9 @@ def pull_mirror(name, config, opts):
 
                 culled[gitdir] = manifest[gitdir]
 
-    # We first clone any repositories that don't have references listed
-    # Then we clone all others
-    to_clone_first  = []
-    to_clone_second = []
-    existing        = []
-    to_pull         = []
+    to_clone = []
+    to_pull  = []
+    existing = []
 
     toplevel = config['toplevel']
     for gitdir in culled.keys():
@@ -222,29 +246,18 @@ def pull_mirror(name, config, opts):
             to_pull.append(gitdir)
             continue
 
-        if culled[gitdir]['reference'] is None:
-            to_clone_first.append(gitdir)
-        else:
-            to_clone_second.append(gitdir)
+        to_clone.append(gitdir)
 
     for gitdir in to_pull:
         pull_repo(toplevel, gitdir)
-    # We need to clone all repositories that don't have references
-    # first.
-    for gitdir in to_clone_first:
-        clone_repo(toplevel, gitdir, config['site'])
 
     # we use "existing" to track which repos can be used as references
-    # XXX: This doesn't work for fork-of-a-fork repositories, which
-    # must be cloned according to the dependency map.
-    # E.g. repA is a shared clone of repB, repC is shared clone of repB
-    # Currently, we'll clone repC fully, but it should be improved.
-    # Instead of using "to_clone_first" and "to_clone_second" we should be
-    # using a dependency resolver.
     existing.extend(to_pull)
-    existing.extend(to_clone_first)
 
-    for gitdir in to_clone_second:
+    to_clone_sorted = []
+    clone_order(to_clone, manifest, to_clone_sorted, existing)
+
+    for gitdir in to_clone_sorted:
         reference = culled[gitdir]['reference']
         if reference in existing:
             clone_repo(toplevel, gitdir, config['site'], reference=reference)
@@ -254,7 +267,7 @@ def pull_mirror(name, config, opts):
 
     # loop through all entries and find any symlinks we need to set
     for gitdir in culled.keys():
-        if symlinks in culled[gitdir].keys():
+        if 'symlinks' in culled[gitdir].keys():
             source = os.path.join(config['toplevel'], gitdir.lstrip('/'))
             for symlink in culled[gitdir]['symlinks']:
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
