@@ -91,9 +91,9 @@ def clone_order(to_clone, manifest, to_clone_sorted, existing):
     if len(new_to_clone) == 0 or len(new_to_clone) == num_received:
         # we can resolve no more dependencies, break out
         logger.debug('Finished resolving dependencies, quitting')
-        if len(to_clone):
+        if len(new_to_clone):
             logger.debug('Unresolved: %s' % new_to_clone)
-        to_clone_sorted.extend(to_clone)
+            to_clone_sorted.extend(new_to_clone)
         return
 
     logger.debug('Going for another clone_order loop')
