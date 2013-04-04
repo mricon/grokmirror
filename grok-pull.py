@@ -259,11 +259,15 @@ def pull_mirror(name, config, opts):
 
     for gitdir in to_clone_sorted:
         reference = culled[gitdir]['reference']
-        if reference in existing:
+        if reference is not None and reference in existing:
             clone_repo(toplevel, gitdir, config['site'], reference=reference)
         else:
-            # We don't carry the reference to this repo, so clone fully
             clone_repo(toplevel, gitdir, config['site'])
+
+        # check dir to make sure cloning succeeded and then add to existing
+        if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
+            logger.debug('Cloning of %s succeeded, adding to existing' % gitdir)
+            existing.append(gitdir)
 
     # loop through all entries and find any symlinks we need to set
     for gitdir in culled.keys():
