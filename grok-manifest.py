@@ -45,6 +45,11 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
+    # Ignore it if it's an empty git repository
+    if len(repo.heads) == 0:
+        logger.info('%s has no heads, ignoring' % gitdir)
+        return
+
     modified = 0
 
     if not usenow:
@@ -77,6 +82,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
             'modified':    modified,
             }
 
+    logger.info('Adding %s to manifest' % path)
     manifest[path] = entry
 
 def set_symlinks(manifest, toplevel, symlinks):
