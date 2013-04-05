@@ -28,13 +28,6 @@ logger = logging.getLogger(__name__)
 def update_manifest(manifest, toplevel, gitdir, usenow):
     path = gitdir.replace(toplevel, '')
 
-    if usenow and path in manifest.keys():
-        # Is it already in the manifest? If so, just update the
-        # modified timestamp and get out.
-        logger.info('Updating timestamp for %s' % gitdir)
-        manifest[path]['modified'] = int(time.time())
-        return
-
     # Try to open git dir
     logger.debug('Examining %s' % gitdir)
     try:
@@ -49,6 +42,17 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     if len(repo.heads) == 0:
         logger.info('%s has no heads, ignoring' % gitdir)
         return
+
+    try:
+        description = repo.description
+    except:
+        description = 'Unnamed repository'
+
+    try:
+        rcr   = repo.config_reader()
+        owner = rcr.get('gitweb', 'owner')
+    except:
+        owner = None
 
     modified = 0
 
@@ -71,19 +75,16 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         if alternate.find(toplevel) == 0:
             reference = alternate.replace(toplevel, '').replace('/objects', '')
 
-    try:
-        description = repo.description
-    except:
-        description = 'Unnamed repository'
+    if path not in manifest.keys():
+        logger.info('Adding %s to manifest' % path)
+        manifest[path] = {}
+    else:
+        logger.info('Updating %s in the manifest' % path)
 
-    entry = {
-            'description': description,
-            'reference':   reference,
-            'modified':    modified,
-            }
-
-    logger.info('Adding %s to manifest' % path)
-    manifest[path] = entry
+    manifest[path]['owner']       = owner
+    manifest[path]['description'] = description
+    manifest[path]['reference']   = reference
+    manifest[path]['modified']    = modified
 
 def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:

@@ -31,8 +31,29 @@ import calendar
 from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
 from StringIO import StringIO
 
+from git import Repo
+
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
+
+def set_owner_description(toplevel, gitdir, owner, description):
+    if owner is None and description is None:
+        # Let the default git values be there, then
+        return
+
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    repo = Repo(fullpath)
+
+    if description is not None and repo.description != description:
+        logger.debug('Setting %s description to: %s' % (gitdir, description))
+        repo.description = description
+
+    if owner is not None:
+        rcw = repo.config_writer()
+        logger.debug('Setting %s owner to: %s' % (gitdir, owner))
+        if not rcw.has_section('gitweb'):
+            rcw.add_section('gitweb')
+        rcw.set('gitweb', 'owner', owner)
 
 def pull_repo(toplevel, gitdir):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
@@ -261,6 +282,19 @@ def pull_mirror(name, config, opts):
             if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
                 # Is it newer than what we have in our old manifest?
                 if gitdir in mymanifest.keys():
+                    # This code is hurky and needs to be cleaned up
+                    desc    = culled[gitdir].get('description')
+                    owner   = culled[gitdir].get('owner')
+                    mydesc  = mymanifest[gitdir].get('description')
+                    myowner = mymanifest[gitdir].get('owner')
+                    if owner is None:
+                        owner = config['default_owner']
+                    if myowner is None:
+                        myowner = config['default_owner']
+                    if (owner != myowner or desc != mydesc):
+                        # we can do this right away without waiting
+                        set_owner_description(toplevel, gitdir, owner, desc)
+
                     if (opts.force or culled[gitdir]['modified']
                             > mymanifest[gitdir]['modified']):
                         to_pull.append(gitdir)
@@ -300,6 +334,12 @@ def pull_mirror(name, config, opts):
                 logger.debug('Cloning of %s succeeded, adding to existing'
                         % gitdir)
                 existing.append(gitdir)
+
+                desc    = culled[gitdir].get('description')
+                owner   = culled[gitdir].get('owner')
+                if owner is None:
+                    owner = config['default_owner']
+                set_owner_description(toplevel, gitdir, owner, desc)
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -371,6 +411,9 @@ if __name__ == '__main__':
         config = {}
         for (option, value) in ini.items(section):
             config[option] = value
+
+        if 'default_owner' not in config.keys():
+            config['default_owner'] = 'Grokmirror User'
 
         sect_retval = pull_mirror(section, config, opts)
         if sect_retval == 1:
