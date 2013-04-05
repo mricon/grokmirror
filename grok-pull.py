@@ -55,6 +55,19 @@ def set_owner_description(toplevel, gitdir, owner, description):
             rcw.add_section('gitweb')
         rcw.set('gitweb', 'owner', owner)
 
+def set_agefile(toplevel, gitdir, last_modified):
+    # set agefile, which can be used by cgit to show idle times
+    # cgit recommends it to be yyyy-mm-dd hh:mm:ss
+    cgit_fmt = time.strftime('%F %T', time.gmtime(last_modified))
+    agefile = os.path.join(toplevel, gitdir.lstrip('/'),
+            'info/web/last-modified')
+    if not os.path.exists(os.path.dirname(agefile)):
+        os.makedirs(os.path.dirname(agefile))
+    fh = open(agefile, 'w')
+    fh.write('%s\n' % cgit_fmt)
+    fh.close()
+    logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
+
 def pull_repo(toplevel, gitdir):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
     args = ['/usr/bin/git', 'remote', 'update']
@@ -313,6 +326,7 @@ def pull_mirror(name, config, opts):
 
     for gitdir in to_pull:
         pull_repo(toplevel, gitdir)
+        set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
 
     if to_clone:
         # we use "existing" to track which repos can be used as references
@@ -340,6 +354,7 @@ def pull_mirror(name, config, opts):
                 if owner is None:
                     owner = config['default_owner']
                 set_owner_description(toplevel, gitdir, owner, desc)
+                set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
