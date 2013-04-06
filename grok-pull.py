@@ -70,7 +70,7 @@ def set_agefile(toplevel, gitdir, last_modified):
 
 def pull_repo(toplevel, gitdir):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
-    args = ['/usr/bin/git', 'remote', 'update']
+    args = ['/usr/bin/git', 'remote', 'update', '--prune']
     logger.info('Updating %s' % gitdir)
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
