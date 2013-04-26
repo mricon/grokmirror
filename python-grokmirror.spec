@@ -50,7 +50,7 @@ rm -rf %{buildroot}
 
 
 %changelog
-* THu Apr 25 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.2-1
+* Thu Apr 25 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.2-1
 - Version 0.2 with minor improvements.
 
 * Wed Apr 03 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.1-1
