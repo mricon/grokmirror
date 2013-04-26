@@ -68,6 +68,29 @@ def set_agefile(toplevel, gitdir, last_modified):
     fh.close()
     logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
 
+def run_post_update_hook(hookscript, toplevel, gitdir):
+    if hookscript == '':
+        return
+    if not os.access(hookscript, os.X_OK):
+        logger.warning('post_update_hook %s is not executable' % hookscript)
+        return
+
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    args = [hookscript, fullpath]
+    logger.debug('Running: %s' % ' '.join(args))
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).communicate()
+
+    error  = error.strip()
+    output = output.strip()
+    if error:
+        # Put hook stderror into warning
+        logger.warning('Hook Stderr: %s' % error)
+    if output:
+        # Put hook stdout into info
+        logger.info('Hook Stdout: %s' % output)
+
+
 def pull_repo(toplevel, gitdir):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
     args = ['/usr/bin/git', 'remote', 'update', '--prune']
@@ -359,9 +382,12 @@ def pull_mirror(name, config, opts):
 
         to_clone.append(gitdir)
 
+    hookscript = config['post_update_hook']
+
     for gitdir in to_pull:
         pull_repo(toplevel, gitdir)
         set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
+        run_post_update_hook(hookscript, toplevel, gitdir)
 
     if to_clone:
         # we use "existing" to track which repos can be used as references
@@ -390,6 +416,7 @@ def pull_mirror(name, config, opts):
                     owner = config['default_owner']
                 set_owner_description(toplevel, gitdir, owner, desc)
                 set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
+                run_post_update_hook(hookscript, toplevel, gitdir)
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -410,7 +437,7 @@ def pull_mirror(name, config, opts):
             gitdir = founddir.replace(config['toplevel'], '')
             if gitdir not in culled.keys() and gitdir not in symlinks:
                 if os.path.islink(gitdir):
-                    logger.info('Removing unreferenced synlink %s' % gitdir)
+                    logger.info('Removing unreferenced symlink %s' % gitdir)
                     os.unlink(gitdir)
                 else:
                     logger.info('Purging %s' % gitdir)
@@ -468,6 +495,8 @@ if __name__ == '__main__':
 
         if 'default_owner' not in config.keys():
             config['default_owner'] = 'Grokmirror User'
+        if 'post_update_hook' not in config.keys():
+            config['post_update_hook'] = ''
 
         sect_retval = pull_mirror(section, config, opts)
         if sect_retval == 1:
