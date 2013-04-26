@@ -127,7 +127,7 @@ if __name__ == '__main__':
     Create or update manifest.js with the latest repository information.
     '''
 
-    parser = OptionParser(usage=usage, version='0.1')
+    parser = OptionParser(usage=usage, version=grokmirror.VERSION)
     parser.add_option('-m', '--manifest', dest='manifile',
         help='Location of manifest.js or manifest.js.gz')
     parser.add_option('-t', '--toplevel', dest='toplevel',

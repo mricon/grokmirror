@@ -21,6 +21,8 @@ import json
 
 import logging
 
+VERSION = '0.2'
+
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 

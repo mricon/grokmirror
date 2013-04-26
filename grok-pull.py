@@ -162,6 +162,41 @@ def clone_order(to_clone, manifest, to_clone_sorted, existing):
     logger.debug('Going for another clone_order loop')
     clone_order(new_to_clone, manifest, to_clone_sorted, existing)
 
+def write_projects_list(manifest, config):
+    import tempfile
+    import shutil
+
+    if 'projectslist' not in config.keys():
+        return
+
+    if config['projectslist'] == '':
+        return
+
+    plpath  = config['projectslist']
+    trimtop = ''
+
+    if 'projectslist_trimtop' in config.keys():
+        trimtop = config['projectslist_trimtop']
+
+    (dirname, basename) = os.path.split(plpath)
+    (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
+    logger.info('Writing new %s' % plpath)
+    try:
+        fh = open(tmpfile, 'w')
+        for gitdir in manifest.keys():
+            if trimtop and gitdir.find(trimtop) == 0:
+                gitdir = gitdir[len(trimtop):]
+            fh.write('%s\n' % gitdir)
+        fh.close()
+        os.chmod(tmpfile, 0644)
+        shutil.move(tmpfile, plpath)
+
+    finally:
+        # If something failed, don't leave tempfiles trailing around
+        if os.path.exists(tmpfile):
+            os.unlink(tmpfile)
+
+
 def pull_mirror(name, config, opts):
     global logger
     logger = logging.getLogger(name)
@@ -383,6 +418,10 @@ def pull_mirror(name, config, opts):
 
     # Once we're done, save culled as our new manifest
     grokmirror.write_manifest(config['mymanifest'], culled, last_modified)
+
+    # write out projects.list, if asked to
+    write_projects_list(culled, config)
+
     logger.debug('Unlocking %s' % config['lock'])
     flock(flockh, LOCK_UN)
     flockh.close()
@@ -398,7 +437,7 @@ if __name__ == '__main__':
     Create a grok mirror using the repository configuration found in repos.conf
     '''
 
-    parser = OptionParser(usage=usage, version='0.1')
+    parser = OptionParser(usage=usage, version=grokmirror.VERSION)
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
         default=False,
         help='Be verbose and tell us what you are doing')
