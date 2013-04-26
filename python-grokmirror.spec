@@ -40,6 +40,9 @@ rm -rf %{buildroot}
     %{buildroot}%{_bindir}
 %{__install} -m 0755 grok-manifest.py %{buildroot}/%{_bindir}/grok-manifest
 %{__install} -m 0755 grok-pull.py     %{buildroot}/%{_bindir}/grok-pull
+%{__mkdir_p} -m 0755 \
+    %{buildroot}%{_mandir}/1
+%{__install} -m 0644 man/*.1 %{buildroot}/%{_mandir}/1/
 
 
 %files
@@ -47,11 +50,12 @@ rm -rf %{buildroot}
 %{python_sitelib}/grokmirror/
 %{python_sitelib}/*.egg-info
 %{_bindir}/grok-*
+%{_mandir}/*/*
 
 
 %changelog
 * Thu Apr 25 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.2-1
-- Version 0.2 with minor improvements.
+- Version 0.2 with new features and manpages.
 
 * Wed Apr 03 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.1-1
 - Initial packaging
