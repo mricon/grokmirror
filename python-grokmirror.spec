@@ -41,8 +41,8 @@ rm -rf %{buildroot}
 %{__install} -m 0755 grok-manifest.py %{buildroot}/%{_bindir}/grok-manifest
 %{__install} -m 0755 grok-pull.py     %{buildroot}/%{_bindir}/grok-pull
 %{__mkdir_p} -m 0755 \
-    %{buildroot}%{_mandir}/1
-%{__install} -m 0644 man/*.1 %{buildroot}/%{_mandir}/1/
+    %{buildroot}%{_mandir}/man1
+%{__install} -m 0644 man/*.1 %{buildroot}/%{_mandir}/man1/
 
 
 %files
