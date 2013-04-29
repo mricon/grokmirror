@@ -138,6 +138,9 @@ if __name__ == '__main__':
     parser.add_option('-p', '--purge', dest='purge', action='store_true',
         default=False,
         help='Purge deleted git repositories from manifest')
+    parser.add_option('-x', '--remove', dest='remove', action='store_true',
+        default=False,
+        help='Remove repositories passed as arguments from manifest')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
         default=False,
         help='Be verbose and tell us what you are doing')
@@ -165,7 +168,25 @@ if __name__ == '__main__':
     # push our logger into grokmirror to override the default
     grokmirror.logger = logger
 
+    grokmirror.manifest_lock(opts.manifile)
     manifest = grokmirror.read_manifest(opts.manifile)
+
+    if opts.remove and len(args):
+        # Remove the repos as required, write new manfiest and exit
+        for fullpath in args:
+            repo = fullpath.replace(opts.toplevel, '', 1)
+            if repo in manifest.keys():
+                del manifest[repo]
+                logger.info('Repository %s removed from manifest' % repo)
+            else:
+                logger.info('Repository %s not in manifest' % repo)
+
+        # XXX: need to go through the symlinks and remove any that were
+        # pointing to the repos just deleted
+
+        grokmirror.write_manifest(opts.manifile, manifest)
+        grokmirror.manifest_unlock(opts.manifile)
+        sys.exit(0)
 
     if opts.purge or not len(args) or not len(manifest.keys()):
         # We automatically purge when we do a full tree walk
@@ -189,4 +210,5 @@ if __name__ == '__main__':
         set_symlinks(manifest, opts.toplevel, symlinks)
 
     grokmirror.write_manifest(opts.manifile, manifest)
+    grokmirror.manifest_unlock(opts.manifile)
 

@@ -21,7 +21,10 @@ import json
 
 import logging
 
+from fcntl import flock, LOCK_EX, LOCK_UN
+
 VERSION = '0.2'
+MANIFEST_LOCKH = None
 
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
@@ -45,6 +48,16 @@ def find_all_gitdirs(toplevel):
             dirs.remove(name)
 
     return gitdirs
+
+def manifest_lock(manifile):
+    (dirname, basename) = os.path.split(manifile)
+    MANIFEST_LOCKH = open(os.path.join(dirname, '.%s.lock' % basename), 'w')
+    flock(MANIFEST_LOCKH, LOCK_EX)
+
+def manifest_unlock(manifile):
+    if MANIFEST_LOCKH is not None:
+        flock(lockfh, LOCK_UN)
+        lockfh.close()
 
 def read_manifest(manifile):
     if not os.path.exists(manifile):
@@ -71,7 +84,6 @@ def write_manifest(manifile, manifest, mtime=None):
     import tempfile
     import shutil
     import gzip
-    #from fcntl import flock, LOCK_EX, LOCK_UN
 
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
@@ -88,15 +100,7 @@ def write_manifest(manifile, manifest, mtime=None):
         os.chmod(tmpfile, 0644)
         if mtime is not None:
             os.utime(tmpfile, (mtime, mtime))
-        # since we're doing mv, this should be an atomic operation
-        # and we shouldn't have to worry about locking in order to
-        # prevent multiple simultaneous operations on the same target
-        # Leaving the code in place just in case I'm wrong.
-        #lockfh = open(os.path.join(dirname, '.%s.lock' % basename), 'w')
-        #flock(lockfh, LOCK_EX)
         shutil.move(tmpfile, manifile)
-        #flock(lockfh, LOCK_UN)
-        #lockfh.close()
 
     finally:
         # If something failed, don't leave these trailing around
