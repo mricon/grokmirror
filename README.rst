@@ -113,10 +113,18 @@ but omit the -n and the \`pwd\` argument. E.g.::
 
 The last component you need to set up is to automatically purge deleted
 repositories from the manifest. As this can't be added to a git hook,
-you can either run the ``--purge`` command from cron, or add it to your
-gitolite's ``rm`` ADC::
+you can either run the ``--purge`` command from cron::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -p
+
+Or add it to your gitolite's ``rm`` ADC using the ``--remove`` flag::
+
+    /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -x $repo.git
+
+If you would like grok-manifest to honor the ``git-daemon-export-ok``
+magic file and only add to the manifest those repositories specifically
+marked as exportable, pass the ``--check-export-ok`` flag. See
+``git-daemon(1)`` for more info on ``git-daemon-export-ok`` file.
 
 MIRROR SETUP
 ------------

@@ -29,8 +29,13 @@ OPTIONS
                         Location of manifest.js or manifest.js.gz
   -t TOPLEVEL, --toplevel=TOPLEVEL
                         Top dir where all repositories reside
+  -c, --check-export-ok
+                        Honor the git-daemon-export-ok magic file and 
+                        do not export repositories not marked as such
   -n, --use-now         Use current timestamp instead of parsing commits
   -p, --purge           Purge deleted git repositories from manifest
+  -x, --remove          Remove repositories passed as arguments from
+                        the manifest file
   -v, --verbose         Be verbose and tell us what you are doing
 
 EXAMPLES
@@ -47,10 +52,14 @@ Inside the git hook::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -n `pwd`
 
-To purge deleted repositories, use the ``-p`` flag, either from
-cron or via some other mechanism::
+To purge deleted repositories, use the ``-p`` flag when running from
+cron::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -p
+
+You can also add it to the gitolite's "rm" ADC using the ``-x`` flag::
+
+    /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -x $repo.git
 
 SEE ALSO
 --------

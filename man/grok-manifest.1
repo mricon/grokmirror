@@ -59,11 +59,19 @@ Location of manifest.js or manifest.js.gz
 .BI \-t \ TOPLEVEL, \ \-\-toplevel\fB= TOPLEVEL
 Top dir where all repositories reside
 .TP
+.B \-c,  \-\-check\-export\-ok
+Honor the git\-daemon\-export\-ok magic file and
+do not export repositories not marked as such
+.TP
 .B \-n,  \-\-use\-now
 Use current timestamp instead of parsing commits
 .TP
 .B \-p,  \-\-purge
 Purge deleted git repositories from manifest
+.TP
+.B \-x,  \-\-remove
+Remove repositories passed as arguments from
+the manifest file
 .TP
 .B \-v,  \-\-verbose
 Be verbose and tell us what you are doing
@@ -100,14 +108,26 @@ Inside the git hook:
 .UNINDENT
 .UNINDENT
 .sp
-To purge deleted repositories, use the \fB\-p\fP flag, either from
-cron or via some other mechanism:
+To purge deleted repositories, use the \fB\-p\fP flag when running from
+cron:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
 /usr/bin/grok\-manifest \-m /repos/manifest.js.gz \-t /repos \-p
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+You can also add it to the gitolite\(aqs "rm" ADC using the \fB\-x\fP flag:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+/usr/bin/grok\-manifest \-m /repos/manifest.js.gz \-t /repos \-x $repo.git
 .ft P
 .fi
 .UNINDENT
