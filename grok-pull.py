@@ -204,12 +204,17 @@ def write_projects_list(manifest, config):
     (dirname, basename) = os.path.split(plpath)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
     logger.info('Writing new %s' % plpath)
+
     try:
         fh = open(tmpfile, 'w')
         for gitdir in manifest.keys():
             if trimtop and gitdir.find(trimtop) == 0:
                 gitdir = gitdir[len(trimtop):]
+
+            # Always remove leading slash, otherwise cgit breaks
+            gitdir = gitdir.lstrip('/')
             fh.write('%s\n' % gitdir)
+
         fh.close()
         os.chmod(tmpfile, 0644)
         shutil.move(tmpfile, plpath)
