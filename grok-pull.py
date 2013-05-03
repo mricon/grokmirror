@@ -430,6 +430,8 @@ def pull_mirror(name, config, opts):
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
                 if not os.path.exists(target):
                     logger.info('Symlinking %s -> %s' % (target, source))
+                    # Make sure the leading dirs are in place
+                    os.makedirs(os.path.dirname(target))
                     os.symlink(source, target)
 
     if opts.purge:
