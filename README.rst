@@ -142,6 +142,34 @@ following to ``/etc/cron.d/grokmirror.cron``::
 Make sure the user "mirror" (or whichever user you specified) is able to
 write to the toplevel, log and lock locations specified in repos.conf.
 
+GROK-FSCK
+---------
+Git repositories can get corrupted whether they are frequently updated
+or not, which is why it is useful to routinely check them using "git
+fsck". Grokmirror ships with a "grok-fsck" utility that will run "git
+fsck" on all mirrored git repositories. It is supposed to be run
+nightly from cron, and will do its best to randomly stagger the checks
+so only a subset of repositories is checked each night. Any errors will
+be sent to the user set in MAILTO.
+
+To enable grok-fsck, first locate the fsck.conf file and edit it to
+match your setup -- e.g., it must know where you keep your local
+manifest. Then, add the following to ``/etc/cron.d/grok-fsck.cron``::
+
+    # Make sure MAILTO is set, for error reports
+    MAILTO=root
+    # Run nightly, at 2AM
+    00 02 * * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
+
+You can force a full run using the ``-f`` flag, but unless you only have
+a few smallish git repositories, it's not recommended, as it may take
+several hours to complete.
+
+Before it runs, grok-fsck will put an advisory lock in the git-directory
+being checked (repository.git/grokmirror.lock). Grok-pull will recognize
+the lock and will postpone any incoming updates to that repository until
+the next grok-pull run.
+
 FAQ
 ---
 Why is it called "grok mirror"?

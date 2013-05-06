@@ -5,7 +5,7 @@
 %endif
 
 Name:           python-grokmirror
-Version:        0.2
+Version:        0.3
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -40,6 +40,7 @@ rm -rf %{buildroot}
     %{buildroot}%{_bindir}
 %{__install} -m 0755 grok-manifest.py %{buildroot}/%{_bindir}/grok-manifest
 %{__install} -m 0755 grok-pull.py     %{buildroot}/%{_bindir}/grok-pull
+%{__install} -m 0755 grok-fsck.py     %{buildroot}/%{_bindir}/grok-fsck
 %{__mkdir_p} -m 0755 \
     %{buildroot}%{_mandir}/man1
 %{__install} -m 0644 man/*.1 %{buildroot}/%{_mandir}/man1/
@@ -54,6 +55,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon May 06 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3-1
+- Preparing for 0.3 with new features.
+
 * Thu Apr 25 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.2-1
 - Version 0.2 with new features and manpages.
 

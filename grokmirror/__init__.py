@@ -22,13 +22,34 @@ import fnmatch
 
 import logging
 
-from fcntl import flock, LOCK_EX, LOCK_UN
+from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
 
-VERSION = '0.2'
+VERSION = '0.3'
 MANIFEST_LOCKH = None
+REPO_LOCKH = {}
 
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
+
+def lock_repo(fullpath, nonblocking=False):
+    repolock = os.path.join(fullpath, 'grokmirror.lock')
+    logger.debug('Attempting to exclusive-lock %s' % repolock)
+    lockfh = open(repolock, 'w')
+
+    if nonblocking:
+        flags = LOCK_EX | LOCK_NB
+    else:
+        flags = LOCK_EX
+
+    flock(lockfh, flags)
+    REPO_LOCKH[fullpath] = lockfh
+
+def unlock_repo(fullpath):
+    if fullpath in REPO_LOCKH.keys():
+        logger.debug('Unlocking %s' % fullpath)
+        flock(REPO_LOCKH[fullpath], LOCK_UN)
+        REPO_LOCKH[fullpath].close()
+        del REPO_LOCKH[fullpath]
 
 def find_all_gitdirs(toplevel, ignore=[]):
     logger.info('Finding bare git repos in %s' % toplevel)

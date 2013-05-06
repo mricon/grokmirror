@@ -1,14 +1,14 @@
 GROK-PULL
 =========
----------------------------------------
-Create manifest for use with grokmirror
----------------------------------------
+--------------------------------------
+Clone or update local git repositories
+--------------------------------------
 
 :Author:    mricon@kernel.org
 :Date:      2013-04-26
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.2
+:Version:   0.3
 
 SYNOPSIS
 --------

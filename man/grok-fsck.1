@@ -1,8 +1,8 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-PULL  "2013-04-26" "0.3" ""
+.TH GROK-FSCK  "2013-04-26" "0.3" ""
 .SH NAME
-GROK-PULL \- Clone or update local git repositories
+GROK-FSCK \- Create manifest for use with grokmirror
 .
 .nr rst2man-indent-level 0
 .
@@ -33,18 +33,18 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .SH SYNOPSIS
 .INDENT 0.0
 .INDENT 3.5
-grok\-pull \-c /path/to/repos.conf
+grok\-fsck \-c /path/to/fsck.conf
 .UNINDENT
 .UNINDENT
 .SH DESCRIPTION
 .sp
-This utility runs from a cronjob and downloads the latest manifest from
-the grokmirror master. If there are new repositories or changes in the
-existing repositories, grok\-pull will perform the necessary git commands
-to clone or fetch the required data from the master.
-.sp
-At the end of its run, grok\-pull will generate its own manifest file,
-which can then be used for further mirroring.
+Git repositories can get corrupted whether they are frequently updated
+or not, which is why it is useful to routinely check them using "git
+fsck". Grokmirror ships with a "grok\-fsck" utility that will run "git
+fsck" on all mirrored git repositories. It is supposed to be run
+nightly from cron, and will do its best to randomly stagger the checks
+so only a subset of repositories is checked each night. Any errors will
+be sent to the user set in MAILTO.
 .SH OPTIONS
 .INDENT 0.0
 .INDENT 3.5
@@ -59,48 +59,46 @@ show this help message and exit
 .B \-v,  \-\-verbose
 Be verbose and tell us what you are doing
 .TP
-.B \-n,  \-\-no\-mtime\-check
-Run without checking manifest mtime.
-.TP
 .B \-f,  \-\-force
-Force full git update regardless of last\-modified
-times. Also useful when repos.conf has changed.
-.TP
-.B \-p,  \-\-purge
-Remove any git trees that are no longer in manifest.
+Force immediate run on all repositories.
 .TP
 .BI \-c \ CONFIG, \ \-\-config\fB= CONFIG
-Location of repos.conf
+Location of fsck.conf
 .UNINDENT
 .UNINDENT
 .UNINDENT
 .SH EXAMPLES
 .sp
-Locate repos.conf and modify it to reflect your needs. The default
+Locate fsck.conf and modify it to reflect your needs. The default
 configuration file is heavily commented.
 .sp
-Add a cronjob to run as frequently as you like. For example, add the
-following to \fB/etc/cron.d/grokmirror.cron\fP:
+Set up a cron job to run nightly and to email any discovered errors to
+root:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-# Run grok\-pull every minute as user "mirror"
-* * * * * mirror /usr/bin/grok\-pull \-p \-c /etc/grokmirror/repos.conf
+# Make sure MAILTO is set, for error reports
+MAILTO=root
+# Run nightly, at 2AM
+00 02 * * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-Make sure the user "mirror" (or whichever user you specified) is able to
-write to the toplevel, log and lock locations specified in repos.conf.
+You can force a full run using the \fB\-f\fP flag, but unless you only have
+a few smallish git repositories, it\(aqs not recommended, as it may take
+several hours to complete.
 .SH SEE ALSO
 .INDENT 0.0
 .INDENT 3.5
 .INDENT 0.0
 .IP \(bu 2
 grok\-manifest(1)
+.IP \(bu 2
+grok\-pull(1)
 .IP \(bu 2
 git(1)
 .UNINDENT

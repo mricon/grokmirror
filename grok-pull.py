@@ -390,9 +390,21 @@ def pull_mirror(name, config, opts):
     hookscript = config['post_update_hook']
 
     for gitdir in to_pull:
-        pull_repo(toplevel, gitdir)
-        set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
-        run_post_update_hook(hookscript, toplevel, gitdir)
+        # Check in case grok-fsck is checking this repo right now
+        try:
+            fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+            grokmirror.lock_repo(fullpath, nonblocking=True)
+            pull_repo(toplevel, gitdir)
+            set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
+            run_post_update_hook(hookscript, toplevel, gitdir)
+        except IOError, ex:
+            logger.info('Could not obtain exclusive lock on %s' % gitdir)
+            logger.info('\tAssuming grok-fsck is running, will try later.')
+            # To make sure we check this again during next run,
+            # fudge the manifest accordingly.
+            culled[gitdir] = mymanifest[gitdir]
+            # this is rather hackish, but effective
+            last_modified -= 1
 
     if to_clone:
         # we use "existing" to track which repos can be used as references
