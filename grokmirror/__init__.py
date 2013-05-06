@@ -18,6 +18,7 @@ import os
 import sys
 
 import json
+import fnmatch
 
 import logging
 
@@ -29,8 +30,9 @@ MANIFEST_LOCKH = None
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 
-def find_all_gitdirs(toplevel):
+def find_all_gitdirs(toplevel, ignore=[]):
     logger.info('Finding bare git repos in %s' % toplevel)
+    logger.debug('Ignore list: %s' % ' '.join(ignore))
     gitdirs = []
     for root, dirs, files in os.walk(toplevel, topdown=True):
         if not len(dirs):
@@ -38,7 +40,14 @@ def find_all_gitdirs(toplevel):
 
         torm = []
         for name in dirs:
-            if name.find('.git') > 0:
+            # Should we ignore this dir?
+            ignored = False
+            for ignoredir in ignore:
+                if fnmatch.fnmatch(os.path.join(root, name), ignoredir):
+                    torm.append(name)
+                    ignored = True
+                    break
+            if not ignored and name.find('.git') > 0:
                 logger.debug('Found %s' % os.path.join(root, name))
                 gitdirs.append(os.path.join(root, name))
                 torm.append(name)

@@ -144,6 +144,10 @@ if __name__ == '__main__':
     parser.add_option('-x', '--remove', dest='remove', action='store_true',
         default=False,
         help='Remove repositories passed as arguments from manifest')
+    parser.add_option('-i', '--ignore-paths', dest='ignore', action='append',
+        default=[],
+        help='When finding git dirs, ignore these paths '
+             '(can be used multiple times, accepts shell-style globbing)')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
         default=False,
         help='Be verbose and tell us what you are doing')
@@ -194,7 +198,7 @@ if __name__ == '__main__':
 
     if opts.purge or not len(args) or not len(manifest.keys()):
         # We automatically purge when we do a full tree walk
-        gitdirs = grokmirror.find_all_gitdirs(opts.toplevel)
+        gitdirs = grokmirror.find_all_gitdirs(opts.toplevel, ignore=opts.ignore)
         purge_manifest(manifest, opts.toplevel, gitdirs)
 
     if len(manifest.keys()) and len(args):
