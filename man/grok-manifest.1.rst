@@ -12,7 +12,7 @@ Create manifest for use with grokmirror
 
 SYNOPSIS
 --------
-    grok-manifest -m manifest.js[.gz] -t /path [/path/to/bare.git]
+    grok-manifest [opts] -m manifest.js[.gz] -t /path [/path/to/bare.git]
 
 DESCRIPTION
 -----------
@@ -36,6 +36,9 @@ OPTIONS
   -p, --purge           Purge deleted git repositories from manifest
   -x, --remove          Remove repositories passed as arguments from
                         the manifest file
+  -i IGNORE, --ignore-paths=IGNORE
+                        When finding git dirs, ignore these paths (can be used
+                        multiple times, accepts shell-style globbing)
   -v, --verbose         Be verbose and tell us what you are doing
 
 EXAMPLES
