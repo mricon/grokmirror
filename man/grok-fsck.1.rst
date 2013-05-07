@@ -1,8 +1,8 @@
 GROK-FSCK
 =========
----------------------------------------
-Create manifest for use with grokmirror
----------------------------------------
+------------------------------------------
+Check mirrored repositories for corruption
+------------------------------------------
 
 :Author:    mricon@kernel.org
 :Date:      2013-04-26
