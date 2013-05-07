@@ -47,7 +47,7 @@ rm -rf %{buildroot}
 
 
 %files
-%doc README.rst COPYING repos.conf
+%doc README.rst COPYING repos.conf fsck.conf
 %{python_sitelib}/grokmirror/
 %{python_sitelib}/*.egg-info
 %{_bindir}/grok-*
