@@ -49,11 +49,8 @@ def set_owner_description(toplevel, gitdir, owner, description):
         repo.description = description
 
     if owner is not None:
-        rcw = repo.config_writer()
         logger.debug('Setting %s owner to: %s' % (gitdir, owner))
-        if not rcw.has_section('gitweb'):
-            rcw.add_section('gitweb')
-        rcw.set('gitweb', 'owner', owner)
+        repo.git.config('gitweb.owner', owner)
 
 def set_agefile(toplevel, gitdir, last_modified):
     # set agefile, which can be used by cgit to show idle times

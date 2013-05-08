@@ -39,8 +39,13 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         sys.exit(1)
 
     # Ignore it if it's an empty git repository
-    if len(repo.heads) == 0:
-        logger.info('%s has no heads, ignoring' % gitdir)
+    try:
+        if len(repo.heads) == 0:
+            logger.info('%s has no heads, ignoring' % gitdir)
+            return
+    except:
+        # Errors when listing heads usually means repository is no good
+        logger.info('Error listing heads in %s, ignoring' % gitdir)
         return
 
     try:
@@ -61,6 +66,10 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
             try:
                 if branch.commit.committed_date > modified:
                     modified = branch.commit.committed_date
+                    # Older versions of GitPython returned time.struct_time
+                    if type(modified) == time.struct_time:
+                        modified = int(time.mktime(modified))
+
             except:
                 pass
 
