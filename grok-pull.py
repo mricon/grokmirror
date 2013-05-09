@@ -36,6 +36,21 @@ from git import Repo
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
 
+def fix_remotes(gitdir, toplevel, site):
+    # Remove all existing remotes and set new origin
+    repo = Repo(os.path.join(toplevel, gitdir.lstrip('/')))
+    remotes = repo.git.remote()
+    if len(remotes.strip()):
+        logger.debug('existing remotes: %s' % remotes)
+        for name in remotes.split('\n'):
+            logger.debug('\tremoving remote: %s' % name)
+            repo.git.remote('rm', name)
+
+    # set my origin
+    origin = os.path.join(site, gitdir.lstrip('/'))
+    repo.git.remote('add', '--mirror', 'origin', origin)
+    logger.debug('\tset new origin as %s' % origin)
+
 def set_owner_description(toplevel, gitdir, owner, description):
     if owner is None and description is None:
         # Let the default git values be there, then
@@ -349,10 +364,15 @@ def pull_mirror(name, config, opts):
     existing = []
 
     toplevel = config['toplevel']
+    if not os.access(toplevel, os.W_OK):
+        logger.critical('Toplevel %s does not exist or is not writable')
+        sys.exit(1)
+
     for gitdir in culled.keys():
+        fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         if gitdir in mymanifest.keys():
             # Is the directory in place, too?
-            if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
+            if os.path.exists(fullpath):
                 # Is it newer than what we have in our old manifest?
                 if gitdir in mymanifest.keys():
                     # This code is hurky and needs to be cleaned up
@@ -377,8 +397,14 @@ def pull_mirror(name, config, opts):
                 continue
 
         # do we have the dir in place?
-        if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
-            # blindly assume it's kosher and pull it
+        if os.path.exists(fullpath):
+            if not opts.reuse:
+                logger.critical('Found existing repository in %s' % fullpath)
+                logger.critical('Run with -r to use existing repos')
+                sys.exit(1)
+            logger.info('Found existing %s, will set new origin' % gitdir)
+            # Accept it, but fix remotes so they are pointing to our origin
+            fix_remotes(gitdir, toplevel, config['site'])
             to_pull.append(gitdir)
             continue
 
@@ -495,6 +521,10 @@ if __name__ == '__main__':
     parser.add_option('-p', '--purge', dest='purge',
         action='store_true', default=False,
         help='Remove any git trees that are no longer in manifest.')
+    parser.add_option('-r', '--reuse-existing-repos', dest='reuse',
+        action='store_true', default=False,
+        help='If any existing repositories are found on disk, set new '
+        'remote origin and reuse')
     parser.add_option('-c', '--config', dest='config',
         help='Location of repos.conf')
 
