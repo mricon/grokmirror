@@ -69,6 +69,10 @@ times. Also useful when repos.conf has changed.
 .B \-p,  \-\-purge
 Remove any git trees that are no longer in manifest.
 .TP
+.B \-r,  \-\-reuse\-existing\-repos
+If any existing repositories are found on disk, set
+new remote origin and reuse
+.TP
 .BI \-c \ CONFIG, \ \-\-config\fB= CONFIG
 Location of repos.conf
 .UNINDENT
@@ -101,6 +105,8 @@ write to the toplevel, log and lock locations specified in repos.conf.
 .INDENT 0.0
 .IP \(bu 2
 grok\-manifest(1)
+.IP \(bu 2
+grok\-fsck(1)
 .IP \(bu 2
 git(1)
 .UNINDENT

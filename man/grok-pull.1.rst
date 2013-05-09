@@ -33,6 +33,9 @@ OPTIONS
   -f, --force           Force full git update regardless of last-modified
                         times. Also useful when repos.conf has changed.
   -p, --purge           Remove any git trees that are no longer in manifest.
+  -r, --reuse-existing-repos
+                        If any existing repositories are found on disk, set
+                        new remote origin and reuse
   -c CONFIG, --config=CONFIG
                         Location of repos.conf
 
@@ -53,6 +56,7 @@ write to the toplevel, log and lock locations specified in repos.conf.
 SEE ALSO
 --------
   * grok-manifest(1)
+  * grok-fsck(1)
   * git(1)
 
 SUPPORT

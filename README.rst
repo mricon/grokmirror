@@ -142,6 +142,13 @@ following to ``/etc/cron.d/grokmirror.cron``::
 Make sure the user "mirror" (or whichever user you specified) is able to
 write to the toplevel, log and lock locations specified in repos.conf.
 
+If you already have a bunch of repositories in the hierarchy that
+matches the upstream mirror and you'd like to reuse them instead of
+re-downloading everything from the master, you can pass the ``-r`` flag
+to tell grok-pull that it's okay to reuse existing repos. This will
+delete any existing remotes defined in the repository and set the new
+origin to match what is configured in the repos.conf.
+
 GROK-FSCK
 ---------
 Git repositories can get corrupted whether they are frequently updated
