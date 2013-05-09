@@ -59,11 +59,13 @@ def run_git_fsck(fullpath, config):
     error = error.strip()
 
     if error:
-        # Put things we recognize into debug
+        # Put things we recognize as fairly benign into debug
         debug = []
         warn  = []
         for line in error.split('\n'):
             if line.find('dangling ') == 0:
+                debug.append(line)
+            elif line.find('notice: ') == 0:
                 debug.append(line)
             else:
                 warn.append(line)
