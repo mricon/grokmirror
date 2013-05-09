@@ -479,9 +479,9 @@ def pull_mirror(name, config, opts):
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
             gitdir = founddir.replace(config['toplevel'], '')
             if gitdir not in culled.keys() and gitdir not in symlinks:
-                if os.path.islink(gitdir):
+                if os.path.islink(founddir):
                     logger.info('Removing unreferenced symlink %s' % gitdir)
-                    os.unlink(gitdir)
+                    os.unlink(founddir)
                 else:
                     logger.info('Purging %s' % gitdir)
                     shutil.rmtree(founddir)
