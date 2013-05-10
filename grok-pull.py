@@ -420,6 +420,7 @@ def pull_mirror(name, config, opts):
             pull_repo(toplevel, gitdir)
             set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
             run_post_update_hook(hookscript, toplevel, gitdir)
+            grokmirror.unlock_repo(fullpath)
         except IOError, ex:
             logger.info('Could not obtain exclusive lock on %s' % gitdir)
             logger.info('\tAssuming grok-fsck is running, will try later.')
