@@ -65,7 +65,9 @@ def run_git_fsck(fullpath, config):
         for line in error.split('\n'):
             if line.find('dangling ') == 0:
                 debug.append(line)
-            elif line.find('notice: ') == 0:
+            elif line.find('notice: HEAD points to an unborn branch') == 0:
+                debug.append(line)
+            elif line.find('contains zero-padded file modes') > 0:
                 debug.append(line)
             else:
                 warn.append(line)
