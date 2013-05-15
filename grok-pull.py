@@ -365,7 +365,7 @@ def pull_mirror(name, config, opts):
 
     toplevel = config['toplevel']
     if not os.access(toplevel, os.W_OK):
-        logger.critical('Toplevel %s does not exist or is not writable')
+        logger.critical('Toplevel %s does not exist or is not writable' % toplevel)
         sys.exit(1)
 
     for gitdir in culled.keys():
