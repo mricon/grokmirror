@@ -19,6 +19,7 @@ import sys
 
 import json
 import fnmatch
+import subprocess
 
 import logging
 
@@ -51,10 +52,44 @@ def unlock_repo(fullpath):
         REPO_LOCKH[fullpath].close()
         del REPO_LOCKH[fullpath]
 
-def find_all_gitdirs(toplevel, ignore=[]):
-    logger.info('Finding bare git repos in %s' % toplevel)
+def find_all_gitdirs(toplevel, ignore=[], use_gitolite=False):
     logger.debug('Ignore list: %s' % ' '.join(ignore))
     gitdirs = []
+
+    if use_gitolite:
+        logger.info('Using gitolite list-phy-repos')
+        args = ['/usr/bin/gitolite', 'list-phy-repos']
+        logger.debug('Running: %s' % ' '.join(args))
+
+        (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        error  = error.strip()
+        output = output.strip()
+        if len(error):
+            logger.critical('Attempting to run gitolite returned errors:')
+            logger.critical(error)
+            sys.exit(1)
+
+        for repo in output.split('\n'):
+            gitdir = os.path.join(toplevel, repo + '.git')
+            # should we ignore this repo?
+            ignored = False
+            for ignoredir in ignore:
+                if fnmatch.fnmatch(gitdir, ignoredir):
+                    ignored = True
+                    logger.debug('Ignoring %s due to %s' % (name, ignoredir))
+                    break
+            if ignored:
+                continue
+
+            logger.debug('Found %s' % gitdir)
+            gitdirs.append(gitdir)
+
+        return gitdirs
+
+    # No gitolite requested, walk the toplevel
+    logger.info('Finding bare git repos in %s' % toplevel)
     for root, dirs, files in os.walk(toplevel, topdown=True):
         if not len(dirs):
             continue
@@ -66,6 +101,7 @@ def find_all_gitdirs(toplevel, ignore=[]):
             for ignoredir in ignore:
                 if fnmatch.fnmatch(os.path.join(root, name), ignoredir):
                     torm.append(name)
+                    logger.debug('Ignoring %s due to %s' % (name, ignoredir))
                     ignored = True
                     break
             if not ignored and name.find('.git') > 0:

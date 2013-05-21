@@ -18,6 +18,7 @@ import os
 import sys
 import logging
 import time
+import subprocess
 
 import grokmirror
 
@@ -144,6 +145,9 @@ if __name__ == '__main__':
     parser.add_option('-n', '--use-now', dest='usenow', action='store_true',
         default=False,
         help='Use current timestamp instead of parsing commits')
+    parser.add_option('-g', '--gitolite', dest='gitolite', action='store_true',
+        default=False,
+        help='Use gitolite tools to get repository information')
     parser.add_option('-c', '--check-export-ok', dest='check_export_ok', 
         action='store_true', default=False,
         help='Export only repositories marked as git-daemon-export-ok')
@@ -167,6 +171,11 @@ if __name__ == '__main__':
         parser.error('You must provide the path to the manifest file')
     if not opts.toplevel:
         parser.error('You must provide the toplevel path')
+    if opts.gitolite:
+        # check for sanity to make sure $HOME/.gitolite.rc exists
+        if not os.access(os.path.join(os.environ['HOME'], '.gitolite.rc'),
+                         os.R_OK):
+            parser.error('Asked to use gitolite, but no $HOME/.gitolite.rc')
 
     logger.setLevel(logging.DEBUG)
 
@@ -207,7 +216,8 @@ if __name__ == '__main__':
 
     if opts.purge or not len(args) or not len(manifest.keys()):
         # We automatically purge when we do a full tree walk
-        gitdirs = grokmirror.find_all_gitdirs(opts.toplevel, ignore=opts.ignore)
+        gitdirs = grokmirror.find_all_gitdirs(opts.toplevel,
+                ignore=opts.ignore, use_gitolite=opts.gitolite)
         purge_manifest(manifest, opts.toplevel, gitdirs)
 
     if len(manifest.keys()) and len(args):
@@ -219,19 +229,47 @@ if __name__ == '__main__':
     symlinks = []
     for gitdir in gitdirs:
         # check to make sure this gitdir is ok to export
-        if (opts.check_export_ok and
-            not os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
-            # is it curently in the manifest?
-            repo = gitdir.replace(opts.toplevel, '', 1)
-            if repo in manifest.keys():
-                logger.info('Repository %s is no longer exported, '
-                    'removing from manifest' % repo)
-                del manifest[repo]
+        if opts.check_export_ok:
+            export_ok = False
+            if opts.gitolite:
+                # Use gitolite's access check for reliability
+                repo = gitdir.replace(opts.toplevel, '', 1)
+                # remove trailing .git
+                if repo[-4:] == '.git':
+                    repo = repo[:-4]
+                repo = repo.lstrip('/')
+                args = ['/usr/bin/gitolite', 'access', repo, 'daemon', 'R', 
+                        'any']
+                logger.debug('Running: %s' % ' '.join(args))
 
-            # XXX: need to add logic to make sure we don't break the world
-            #      by removing a repository used as a reference for others
-            #      also make sure we clean up any dangling symlinks
-            continue
+                (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE).communicate()
+
+                error  = error.strip()
+                output = output.strip()
+                if len(error):
+                    logger.critical('Attempting to run gitolite returned:')
+                    logger.critical(error)
+                    sys.exit(1)
+
+                if output.find('DENIED') < 0:
+                    export_ok = True
+
+            elif os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok')):
+                export_ok = True
+
+            if not export_ok:
+                # is it curently in the manifest?
+                repo = gitdir.replace(opts.toplevel, '', 1)
+                if repo in manifest.keys():
+                    logger.info('Repository %s is no longer exported, '
+                        'removing from manifest' % repo)
+                    del manifest[repo]
+
+                # XXX: need to add logic to make sure we don't break the world
+                #      by removing a repository used as a reference for others
+                #      also make sure we clean up any dangling symlinks
+                continue
 
         if os.path.islink(gitdir):
             symlinks.append(gitdir)
