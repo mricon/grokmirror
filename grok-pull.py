@@ -296,6 +296,10 @@ def pull_mirror(name, config, opts):
 
         logger.info('Reading new manifest from %s' % manifile)
         manifest = grokmirror.read_manifest(manifile)
+        # Don't accept empty manifests -- that indicates something is wrong
+        if not len(manifest.keys()):
+            logger.critical('Remote manifest empty or unparseable! Quitting.')
+            return 1
 
     else:
         # Load it from remote host using http and header magic
