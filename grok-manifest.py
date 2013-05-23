@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
     if opts.logfile is not None:
         ch = logging.FileHandler(opts.logfile)
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)

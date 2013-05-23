@@ -244,7 +244,7 @@ def pull_mirror(name, config, opts):
 
     if 'log' in config.keys():
         ch = logging.FileHandler(config['log'])
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         loglevel = logging.INFO
 
