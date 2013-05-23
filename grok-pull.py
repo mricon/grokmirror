@@ -236,7 +236,6 @@ def write_projects_list(manifest, config):
         if os.path.exists(tmpfile):
             os.unlink(tmpfile)
 
-
 def pull_mirror(name, config, opts):
     global logger
     logger = logging.getLogger(name)
@@ -282,59 +281,77 @@ def pull_mirror(name, config, opts):
         return 0
 
     mymanifest = config['mymanifest']
-    logger.info('Fetching remote manifest from %s' % config['manifest'])
-    request = urllib2.Request(config['manifest'])
-    opener  = urllib2.build_opener()
 
-    # Find out if we need to run at all first
-    if not (opts.force or opts.nomtime) and os.path.exists(mymanifest):
-        fstat = os.stat(mymanifest)
-        mtime = fstat[8]
-        logger.debug('mtime on %s is: %s' % (mymanifest, mtime))
-        my_last_modified = time.strftime('%a, %d %b %Y %H:%M:%S GMT',
-            time.gmtime(mtime))
-        logger.debug('Our last-modified is: %s' % my_last_modified)
-        request.add_header('If-Modified-Since', my_last_modified)
-
-    try:
-        ufh = opener.open(request)
-    except urllib2.HTTPError, ex:
-        if ex.code == 304:
-            logger.info('Server says we have the latest manifest. Quitting.')
+    if config['manifest'].find('file:///') == 0:
+        manifile = config['manifest'].replace('file://', '')
+        fstat = os.stat(manifile)
+        last_modified = fstat[8]
+        fstat = os.stat(config['mymanifest'])
+        my_last_modified = fstat[8]
+        if not (opts.force or opts.nomtime) and last_modified <= my_last_modified:
+            logger.info('Manifest file unchanged. Quitting.')
             lockf(flockh, LOCK_UN)
             flockh.close()
             return 0
-        logger.critical('Could not fetch %s' % config['manifest'])
-        logger.critical('Server returned: %s' % ex)
-        lockf(flockh, LOCK_UN)
-        flockh.close()
-        return 1
-    except urllib2.URLError, ex:
-        logger.critical('Could not fetch %s' % config['manifest'])
-        logger.critical('Error was: %s' % ex)
-        lockf(flockh, LOCK_UN)
-        flockh.close()
-        return 1
 
-    last_modified = ufh.headers.get('Last-Modified')
-    last_modified = time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z')
-    last_modified = calendar.timegm(last_modified)
+        logger.info('Reading new manifest from %s' % manifile)
+        manifest = grokmirror.read_manifest(manifile)
 
-    # We don't use read_manifest for the remote manifest, as it can be
-    # anything, really. For now, blindly open it with gzipfile if it ends
-    # with .gz. XXX: some http servers will auto-deflate such files.
-    if config['manifest'].find('.gz') > 0:
-        fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
     else:
-        fh = ufh
+        # Load it from remote host using http and header magic
+        logger.info('Fetching remote manifest from %s' % config['manifest'])
+        request = urllib2.Request(config['manifest'])
+        opener  = urllib2.build_opener()
 
-    try:
-        manifest = json.load(fh)
-    except:
-        logger.critical('Failed to parse %s' % config['manifest'])
-        lockf(flockh, LOCK_UN)
-        flockh.close()
-        return 1
+        # Find out if we need to run at all first
+        if not (opts.force or opts.nomtime) and os.path.exists(mymanifest):
+            fstat = os.stat(mymanifest)
+            mtime = fstat[8]
+            logger.debug('mtime on %s is: %s' % (mymanifest, mtime))
+            my_last_modified = time.strftime('%a, %d %b %Y %H:%M:%S GMT',
+                time.gmtime(mtime))
+            logger.debug('Our last-modified is: %s' % my_last_modified)
+            request.add_header('If-Modified-Since', my_last_modified)
+
+        try:
+            ufh = opener.open(request)
+        except urllib2.HTTPError, ex:
+            if ex.code == 304:
+                logger.info('Server says we have the latest manifest. Quitting.')
+                lockf(flockh, LOCK_UN)
+                flockh.close()
+                return 0
+            logger.critical('Could not fetch %s' % config['manifest'])
+            logger.critical('Server returned: %s' % ex)
+            lockf(flockh, LOCK_UN)
+            flockh.close()
+            return 1
+        except urllib2.URLError, ex:
+            logger.critical('Could not fetch %s' % config['manifest'])
+            logger.critical('Error was: %s' % ex)
+            lockf(flockh, LOCK_UN)
+            flockh.close()
+            return 1
+
+        last_modified = ufh.headers.get('Last-Modified')
+        last_modified = time.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z')
+        last_modified = calendar.timegm(last_modified)
+
+        # We don't use read_manifest for the remote manifest, as it can be
+        # anything, really. For now, blindly open it with gzipfile if it ends
+        # with .gz. XXX: some http servers will auto-deflate such files.
+        if config['manifest'].find('.gz') > 0:
+            fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
+        else:
+            fh = ufh
+
+        try:
+            manifest = json.load(fh)
+        except:
+            logger.critical('Failed to parse %s' % config['manifest'])
+            lockf(flockh, LOCK_UN)
+            flockh.close()
+            return 1
 
     mymanifest = grokmirror.read_manifest(mymanifest)
 
