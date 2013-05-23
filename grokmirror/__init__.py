@@ -24,7 +24,7 @@ import logging
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 

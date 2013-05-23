@@ -5,13 +5,13 @@
 %endif
 
 Name:           python-grokmirror
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
 License:        GPLv3+
 URL:            https://git.kernel.org/cgit/utils/grokmirror/grokmirror.git
-Source0:        https://www.kernel.org/pub/software/network/grokmirror/grokmirror-%{version}.tar.gz
+Source0:        https://www.kernel.org/pub/software/network/grokmirror/grokmirror-%{version}.tar.xz
 
 BuildArch:      noarch
 BuildRequires:  python2-devel, python-setuptools
@@ -55,6 +55,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon May 13 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.2-1
+- Update to 0.3.2 containing important bugfixes and minor new features
+
 * Mon May 13 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.1-1
 - Update to 0.3.1 containing important bugfixes
 
