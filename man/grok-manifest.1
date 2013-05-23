@@ -59,6 +59,9 @@ Location of manifest.js or manifest.js.gz
 .BI \-t \ TOPLEVEL, \ \-\-toplevel\fB= TOPLEVEL
 Top dir where all repositories reside
 .TP
+.BI \-l \ LOGFILE, \ \-\-logfile\fB= LOGFILE
+When specified, will put debug logs in this location
+.TP
 .B \-c,  \-\-check\-export\-ok
 Honor the git\-daemon\-export\-ok magic file and
 do not export repositories not marked as such
@@ -132,6 +135,21 @@ You can also add it to the gitolite\(aqs "rm" ADC using the \fB\-x\fP flag:
 .nf
 .ft C
 /usr/bin/grok\-manifest \-m /repos/manifest.js.gz \-t /repos \-x $repo.git
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+To troubleshoot potential problems, you can pass \fB\-l\fP parameter to
+grok\-manifest, just make sure the user executing the hook command (user
+git or gitolite, for example) is able to write to that location:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+/usr/bin/grok\-manifest \-m /repos/manifest.js.gz \-t /repos \e
+    \-l /var/log/git/grok\-manifest\-hook.log \-n \(gapwd\(ga
 .ft P
 .fi
 .UNINDENT
