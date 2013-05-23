@@ -42,9 +42,11 @@ def lock_repo(fullpath, nonblocking=False):
         flags = LOCK_EX
 
     lockf(lockfh, flags)
+    global REPO_LOCKH
     REPO_LOCKH[fullpath] = lockfh
 
 def unlock_repo(fullpath):
+    global REPO_LOCKH
     if fullpath in REPO_LOCKH.keys():
         logger.debug('Unlocking %s' % fullpath)
         lockf(REPO_LOCKH[fullpath], LOCK_UN)
@@ -81,16 +83,22 @@ def find_all_gitdirs(toplevel, ignore=[]):
 
 def manifest_lock(manifile):
     (dirname, basename) = os.path.split(manifile)
+    global MANIFEST_LOCKH
     MANIFEST_LOCKH = open(os.path.join(dirname, '.%s.lock' % basename), 'w')
+    logger.debug('Attempting to lock the manifest')
     lockf(MANIFEST_LOCKH, LOCK_EX)
+    logger.debug('Manifest lock obtained')
 
 def manifest_unlock(manifile):
+    global MANIFEST_LOCKH
     if MANIFEST_LOCKH is not None:
-        lockf(lockfh, LOCK_UN)
-        lockfh.close()
+        logger.debug('Unlocking manifest')
+        lockf(MANIFEST_LOCKH, LOCK_UN)
+        MANIFEST_LOCKH.close()
 
 def read_manifest(manifile):
     if not os.path.exists(manifile):
+        logger.info('%s not found, assuming initial run' % manifile)
         return {}
 
     if manifile.find('.gz') > 0:
@@ -104,9 +112,11 @@ def read_manifest(manifile):
         manifest = json.load(fh)
     except:
         # We'll regenerate the file entirely on failure to parse
+        logger.critical('Unable to parse %s, will regenerate' % manifile)
         manifest = {}
 
     fh.close()
+    logger.debug('Manifest contains %s entries' % len(manifest.keys()))
 
     return manifest
 

@@ -141,6 +141,9 @@ if __name__ == '__main__':
         help='Location of manifest.js or manifest.js.gz')
     parser.add_option('-t', '--toplevel', dest='toplevel',
         help='Top dir where all repositories reside')
+    parser.add_option('-l', '--logfile', dest='logfile',
+        default=None,
+        help='When specified, will put debug logs in this location')
     parser.add_option('-n', '--use-now', dest='usenow', action='store_true',
         default=False,
         help='Use current timestamp instead of parsing commits')
@@ -181,11 +184,23 @@ if __name__ == '__main__':
 
     logger.addHandler(ch)
 
+    if opts.logfile is not None:
+        ch = logging.FileHandler(opts.logfile)
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        ch.setFormatter(formatter)
+
+        ch.setLevel(logging.DEBUG)
+        logger.addHandler(ch)
+
     # push our logger into grokmirror to override the default
     grokmirror.logger = logger
 
     grokmirror.manifest_lock(opts.manifile)
     manifest = grokmirror.read_manifest(opts.manifile)
+
+    # If manifest is empty, don't use current timestamp
+    if not len(manifest.keys()):
+        opts.usenow = False
 
     if opts.remove and len(args):
         # Remove the repos as required, write new manfiest and exit
