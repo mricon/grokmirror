@@ -28,7 +28,7 @@ import subprocess
 import shutil
 import calendar
 
-from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
+from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 from StringIO import StringIO
 
 from git import Repo
@@ -275,7 +275,7 @@ def pull_mirror(name, config, opts):
     logger.debug('Attempting to obtain lock on %s' % config['lock'])
     flockh = open(config['lock'], 'w')
     try:
-        flock(flockh, LOCK_EX | LOCK_NB)
+        lockf(flockh, LOCK_EX | LOCK_NB)
     except IOError, ex:
         logger.info('Could not obtain exclusive lock on %s' % config['lock'])
         logger.info('Assuming another process is running.')
@@ -301,18 +301,18 @@ def pull_mirror(name, config, opts):
     except urllib2.HTTPError, ex:
         if ex.code == 304:
             logger.info('Server says we have the latest manifest. Quitting.')
-            flock(flockh, LOCK_UN)
+            lockf(flockh, LOCK_UN)
             flockh.close()
             return 0
         logger.critical('Could not fetch %s' % config['manifest'])
         logger.critical('Server returned: %s' % ex)
-        flock(flockh, LOCK_UN)
+        lockf(flockh, LOCK_UN)
         flockh.close()
         return 1
     except urllib2.URLError, ex:
         logger.critical('Could not fetch %s' % config['manifest'])
         logger.critical('Error was: %s' % ex)
-        flock(flockh, LOCK_UN)
+        lockf(flockh, LOCK_UN)
         flockh.close()
         return 1
 
@@ -332,7 +332,7 @@ def pull_mirror(name, config, opts):
         manifest = json.load(fh)
     except:
         logger.critical('Failed to parse %s' % config['manifest'])
-        flock(flockh, LOCK_UN)
+        lockf(flockh, LOCK_UN)
         flockh.close()
         return 1
 
@@ -469,7 +469,7 @@ def pull_mirror(name, config, opts):
                 if symlink not in symlinks:
                     symlinks.append(symlink)
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
-                if not os.path.exists(target):
+                if not os.path.exists(target) and os.path.exists(source):
                     logger.info('Symlinking %s -> %s' % (target, source))
                     # Make sure the leading dirs are in place
                     if not os.path.exists(os.path.dirname(target)):
@@ -494,7 +494,7 @@ def pull_mirror(name, config, opts):
     write_projects_list(culled, config)
 
     logger.debug('Unlocking %s' % config['lock'])
-    flock(flockh, LOCK_UN)
+    lockf(flockh, LOCK_UN)
     flockh.close()
 
     return 127

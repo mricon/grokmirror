@@ -144,7 +144,7 @@ if __name__ == '__main__':
     parser.add_option('-n', '--use-now', dest='usenow', action='store_true',
         default=False,
         help='Use current timestamp instead of parsing commits')
-    parser.add_option('-c', '--check-export-ok', dest='check_export_ok', 
+    parser.add_option('-c', '--check-export-ok', dest='check_export_ok',
         action='store_true', default=False,
         help='Export only repositories marked as git-daemon-export-ok')
     parser.add_option('-p', '--purge', dest='purge', action='store_true',

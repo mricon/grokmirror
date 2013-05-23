@@ -22,7 +22,7 @@ import fnmatch
 
 import logging
 
-from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
+from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 VERSION = '0.3.1'
 MANIFEST_LOCKH = None
@@ -41,13 +41,13 @@ def lock_repo(fullpath, nonblocking=False):
     else:
         flags = LOCK_EX
 
-    flock(lockfh, flags)
+    lockf(lockfh, flags)
     REPO_LOCKH[fullpath] = lockfh
 
 def unlock_repo(fullpath):
     if fullpath in REPO_LOCKH.keys():
         logger.debug('Unlocking %s' % fullpath)
-        flock(REPO_LOCKH[fullpath], LOCK_UN)
+        lockf(REPO_LOCKH[fullpath], LOCK_UN)
         REPO_LOCKH[fullpath].close()
         del REPO_LOCKH[fullpath]
 
@@ -82,11 +82,11 @@ def find_all_gitdirs(toplevel, ignore=[]):
 def manifest_lock(manifile):
     (dirname, basename) = os.path.split(manifile)
     MANIFEST_LOCKH = open(os.path.join(dirname, '.%s.lock' % basename), 'w')
-    flock(MANIFEST_LOCKH, LOCK_EX)
+    lockf(MANIFEST_LOCKH, LOCK_EX)
 
 def manifest_unlock(manifile):
     if MANIFEST_LOCKH is not None:
-        flock(lockfh, LOCK_UN)
+        lockf(lockfh, LOCK_UN)
         lockfh.close()
 
 def read_manifest(manifile):

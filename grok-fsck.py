@@ -28,7 +28,7 @@ import random
 import time
 import datetime
 
-from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
+from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ def fsck_mirror(name, config, opts):
     logger.debug('Attempting to obtain lock on %s' % config['lock'])
     flockh = open(config['lock'], 'w')
     try:
-        flock(flockh, LOCK_EX | LOCK_NB)
+        lockf(flockh, LOCK_EX | LOCK_NB)
     except IOError, ex:
         logger.info('Could not obtain exclusive lock on %s' % config['lock'])
         logger.info('Assuming another process is running.')
@@ -141,7 +141,7 @@ def fsck_mirror(name, config, opts):
         except:
             # Huai le!
             logger.critical('Failed to parse %s' % config['statusfile'])
-            flock(flockh, LOCK_UN)
+            lockf(flockh, LOCK_UN)
             flockh.close()
             return 1
     else:
@@ -214,7 +214,7 @@ def fsck_mirror(name, config, opts):
         json.dump(status, stfh, indent=2)
         stfh.close()
 
-    flock(flockh, LOCK_UN)
+    lockf(flockh, LOCK_UN)
     flockh.close()
 
 
