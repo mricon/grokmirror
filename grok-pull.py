@@ -268,17 +268,17 @@ def pull_mirror(name, config, opts):
     # push it into grokmirror to override the default logger
     grokmirror.logger = logger
 
-    logger.info('Updating mirror for [%s]' % name)
-
     # Lock the tree to make sure we only run one instance
     logger.debug('Attempting to obtain lock on %s' % config['lock'])
     flockh = open(config['lock'], 'w')
     try:
         lockf(flockh, LOCK_EX | LOCK_NB)
     except IOError, ex:
-        logger.info('Could not obtain exclusive lock on %s' % config['lock'])
-        logger.info('Assuming another process is running.')
+        logger.debug('Could not obtain exclusive lock on %s' % config['lock'])
+        logger.info('Skipping [%s] - update already running' % name)
         return 0
+
+    logger.info('Checking [%s]' % name)
 
     mymanifest = config['mymanifest']
 
