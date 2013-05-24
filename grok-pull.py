@@ -284,15 +284,20 @@ def pull_mirror(name, config, opts):
 
     if config['manifest'].find('file:///') == 0:
         manifile = config['manifest'].replace('file://', '')
+        if not os.path.exists(manifile):
+            logger.critical('Remote manifest not found in %s! Quitting!' % config['manifest'])
+            return 1
+
         fstat = os.stat(manifile)
         last_modified = fstat[8]
-        fstat = os.stat(config['mymanifest'])
-        my_last_modified = fstat[8]
-        if not (opts.force or opts.nomtime) and last_modified <= my_last_modified:
-            logger.info('Manifest file unchanged. Quitting.')
-            lockf(flockh, LOCK_UN)
-            flockh.close()
-            return 0
+        if os.path.exists(config['mymanifest']):
+            fstat = os.stat(config['mymanifest'])
+            my_last_modified = fstat[8]
+            if not (opts.force or opts.nomtime) and last_modified <= my_last_modified:
+                logger.info('Manifest file unchanged. Quitting.')
+                lockf(flockh, LOCK_UN)
+                flockh.close()
+                return 0
 
         logger.info('Reading new manifest from %s' % manifile)
         manifest = grokmirror.read_manifest(manifile)
