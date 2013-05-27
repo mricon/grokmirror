@@ -36,13 +36,16 @@ mirrors.
 %install
 rm -rf %{buildroot}
 %{__python} setup.py install -O1 --skip-build --root %{buildroot}
+
 %{__mkdir_p} -m 0755 \
-    %{buildroot}%{_bindir}
-%{__install} -m 0755 grok-manifest.py %{buildroot}/%{_bindir}/grok-manifest
-%{__install} -m 0755 grok-pull.py     %{buildroot}/%{_bindir}/grok-pull
-%{__install} -m 0755 grok-fsck.py     %{buildroot}/%{_bindir}/grok-fsck
-%{__mkdir_p} -m 0755 \
+    %{buildroot}%{_bindir} \
     %{buildroot}%{_mandir}/man1
+
+%{__install} -m 0755 grok-manifest.py  %{buildroot}/%{_bindir}/grok-manifest
+%{__install} -m 0755 grok-pull.py      %{buildroot}/%{_bindir}/grok-pull
+%{__install} -m 0755 grok-fsck.py      %{buildroot}/%{_bindir}/grok-fsck
+%{__install} -m 0755 grok-dumb-pull.py %{buildroot}/%{_bindir}/grok-dumb-pull
+
 %{__install} -m 0644 man/*.1 %{buildroot}/%{_mandir}/man1/
 
 
@@ -55,6 +58,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon May 27 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.3-1
+- Update to 0.3.3 containing bugfixes and new features
+
 * Mon May 13 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.2-1
 - Update to 0.3.2 containing important bugfixes and minor new features
 
