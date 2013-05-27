@@ -55,7 +55,7 @@ def git_remote_update(args, env):
         if warn:
             logger.warning('Stderr: %s' % '\n'.join(warn))
 
-def dumb_pull_repo(gitdir, remote, svn=False):
+def dumb_pull_repo(gitdir, remotes, svn=False):
     # verify it's a git repo and fetch all remotes
     try:
         repo = Repo(gitdir)
@@ -75,20 +75,19 @@ def dumb_pull_repo(gitdir, remote, svn=False):
 
     if svn:
         logger.debug('Using git-svn for %s' % gitdir)
-        # arghie-argh-argh
-        if remote == '*':
-            remote = '--all'
+        for remote in remotes:
+            # arghie-argh-argh
+            if remote == '*':
+                remote = '--all'
 
-        logger.info('Running git-svn fetch %s in %s' % (remote, gitdir))
-        args = ['/usr/bin/git', 'svn', 'fetch', remote]
-        git_remote_update(args, env)
-        grokmirror.unlock_repo(gitdir)
+            logger.info('Running git-svn fetch %s in %s' % (remote, gitdir))
+            args = ['/usr/bin/git', 'svn', 'fetch', remote]
+            git_remote_update(args, env)
+            grokmirror.unlock_repo(gitdir)
 
-        return
+        return True
 
     # Not an svn remote
-    pullremotes = []
-
     hasremotes = repo.git.remote()
     if not len(hasremotes.strip()):
         logger.info('Repository %s has no defined remotes!' % gitdir)
@@ -98,14 +97,15 @@ def dumb_pull_repo(gitdir, remote, svn=False):
 
     logger.debug('existing remotes: %s' % hasremotes)
     for hasremote in hasremotes.split('\n'):
-        if fnmatch.fnmatch(hasremote, remote):
-            logger.debug('existing remote %s matches requested %s' % (
-                hasremote, remote))
-            args = ['/usr/bin/git', 'remote', 'update', hasremote]
-            logger.info('Updating remote %s in %s' % (hasremote, gitdir))
+        for remote in remotes:
+            if fnmatch.fnmatch(hasremote, remote):
+                logger.debug('existing remote %s matches requested %s' % (
+                    hasremote, remote))
+                args = ['/usr/bin/git', 'remote', 'update', hasremote]
+                logger.info('Updating remote %s in %s' % (hasremote, gitdir))
 
-            git_remote_update(args, env)
-            didwork = True
+                git_remote_update(args, env)
+                didwork = True
 
     grokmirror.unlock_repo(gitdir)
     if not didwork:
@@ -149,9 +149,10 @@ if __name__ == '__main__':
     parser.add_option('-s', '--svn', dest='svn', action='store_true',
         default=False,
         help='The remotes for these repositories are Subversion')
-    parser.add_option('-r', '--remote-name', dest='remote',
-        default='*',
-        help='Only fetch remotes matching this name (accepts globbing)')
+    parser.add_option('-r', '--remote-names', dest='remotes', action='append',
+        default=[],
+        help='Only fetch remotes matching this name (accepts globbing, '
+             'can be passed multiple times)')
     parser.add_option('-u', '--post-update-hook', dest='posthook',
         default='',
         help='Run this hook after each repository is updated. Passes '
@@ -164,6 +165,9 @@ if __name__ == '__main__':
 
     if not len(args):
         parser.error('You must provide at least a path to the repos to pull')
+
+    if not len(opts.remotes):
+        opts.remotes = ['*']
 
     logger.setLevel(logging.DEBUG)
 
@@ -197,14 +201,14 @@ if __name__ == '__main__':
                 continue
 
             logger.debug('Found %s' % entry)
-            didwork = dumb_pull_repo(entry, opts.remote, svn=opts.svn)
+            didwork = dumb_pull_repo(entry, opts.remotes, svn=opts.svn)
             if didwork:
                 run_post_update_hook(opts.posthook, entry)
 
         else:
             logger.debug('Finding all git repos in %s' % entry)
             for founddir in grokmirror.find_all_gitdirs(entry):
-                didwork = dumb_pull_repo(founddir, opts.remote, svn=opts.svn)
+                didwork = dumb_pull_repo(founddir, opts.remotes, svn=opts.svn)
                 if didwork:
                     run_post_update_hook(opts.posthook, founddir)
 

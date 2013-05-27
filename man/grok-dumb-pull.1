@@ -60,8 +60,9 @@ Be verbose and tell us what you are doing
 .B \-s,  \-\-svn
 The remotes for these repositories are Subversion
 .TP
-.BI \-r \ REMOTE, \ \-\-remote\-name\fB= REMOTE
-Only fetch remotes matching this name (accepts globbing)
+.BI \-r \ REMOTES, \ \-\-remote\-names\fB= REMOTES
+Only fetch remotes matching this name (accepts globbing,
+can be passed multiple times)
 .TP
 .BI \-u \ POSTHOOK, \ \-\-post\-update\-hook\fB= POSTHOOK
 Run this hook after each repository is updated. Passes

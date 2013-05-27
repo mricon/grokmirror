@@ -29,8 +29,9 @@ OPTIONS
   -h, --help            show this help message and exit
   -v, --verbose         Be verbose and tell us what you are doing
   -s, --svn             The remotes for these repositories are Subversion
-  -r REMOTE, --remote-name=REMOTE
-                        Only fetch remotes matching this name (accepts globbing)
+  -r REMOTES, --remote-names=REMOTES
+                        Only fetch remotes matching this name (accepts globbing,
+                        can be passed multiple times)
   -u POSTHOOK, --post-update-hook=POSTHOOK
                         Run this hook after each repository is updated. Passes
                         full path to the repository as the sole argument.
