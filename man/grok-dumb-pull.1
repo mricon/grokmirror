@@ -63,6 +63,10 @@ The remotes for these repositories are Subversion
 .BI \-r \ REMOTE, \ \-\-remote\-name\fB= REMOTE
 Only fetch remotes matching this name (accepts globbing)
 .TP
+.BI \-u \ POSTHOOK, \ \-\-post\-update\-hook\fB= POSTHOOK
+Run this hook after each repository is updated. Passes
+full path to the repository as the sole argument.
+.TP
 .BI \-l \ LOGFILE, \ \-\-logfile\fB= LOGFILE
 Put debug logs into this file
 .UNINDENT

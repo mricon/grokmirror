@@ -31,6 +31,9 @@ OPTIONS
   -s, --svn             The remotes for these repositories are Subversion
   -r REMOTE, --remote-name=REMOTE
                         Only fetch remotes matching this name (accepts globbing)
+  -u POSTHOOK, --post-update-hook=POSTHOOK
+                        Run this hook after each repository is updated. Passes
+                        full path to the repository as the sole argument.
   -l LOGFILE, --logfile=LOGFILE
                         Put debug logs into this file
 

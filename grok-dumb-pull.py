@@ -91,7 +91,7 @@ def dumb_pull_repo(gitdir, remote, svn=False):
 
     hasremotes = repo.git.remote()
     if not len(hasremotes.strip()):
-        logger.critical('Repository %s has no defined remotes!' % gitdir)
+        logger.info('Repository %s has no defined remotes!' % gitdir)
         return
 
     didwork = False
@@ -109,8 +109,31 @@ def dumb_pull_repo(gitdir, remote, svn=False):
 
     grokmirror.unlock_repo(gitdir)
     if not didwork:
-        logger.critical('Could not find any remotes matching %s in %s' % (
+        logger.info('Could not find any remotes matching %s in %s' % (
             remote, gitdir))
+
+    return didwork
+
+def run_post_update_hook(hookscript, gitdir):
+    if hookscript == '':
+        return
+    if not os.access(hookscript, os.X_OK):
+        logger.warning('post_update_hook %s is not executable' % hookscript)
+        return
+
+    args = [hookscript, gitdir]
+    logger.debug('Running: %s' % ' '.join(args))
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).communicate()
+
+    error  = error.strip()
+    output = output.strip()
+    if error:
+        # Put hook stderror into warning
+        logger.warning('Hook Stderr: %s' % error)
+    if output:
+        # Put hook stdout into info
+        logger.info('Hook Stdout: %s' % output)
 
 if __name__ == '__main__':
     from optparse import OptionParser
@@ -129,6 +152,10 @@ if __name__ == '__main__':
     parser.add_option('-r', '--remote-name', dest='remote',
         default='*',
         help='Only fetch remotes matching this name (accepts globbing)')
+    parser.add_option('-u', '--post-update-hook', dest='posthook',
+        default='',
+        help='Run this hook after each repository is updated. Passes '
+             'full path to the repository as the sole argument.')
     parser.add_option('-l', '--logfile', dest='logfile',
         default=None,
         help='Put debug logs into this file')
@@ -170,10 +197,14 @@ if __name__ == '__main__':
                 continue
 
             logger.debug('Found %s' % entry)
-            dumb_pull_repo(entry, opts.remote, svn=opts.svn)
+            didwork = dumb_pull_repo(entry, opts.remote, svn=opts.svn)
+            if didwork:
+                run_post_update_hook(opts.posthook, entry)
 
         else:
             logger.debug('Finding all git repos in %s' % entry)
             for founddir in grokmirror.find_all_gitdirs(entry):
-                dumb_pull_repo(founddir, opts.remote, svn=opts.svn)
+                didwork = dumb_pull_repo(founddir, opts.remote, svn=opts.svn)
+                if didwork:
+                    run_post_update_hook(opts.posthook, founddir)
 
