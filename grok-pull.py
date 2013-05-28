@@ -221,11 +221,24 @@ def write_projects_list(manifest, config):
         fh = open(tmpfile, 'w')
         for gitdir in manifest.keys():
             if trimtop and gitdir.find(trimtop) == 0:
-                gitdir = gitdir[len(trimtop):]
+                pgitdir = gitdir[len(trimtop):]
+            else:
+                pgitdir = gitdir
 
             # Always remove leading slash, otherwise cgit breaks
-            gitdir = gitdir.lstrip('/')
-            fh.write('%s\n' % gitdir)
+            pgitdir = pgitdir.lstrip('/')
+            fh.write('%s\n' % pgitdir)
+
+            if 'symlinks' in manifest[gitdir].keys():
+                # Do the same for symlinks
+                # XXX: Should make this configurable, perhaps
+                for symlink in manifest[gitdir]['symlinks']:
+                    print symlink
+                    if trimtop and symlink.find(trimtop) == 0:
+                        symlink = symlink[len(trimtop):]
+
+                    symlink = symlink.lstrip('/')
+                    fh.write('%s\n' % symlink)
 
         fh.close()
         os.chmod(tmpfile, 0644)
