@@ -103,7 +103,14 @@ def read_manifest(manifile, wait=False):
         if not wait or os.path.exists(manifile):
             break
         logger.info('Manifest file not yet found, waiting...')
+        # Unlock the manifest so other processes aren't waiting for us
+        was_locked = False
+        if MANIFEST_LOCKH is not None:
+            was_locked = True
+            manifest_unlock(manifile)
         time.sleep(1)
+        if was_locked:
+            manifest_lock(manifile)
 
     if not os.path.exists(manifile):
         logger.info('%s not found, assuming initial run' % manifile)
