@@ -213,6 +213,11 @@ def write_projects_list(manifest, config):
     if 'projectslist_trimtop' in config.keys():
         trimtop = config['projectslist_trimtop']
 
+    add_symlinks = False
+    if ('projectslist_symlinks' in config.keys()
+            and config['projectslist_symlinks'] == 'yes'):
+        add_symlinks = True
+
     (dirname, basename) = os.path.split(plpath)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
     logger.info('Writing new %s' % plpath)
@@ -229,11 +234,10 @@ def write_projects_list(manifest, config):
             pgitdir = pgitdir.lstrip('/')
             fh.write('%s\n' % pgitdir)
 
-            if 'symlinks' in manifest[gitdir].keys():
+            if add_symlinks and 'symlinks' in manifest[gitdir].keys():
                 # Do the same for symlinks
                 # XXX: Should make this configurable, perhaps
                 for symlink in manifest[gitdir]['symlinks']:
-                    print symlink
                     if trimtop and symlink.find(trimtop) == 0:
                         symlink = symlink[len(trimtop):]
 
