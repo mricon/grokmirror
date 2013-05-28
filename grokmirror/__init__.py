@@ -151,6 +151,13 @@ def write_manifest(manifile, manifest, mtime=None):
             os.utime(tmpfile, (mtime, mtime))
         logger.debug('Moving %s to %s' % (tmpfile, manifile))
         shutil.move(tmpfile, manifile)
+        # This is very blunt, but done in an attempt to combat odd
+        # race condition on NFS
+        while True:
+            if os.path.exists(manifile):
+                break
+            logger.debug('New manifest file not yet found, waiting...')
+            time.sleep(0.01)
 
     finally:
         # If something failed, don't leave these trailing around
