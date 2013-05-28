@@ -57,6 +57,7 @@ def git_remote_update(args, env):
 
 def dumb_pull_repo(gitdir, remotes, svn=False):
     # verify it's a git repo and fetch all remotes
+    logger.debug('Will pull %s with following remotes: %s' % (gitdir, remotes))
     try:
         repo = Repo(gitdir)
         assert repo.bare == True
@@ -70,6 +71,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     except IOError, ex:
         logger.info('Could not obtain exclusive lock on %s' % gitdir)
         logger.info('\tAssuming another process is running.')
+        return False
 
     env = {'GIT_DIR': gitdir}
 
@@ -91,14 +93,16 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     hasremotes = repo.git.remote()
     if not len(hasremotes.strip()):
         logger.info('Repository %s has no defined remotes!' % gitdir)
-        return
+        return False
 
     didwork = False
 
     logger.debug('existing remotes: %s' % hasremotes)
-    for hasremote in hasremotes.split('\n'):
-        for remote in remotes:
+    for remote in remotes:
+        remotefound = False
+        for hasremote in hasremotes.split('\n'):
             if fnmatch.fnmatch(hasremote, remote):
+                remotefound = True
                 logger.debug('existing remote %s matches requested %s' % (
                     hasremote, remote))
                 args = ['/usr/bin/git', 'remote', 'update', hasremote]
@@ -107,10 +111,11 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                 git_remote_update(args, env)
                 didwork = True
 
+        if not remotefound:
+            logger.info('Could not find any remotes matching %s in %s' % (
+                remote, gitdir))
+
     grokmirror.unlock_repo(gitdir)
-    if not didwork:
-        logger.info('Could not find any remotes matching %s in %s' % (
-            remote, gitdir))
 
     return didwork
 
