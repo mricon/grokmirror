@@ -23,6 +23,7 @@ import fnmatch
 import logging
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
+from StringIO import StringIO
 
 VERSION = '0.3.3'
 MANIFEST_LOCKH = None
@@ -125,25 +126,35 @@ def write_manifest(manifile, manifest, mtime=None):
     import shutil
     import gzip
 
+    logger.info('Writing new %s' % manifile)
+
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
-    logger.info('Writing new %s' % manifile)
+    fh = os.fdopen(fd, 'w', 0)
+    logger.debug('Created a temporary file in %s' % tmpfile)
+    logger.debug('Writing to %s' % tmpfile)
     try:
-        if manifile.find('.gz') > 0:
-            fh = gzip.open(tmpfile, 'wb')
-        else:
-            fh = open(tmpfile, 'w')
         # Probably should make indent configurable, but extra whitespaces
         # don't change the size of manifest.js.gz by any appreciable amount
-        json.dump(manifest, fh, indent=2)
+        if manifile.find('.gz') > 0:
+            gfh = gzip.GzipFile(fileobj=fh, mode='wb')
+            json.dump(manifest, gfh, indent=2)
+            gfh.close()
+        else:
+            json.dump(manifest, fh, indent=2)
+
+        os.fsync(fd)
         fh.close()
         os.chmod(tmpfile, 0644)
         if mtime is not None:
+            logger.debug('Setting mtime to %s' % mtime)
             os.utime(tmpfile, (mtime, mtime))
+        logger.debug('Moving %s to %s' % (tmpfile, manifile))
         shutil.move(tmpfile, manifile)
 
     finally:
         # If something failed, don't leave these trailing around
         if os.path.exists(tmpfile):
+            logger.debug('Removing %s' % tmpfile)
             os.unlink(tmpfile)
 
