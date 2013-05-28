@@ -160,6 +160,10 @@ if __name__ == '__main__':
         default=[],
         help='When finding git dirs, ignore these paths '
              '(can be used multiple times, accepts shell-style globbing)')
+    parser.add_option('-w', '--wait-for-manifest', dest='wait',
+        action='store_true', default=False,
+        help='When running with arguments, wait if manifest is not there '
+             '(can be useful when multiple writers are writing the manifest)')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
         default=False,
         help='Be verbose and tell us what you are doing')
@@ -170,6 +174,8 @@ if __name__ == '__main__':
         parser.error('You must provide the path to the manifest file')
     if not opts.toplevel:
         parser.error('You must provide the toplevel path')
+    if not len(args) and opts.wait:
+        parser.error('--wait option only makes sense when dirs are passed')
 
     logger.setLevel(logging.DEBUG)
 
@@ -196,7 +202,7 @@ if __name__ == '__main__':
     grokmirror.logger = logger
 
     grokmirror.manifest_lock(opts.manifile)
-    manifest = grokmirror.read_manifest(opts.manifile)
+    manifest = grokmirror.read_manifest(opts.manifile, wait=opts.wait)
 
     # If manifest is empty, don't use current timestamp
     if not len(manifest.keys()):

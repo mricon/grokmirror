@@ -17,6 +17,7 @@
 import os
 import sys
 
+import time
 import json
 import fnmatch
 
@@ -97,7 +98,13 @@ def manifest_unlock(manifile):
         lockf(MANIFEST_LOCKH, LOCK_UN)
         MANIFEST_LOCKH.close()
 
-def read_manifest(manifile):
+def read_manifest(manifile, wait=False):
+    while True:
+        if not wait or os.path.exists(manifile):
+            break
+        logger.info('Manifest file not yet found, waiting...')
+        time.sleep(1)
+
     if not os.path.exists(manifile):
         logger.info('%s not found, assuming initial run' % manifile)
         return {}
@@ -151,13 +158,6 @@ def write_manifest(manifile, manifest, mtime=None):
             os.utime(tmpfile, (mtime, mtime))
         logger.debug('Moving %s to %s' % (tmpfile, manifile))
         shutil.move(tmpfile, manifile)
-        # This is very blunt, but done in an attempt to combat odd
-        # race condition on NFS
-        while True:
-            if os.path.exists(manifile):
-                break
-            logger.debug('New manifest file not yet found, waiting...')
-            time.sleep(0.01)
 
     finally:
         # If something failed, don't leave these trailing around
