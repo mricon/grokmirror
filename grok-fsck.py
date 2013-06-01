@@ -45,7 +45,7 @@ def run_git_fsck(fullpath, config):
     try:
         grokmirror.lock_repo(fullpath, nonblocking=False)
     except IOError, ex:
-        logger.info('Could not obtain exclusive lock on %s' % gitdir)
+        logger.info('Could not obtain exclusive lock on %s' % fullpath)
         logger.info('Will run next time')
         return
 
