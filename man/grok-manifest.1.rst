@@ -38,6 +38,10 @@ OPTIONS
   -p, --purge           Purge deleted git repositories from manifest
   -x, --remove          Remove repositories passed as arguments from
                         the manifest file
+  -w, --wait-for-manifest
+                        When running with arguments, wait if manifest is not
+                        there (can be useful when multiple writers are writing
+                        to the manifest file via NFS)
   -i IGNORE, --ignore-paths=IGNORE
                         When finding git dirs, ignore these paths (can be used
                         multiple times, accepts shell-style globbing)

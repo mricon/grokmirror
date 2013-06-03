@@ -76,6 +76,11 @@ Purge deleted git repositories from manifest
 Remove repositories passed as arguments from
 the manifest file
 .TP
+.B \-w,  \-\-wait\-for\-manifest
+When running with arguments, wait if manifest is not
+there (can be useful when multiple writers are writing
+to the manifest file via NFS)
+.TP
 .BI \-i \ IGNORE, \ \-\-ignore\-paths\fB= IGNORE
 When finding git dirs, ignore these paths (can be used
 multiple times, accepts shell\-style globbing)
