@@ -184,6 +184,8 @@ def fsck_mirror(name, config, opts):
             continue
 
         # If nextcheck is before today, set it to today
+        # XXX: If a system comes up after being in downtime for a while, this
+        #      may cause pain for them, so perhaps use randomization here?
         nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'],
                 '%Y-%m-%d')
 
@@ -205,6 +207,60 @@ def fsck_mirror(name, config, opts):
 
             nextdate = today + datetime.timedelta(days=delay)
             status[fullpath]['nextcheck'] = nextdate.strftime('%F')
+            workdone = True
+
+    # Do quickie checks
+    if 'quick_checks_max_min' in config.keys():
+        # Convert to seconds for ease of tracking
+        max_time = int(config['quick_checks_max_min']) * 60
+        logger.debug('max_time=%s' % max_time)
+        if max_time < 60:
+            logger.warning('quick_checks_max_min must be at least 1 minute')
+            max_time = 60
+        logger.info('Performing quick checks')
+        # Find the smallest s_elapsed not yet checked today
+        # and run a check on it until we either run out of time
+        # or repos to check.
+        total_elapsed_time = 0
+        quickies_checked = 0
+        while True:
+            # use this var to track which repo is smallest on s_elapsed
+            least_elapsed = None
+            repo_to_check = None
+            for fullpath in status.keys():
+                if status[fullpath]['lastcheck'] in ('never', todayiso):
+                    # never been checked or checked today, skip
+                    continue
+                if 's_elapsed' not in status[fullpath].keys():
+                    # something happened to the s_elapsed entry?
+                    continue
+                prev_elapsed = status[fullpath]['s_elapsed']
+                if total_elapsed_time + prev_elapsed > max_time:
+                    # would take us too long to check it, skip
+                    continue
+                if least_elapsed is None or prev_elapsed < least_elapsed:
+                    least_elapsed = prev_elapsed
+                    repo_to_check = fullpath
+
+            if repo_to_check is None:
+                if quickies_checked == 0:
+                    logger.info('No repos qualified for quick checks')
+                else:
+                    logger.info('Quick-checked %s repos in %s seconds' % (
+                        quickies_checked, total_elapsed_time))
+                break
+
+            # check repo and record the necessary bits
+            startt = time.time()
+            run_git_fsck(repo_to_check, config)
+            endt = time.time()
+
+            # We don't adjust nextcheck, since it kinda becomes meaningless
+            status[repo_to_check]['lastcheck'] = todayiso
+            status[repo_to_check]['s_elapsed'] = round(endt - startt, 2)
+
+            total_elapsed_time += status[repo_to_check]['s_elapsed']
+            quickies_checked += 1
             workdone = True
 
     # Write out the new status
