@@ -70,7 +70,7 @@ def set_owner_description(toplevel, gitdir, owner, description):
 def set_agefile(toplevel, gitdir, last_modified):
     # set agefile, which can be used by cgit to show idle times
     # cgit recommends it to be yyyy-mm-dd hh:mm:ss
-    cgit_fmt = time.strftime('%F %T', time.gmtime(last_modified))
+    cgit_fmt = time.strftime('%F %T', time.localtime(last_modified))
     agefile = os.path.join(toplevel, gitdir.lstrip('/'),
             'info/web/last-modified')
     if not os.path.exists(os.path.dirname(agefile)):
