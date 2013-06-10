@@ -55,6 +55,19 @@ def unlock_repo(fullpath):
         REPO_LOCKH[fullpath].close()
         del REPO_LOCKH[fullpath]
 
+def is_bare_git_repo(path):
+    """
+    Return True if path (which is already verified to be a directory)
+    sufficiently resembles a base git repo (good enough to fool git
+    itself).
+    """
+    if (os.path.isdir(os.path.join(path, 'objects')) and
+            os.path.isdir(os.path.join(path, 'refs')) and
+            os.path.isfile(os.path.join(path, 'HEAD'))):
+        return True
+
+    return False
+
 def find_all_gitdirs(toplevel, ignore=[]):
     logger.info('Finding bare git repos in %s' % toplevel)
     logger.debug('Ignore list: %s' % ' '.join(ignore))
@@ -72,7 +85,7 @@ def find_all_gitdirs(toplevel, ignore=[]):
                     torm.append(name)
                     ignored = True
                     break
-            if not ignored and name.find('.git') > 0:
+            if not ignored and is_bare_git_repo(name):
                 logger.debug('Found %s' % os.path.join(root, name))
                 gitdirs.append(os.path.join(root, name))
                 torm.append(name)
