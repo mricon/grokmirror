@@ -60,11 +60,13 @@ def is_bare_git_repo(path):
     sufficiently resembles a base git repo (good enough to fool git
     itself).
     """
+    logger.debug('Checking if %s is a git repository' % path)
     if (os.path.isdir(os.path.join(path, 'objects')) and
             os.path.isdir(os.path.join(path, 'refs')) and
             os.path.isfile(os.path.join(path, 'HEAD'))):
         return True
 
+    logger.debug('Skipping %s: not a git repository' % path)
     return False
 
 def find_all_gitdirs(toplevel, ignore=[]):
@@ -84,7 +86,7 @@ def find_all_gitdirs(toplevel, ignore=[]):
                     torm.append(name)
                     ignored = True
                     break
-            if not ignored and is_bare_git_repo(name):
+            if not ignored and is_bare_git_repo(os.path.join(root, name)):
                 logger.debug('Found %s' % os.path.join(root, name))
                 gitdirs.append(os.path.join(root, name))
                 torm.append(name)
