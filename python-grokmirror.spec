@@ -5,7 +5,7 @@
 %endif
 
 Name:           python-grokmirror
-Version:        0.3.3
+Version:        0.3.4
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -58,6 +58,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Jun 14 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.4-1
+- Update to 0.3.4 containing minor bugfixes
+
 * Mon May 27 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.3-1
 - Update to 0.3.3 containing bugfixes and new features
 

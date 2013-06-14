@@ -8,7 +8,7 @@ Framework to smartly mirror git repositories
 :Date:      2013-05-27
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.3.3
+:Version:   0.3.4
 
 DESCRIPTION
 -----------
