@@ -1,4 +1,3 @@
-#!/usr/bin/python -tt
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
