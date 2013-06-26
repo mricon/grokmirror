@@ -28,6 +28,9 @@ import subprocess
 import shutil
 import calendar
 
+import threading
+import Queue
+
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 from StringIO import StringIO
 
@@ -35,6 +38,35 @@ from git import Repo
 
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
+
+class PullerThread(threading.Thread):
+    def __init__(self, in_queue, out_queue, config, thread_name):
+        threading.Thread.__init__(self)
+        self.in_queue   = in_queue
+        self.out_queue  = out_queue
+        self.toplevel   = config['toplevel']
+        self.hookscript = config['post_update_hook']
+        self.myname     = thread_name
+
+    def run(self):
+        while True:
+            (gitdir, modified) = self.in_queue.get()
+            fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
+            try:
+                grokmirror.lock_repo(fullpath, nonblocking=True)
+                logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
+                pull_repo(self.toplevel, gitdir)
+                set_agefile(self.toplevel, gitdir, modified)
+                run_post_update_hook(self.hookscript, self.toplevel, gitdir)
+                grokmirror.unlock_repo(fullpath)
+                self.out_queue.put((gitdir, True))
+            except IOError, ex:
+                logger.info('Could not obtain exclusive lock on %s' % gitdir)
+                logger.info('\tAssuming grok-fsck is running, will try later.')
+                self.out_queue.put((gitdir, False))
+            logger.debug('[Thread-%s] done pulling %s' % (self.myname, gitdir))
+
+            self.in_queue.task_done()
 
 def fix_remotes(gitdir, toplevel, site):
     # Remove all existing remotes and set new origin
@@ -106,7 +138,6 @@ def run_post_update_hook(hookscript, toplevel, gitdir):
 def pull_repo(toplevel, gitdir):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
     args = ['/usr/bin/git', 'remote', 'update', '--prune']
-    logger.info('Updating %s' % gitdir)
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -455,20 +486,41 @@ def pull_mirror(name, config, opts):
 
     hookscript = config['post_update_hook']
 
+    in_queue  = Queue.Queue()
+    out_queue = Queue.Queue()
+
+    # start out the number of threads we want
+    if 'pull_threads' in config.keys():
+        pull_threads = int(config['pull_threads'])
+        if pull_threads < 1:
+            logger.info('The pull_threads option is less than 1, forcing to 1')
+            pull_threads = 1
+    else:
+        # be conservative
+        logger.info('The pull_threads option is not set, consider setting it')
+        pull_threads = 5
+
+    logger.info('Will use %d threads to pull repos' % pull_threads)
+
     for gitdir in to_pull:
-        # Check in case grok-fsck is checking this repo right now
-        try:
-            fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-            grokmirror.lock_repo(fullpath, nonblocking=True)
-            pull_repo(toplevel, gitdir)
-            set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
-            run_post_update_hook(hookscript, toplevel, gitdir)
-            grokmirror.unlock_repo(fullpath)
-        except IOError, ex:
-            logger.info('Could not obtain exclusive lock on %s' % gitdir)
-            logger.info('\tAssuming grok-fsck is running, will try later.')
+        in_queue.put((gitdir, culled[gitdir]['modified']))
+
+    for i in range(pull_threads):
+        t = PullerThread(in_queue, out_queue, config, i)
+        t.setDaemon(True)
+        t.start()
+
+    # wait till it's all done
+    in_queue.join()
+    logger.info('All threads finished.')
+
+    while not out_queue.empty():
+        # see if any of it failed
+        (gitdir, status) = out_queue.get()
+        if status == False:
             # To make sure we check this again during next run,
             # fudge the manifest accordingly.
+            logger.debug('Will recheck %s during next run' % gitdir)
             culled[gitdir] = mymanifest[gitdir]
             # this is rather hackish, but effective
             last_modified -= 1
