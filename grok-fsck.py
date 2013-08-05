@@ -33,13 +33,30 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
 
-def run_git_fsck(fullpath, config):
-    env = {'GIT_DIR': fullpath}
-    args = ['/usr/bin/git', 'fsck', '--full']
-    logger.info('Checking %s' % fullpath)
+def run_git_repack(fullpath, config):
+    if 'repack' not in config.keys() or config['repack'] != 'yes':
+        return
 
+    env = {'GIT_DIR': fullpath}
+    args = ['/usr/bin/git', 'repack', '-a', '-d', '-l', '-q']
+    logger.info('Repacking %s' % fullpath)
+
+    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, env=env).communicate()
+
+    error = error.strip()
+
+    # Shouldn't return any errors, normally, so dump any of them into warn
+    if error:
+        logger.critical('Repacking %s returned errors:' % fullpath)
+        for entry in error.split('\n'):
+            logger.critical("\t%s" % entry)
+
+def run_git_fsck(fullpath, config):
     # Lock the git repository so no other grokmirror process attempts to
-    # modify it while we're running git-fsck. If we miss this window, we
+    # modify it while we're running git ops. If we miss this window, we
     # may not check the repo again for a long time, so block until the lock
     # is available.
     try:
@@ -48,6 +65,12 @@ def run_git_fsck(fullpath, config):
         logger.info('Could not obtain exclusive lock on %s' % fullpath)
         logger.info('Will run next time')
         return
+
+    run_git_repack(fullpath, config)
+
+    env = {'GIT_DIR': fullpath}
+    args = ['/usr/bin/git', 'fsck', '--full']
+    logger.info('Checking %s' % fullpath)
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
