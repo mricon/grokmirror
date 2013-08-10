@@ -626,6 +626,9 @@ if __name__ == '__main__':
 
     (opts, args) = parser.parse_args()
 
+    if not opts.config:
+        parser.error('You must provide the path to the config file')
+
     ini = ConfigParser()
     ini.read(opts.config)
 
