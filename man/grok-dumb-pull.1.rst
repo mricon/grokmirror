@@ -9,6 +9,7 @@ Update git repositories not managed by grokmirror
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
 :Version:   0.3
+:Manual section: 1
 
 SYNOPSIS
 --------
