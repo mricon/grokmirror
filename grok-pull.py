@@ -371,7 +371,7 @@ def pull_mirror(name, config, opts):
             request.add_header('If-Modified-Since', my_last_modified)
 
         try:
-            ufh = opener.open(request)
+            ufh = opener.open(request, timeout=30)
         except urllib2.HTTPError, ex:
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. Quitting.')
