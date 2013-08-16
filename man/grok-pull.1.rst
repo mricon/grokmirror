@@ -34,6 +34,10 @@ OPTIONS
   -f, --force           Force full git update regardless of last-modified
                         times. Also useful when repos.conf has changed.
   -p, --purge           Remove any git trees that are no longer in manifest.
+  -y, --pretty          Pretty-print the generated manifest (sort repos
+                        and add indentation). This is much slower, so
+                        should be used with caution on large
+                        collections.
   -r, --reuse-existing-repos
                         If any existing repositories are found on disk, set
                         new remote origin and reuse

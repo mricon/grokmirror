@@ -156,6 +156,9 @@ if __name__ == '__main__':
     parser.add_option('-x', '--remove', dest='remove', action='store_true',
         default=False,
         help='Remove repositories passed as arguments from manifest')
+    parser.add_option('-y', '--pretty', dest='pretty', action='store_true',
+        default=False,
+        help='Pretty-print manifest (sort keys and add indentation)')
     parser.add_option('-i', '--ignore-paths', dest='ignore', action='append',
         default=[],
         help='When finding git dirs, ignore these paths '
@@ -222,7 +225,7 @@ if __name__ == '__main__':
         #      by removing a repository used as a reference for others
         #      also make sure we clean up any dangling symlinks
 
-        grokmirror.write_manifest(opts.manifile, manifest)
+        grokmirror.write_manifest(opts.manifile, manifest, pretty=opts.pretty)
         grokmirror.manifest_unlock(opts.manifile)
         sys.exit(0)
 
@@ -262,6 +265,6 @@ if __name__ == '__main__':
     if len(symlinks):
         set_symlinks(manifest, opts.toplevel, symlinks)
 
-    grokmirror.write_manifest(opts.manifile, manifest)
+    grokmirror.write_manifest(opts.manifile, manifest, pretty=opts.pretty)
     grokmirror.manifest_unlock(opts.manifile)
 

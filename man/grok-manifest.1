@@ -50,42 +50,48 @@ clone/pull the repositories that have changed since the mirror\(aqs last run.
 .B \-\-version
 show program\(aqs version number and exit
 .TP
-.B \-h,  \-\-help
+.B \-h\fP,\fB  \-\-help
 show this help message and exit
 .TP
-.BI \-m \ MANIFILE, \ \-\-manifest\fB= MANIFILE
+.BI \-m \ MANIFILE\fP,\fB \ \-\-manifest\fB= MANIFILE
 Location of manifest.js or manifest.js.gz
 .TP
-.BI \-t \ TOPLEVEL, \ \-\-toplevel\fB= TOPLEVEL
+.BI \-t \ TOPLEVEL\fP,\fB \ \-\-toplevel\fB= TOPLEVEL
 Top dir where all repositories reside
 .TP
-.BI \-l \ LOGFILE, \ \-\-logfile\fB= LOGFILE
+.BI \-l \ LOGFILE\fP,\fB \ \-\-logfile\fB= LOGFILE
 When specified, will put debug logs in this location
 .TP
-.B \-c,  \-\-check\-export\-ok
+.B \-c\fP,\fB  \-\-check\-export\-ok
 Honor the git\-daemon\-export\-ok magic file and
 do not export repositories not marked as such
 .TP
-.B \-n,  \-\-use\-now
+.B \-n\fP,\fB  \-\-use\-now
 Use current timestamp instead of parsing commits
 .TP
-.B \-p,  \-\-purge
+.B \-p\fP,\fB  \-\-purge
 Purge deleted git repositories from manifest
 .TP
-.B \-x,  \-\-remove
+.B \-x\fP,\fB  \-\-remove
 Remove repositories passed as arguments from
 the manifest file
 .TP
-.B \-w,  \-\-wait\-for\-manifest
+.B \-y\fP,\fB  \-\-pretty
+Pretty\-print the generated manifest (sort repos
+and add indentation). This is much slower, so
+should be used with caution on large
+collections.
+.TP
+.B \-w\fP,\fB  \-\-wait\-for\-manifest
 When running with arguments, wait if manifest is not
 there (can be useful when multiple writers are writing
 to the manifest file via NFS)
 .TP
-.BI \-i \ IGNORE, \ \-\-ignore\-paths\fB= IGNORE
+.BI \-i \ IGNORE\fP,\fB \ \-\-ignore\-paths\fB= IGNORE
 When finding git dirs, ignore these paths (can be used
 multiple times, accepts shell\-style globbing)
 .TP
-.B \-v,  \-\-verbose
+.B \-v\fP,\fB  \-\-verbose
 Be verbose and tell us what you are doing
 .UNINDENT
 .UNINDENT

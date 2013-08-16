@@ -39,6 +39,10 @@ OPTIONS
   -p, --purge           Purge deleted git repositories from manifest
   -x, --remove          Remove repositories passed as arguments from
                         the manifest file
+  -y, --pretty          Pretty-print the generated manifest (sort repos
+                        and add indentation). This is much slower, so
+                        should be used with caution on large
+                        collections.
   -w, --wait-for-manifest
                         When running with arguments, wait if manifest is not
                         there (can be useful when multiple writers are writing

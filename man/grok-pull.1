@@ -53,27 +53,33 @@ which can then be used for further mirroring.
 .B \-\-version
 show program\(aqs version number and exit
 .TP
-.B \-h,  \-\-help
+.B \-h\fP,\fB  \-\-help
 show this help message and exit
 .TP
-.B \-v,  \-\-verbose
+.B \-v\fP,\fB  \-\-verbose
 Be verbose and tell us what you are doing
 .TP
-.B \-n,  \-\-no\-mtime\-check
+.B \-n\fP,\fB  \-\-no\-mtime\-check
 Run without checking manifest mtime.
 .TP
-.B \-f,  \-\-force
+.B \-f\fP,\fB  \-\-force
 Force full git update regardless of last\-modified
 times. Also useful when repos.conf has changed.
 .TP
-.B \-p,  \-\-purge
+.B \-p\fP,\fB  \-\-purge
 Remove any git trees that are no longer in manifest.
 .TP
-.B \-r,  \-\-reuse\-existing\-repos
+.B \-y\fP,\fB  \-\-pretty
+Pretty\-print the generated manifest (sort repos
+and add indentation). This is much slower, so
+should be used with caution on large
+collections.
+.TP
+.B \-r\fP,\fB  \-\-reuse\-existing\-repos
 If any existing repositories are found on disk, set
 new remote origin and reuse
 .TP
-.BI \-c \ CONFIG, \ \-\-config\fB= CONFIG
+.BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
 Location of repos.conf
 .UNINDENT
 .UNINDENT

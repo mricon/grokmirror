@@ -583,7 +583,8 @@ def pull_mirror(name, config, opts):
                     shutil.rmtree(founddir)
 
     # Once we're done, save culled as our new manifest
-    grokmirror.write_manifest(config['mymanifest'], culled, last_modified)
+    grokmirror.write_manifest(config['mymanifest'], culled,
+                              mtime=last_modified, pretty=opts.pretty)
 
     # write out projects.list, if asked to
     write_projects_list(culled, config)
@@ -617,6 +618,9 @@ if __name__ == '__main__':
     parser.add_option('-p', '--purge', dest='purge',
         action='store_true', default=False,
         help='Remove any git trees that are no longer in manifest.')
+    parser.add_option('-y', '--pretty', dest='pretty', action='store_true',
+        default=False,
+        help='Pretty-print manifest (sort keys and add indentation)')
     parser.add_option('-r', '--reuse-existing-repos', dest='reuse',
         action='store_true', default=False,
         help='If any existing repositories are found on disk, set new '

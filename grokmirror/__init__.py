@@ -149,7 +149,7 @@ def read_manifest(manifile, wait=False):
 
     return manifest
 
-def write_manifest(manifile, manifest, mtime=None):
+def write_manifest(manifile, manifest, mtime=None, pretty=False):
     import tempfile
     import shutil
     import gzip
@@ -162,14 +162,18 @@ def write_manifest(manifile, manifest, mtime=None):
     logger.debug('Created a temporary file in %s' % tmpfile)
     logger.debug('Writing to %s' % tmpfile)
     try:
-        # Probably should make indent configurable, but extra whitespaces
-        # don't change the size of manifest.js.gz by any appreciable amount
         if manifile.find('.gz') > 0:
             gfh = gzip.GzipFile(fileobj=fh, mode='wb')
-            json.dump(manifest, gfh, indent=2)
+            if pretty:
+                json.dump(manifest, gfh, indent=2, sort_keys=True)
+            else:
+                json.dump(manifest, gfh)
             gfh.close()
         else:
-            json.dump(manifest, fh, indent=2)
+            if pretty:
+                json.dump(manifest, fh, indent=2, sort_keys=True)
+            else:
+                json.dump(manifest, fh)
 
         os.fsync(fd)
         fh.close()
