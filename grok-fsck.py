@@ -37,8 +37,13 @@ def run_git_repack(fullpath, config):
     if 'repack' not in config.keys() or config['repack'] != 'yes':
         return
 
+    if 'repack_flags' not in config.keys():
+        config['repack_flags'] = '-a -d -l -q'
+
+    flags = config['repack_flags'].split()
+
     env = {'GIT_DIR': fullpath}
-    args = ['/usr/bin/git', 'repack', '-a', '-d', '-l', '-q']
+    args = ['/usr/bin/git', 'repack'] + flags
     logger.info('Repacking %s' % fullpath)
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
