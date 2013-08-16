@@ -66,8 +66,6 @@ def run_git_fsck(fullpath, config):
         logger.info('Will run next time')
         return
 
-    run_git_repack(fullpath, config)
-
     env = {'GIT_DIR': fullpath}
     args = ['/usr/bin/git', 'fsck', '--full']
     logger.info('Checking %s' % fullpath)
@@ -77,8 +75,6 @@ def run_git_fsck(fullpath, config):
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, env=env).communicate()
 
-    grokmirror.unlock_repo(fullpath)
-
     error = error.strip()
 
     if error:
@@ -86,22 +82,25 @@ def run_git_fsck(fullpath, config):
         debug = []
         warn  = []
         for line in error.split('\n'):
-            if line.find('dangling ') == 0:
-                debug.append(line)
-            elif line.find('notice: HEAD points to an unborn branch') == 0:
-                debug.append(line)
-            elif line.find('notice: No default references') == 0:
-                debug.append(line)
-            elif line.find('contains zero-padded file modes') > 0:
-                debug.append(line)
-            else:
+            ignored = False
+            for estring in config['ignore_errors']:
+                if line.find(estring) != -1:
+                    ignored = True
+                    debug.append(line)
+                    break
+            if not ignored:
                 warn.append(line)
+
         if debug:
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.critical('%s has critical errors:' % fullpath)
             for entry in warn:
                 logger.critical("\t%s" % entry)
+
+    run_git_repack(fullpath, config)
+
+    grokmirror.unlock_repo(fullpath)
 
 def fsck_mirror(name, config, opts):
     global logger
@@ -331,6 +330,20 @@ if __name__ == '__main__':
         config = {}
         for (option, value) in ini.items(section):
             config[option] = value
+
+        if 'ignore_errors' not in config:
+            config['ignore_errors'] = [
+                'dangling commit',
+                'dangling blob',
+                'notice: HEAD points to an unborn branch',
+                'notice: No default references',
+                'contains zero-padded file modes',
+            ]
+        else:
+            ignore_errors = []
+            for estring in config['ignore_errors'].split('\n'):
+                ignore_errors.append(estring.strip())
+            config['ignore_errors'] = ignore_errors
 
         fsck_mirror(section, config, opts)
 
