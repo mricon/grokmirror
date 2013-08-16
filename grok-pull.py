@@ -643,6 +643,10 @@ if __name__ == '__main__':
             config['default_owner'] = 'Grokmirror User'
         if 'post_update_hook' not in config.keys():
             config['post_update_hook'] = ''
+        if 'include' not in config.keys():
+            config['include'] = '*'
+        if 'exclude' not in config.keys():
+            config['exclude'] = ''
 
         sect_retval = pull_mirror(section, config, opts)
         if sect_retval == 1:
