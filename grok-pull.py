@@ -39,6 +39,9 @@ from git import Repo
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
 
+# We use it to bluntly track if there were any repos we couldn't lock
+lock_fails = []
+
 class PullerThread(threading.Thread):
     def __init__(self, in_queue, out_queue, config, thread_name):
         threading.Thread.__init__(self)
@@ -49,17 +52,24 @@ class PullerThread(threading.Thread):
         self.myname     = thread_name
 
     def run(self):
+        global lock_fails
         while True:
             (gitdir, modified) = self.in_queue.get()
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
-            logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
-            pull_repo(self.toplevel, gitdir)
-            set_agefile(self.toplevel, gitdir, modified)
-            run_post_update_hook(self.hookscript, self.toplevel, gitdir)
-            logger.debug('[Thread-%s] done pulling %s' % (self.myname, gitdir))
+            try:
+                grokmirror.lock_repo(fullpath)
+                logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
+                pull_repo(self.toplevel, gitdir)
+                set_agefile(self.toplevel, gitdir, modified)
+                run_post_update_hook(self.hookscript, self.toplevel, gitdir)
+                logger.debug('[Thread-%s] done pulling %s' % 
+                             (self.myname, gitdir))
+                grokmirror.unlock_repo(fullpath)
+            except IOError, ex:
+                logger.info('Could not lock %s, skipping' % gitdir)
+                lock_fails.append(gitdir)
 
-            grokmirror.unlock_repo(fullpath)
             self.out_queue.put((gitdir, True))
             self.in_queue.task_done()
 
@@ -322,6 +332,8 @@ def write_projects_list(manifest, config):
 
 def pull_mirror(name, config, opts):
     global logger
+    global lock_fails
+
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
@@ -452,6 +464,7 @@ def pull_mirror(name, config, opts):
             grokmirror.lock_repo(fullpath, nonblocking=True)
         except IOError, ex:
             logger.info('Could not lock %s, skipping' % gitdir)
+            lock_fails.append(gitdir)
             continue
 
         # Is the directory in place?
@@ -488,26 +501,20 @@ def pull_mirror(name, config, opts):
                 logger.debug('Setting new origin for %s' % gitdir)
                 fix_remotes(gitdir, toplevel, config['site'])
                 to_pull.append(gitdir)
+                grokmirror.unlock_repo(fullpath)
                 continue
 
             if opts.force:
                 # force pull, regardless of timestamp
                 to_pull.append(gitdir)
+                grokmirror.unlock_repo(fullpath)
                 continue
             else:
                 ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
-                if ts == 0:
-                    # Probably upgrade from 0.3 to 0.4
-                    logger.info('Found %s without recorded timestamp' % gitdir)
-                    logger.info('Using timestamp from local manifest')
-                    if mymanifest[gitdir]['modified'] >= culled[gitdir]['modified']:
-                        logger.debug('Repo %s unchanged' % gitdir)
-                        existing.append(gitdir)
-                        grokmirror.unlock_repo(fullpath)
-                        continue
 
                 if ts < culled[gitdir]['modified']:
                     to_pull.append(gitdir)
+                    grokmirror.unlock_repo(fullpath)
                     continue
                 else:
                     logger.debug('Repo %s unchanged' % gitdir)
@@ -518,6 +525,7 @@ def pull_mirror(name, config, opts):
         else:
             # Newly incoming repo
             to_clone.append(gitdir)
+            grokmirror.unlock_repo(fullpath)
             continue
 
         # If we got here, something is odd.
@@ -580,6 +588,13 @@ def pull_mirror(name, config, opts):
         for gitdir in to_clone_sorted:
             fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
 
+            try:
+                grokmirror.lock_repo(fullpath)
+            except IOError, ex:
+                logger.info('Could not lock %s, skipping' % gitdir)
+                lock_fails.append(gitdir)
+                continue
+
             reference = culled[gitdir]['reference']
             if reference is not None and reference in existing:
                 # Make sure we can lock the reference repo
@@ -592,6 +607,9 @@ def pull_mirror(name, config, opts):
                 except IOError, ex:
                     logger.info('Cannot lock reference repo %s, skipping %s' %
                                 (reference, gitdir))
+                    if reference not in lock_fails:
+                        lock_fails.append(reference)
+
                     grokmirror.unlock_repo(fullpath)
                     continue
             else:
@@ -659,12 +677,20 @@ def pull_mirror(name, config, opts):
                         logger.info('Purging %s' % gitdir)
                         shutil.rmtree(founddir)
                     except IOError, ex:
+                        lock_fails.append(gitdir)
                         logger.info('%s is locked, not purging' % gitdir)
 
     # Go through all repos in culled and get the latest local timestamps.
     for gitdir in culled:
         ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
         culled[gitdir]['modified'] = ts
+
+    # If there were any lock failures, we fudge last_modified to always
+    # be older than the server, which will force the next grokmirror run.
+    if len(lock_fails):
+        logger.info('%s repos could not be locked. Forcing next run.' %
+                len(lock_fails))
+        last_modified -= 1
 
     # Once we're done, save culled as our new manifest
     grokmirror.write_manifest(manifile, culled, mtime=last_modified,
