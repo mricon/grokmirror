@@ -140,6 +140,9 @@ def find_all_gitdirs(toplevel, ignore=[]):
 
 def manifest_lock(manifile):
     global MANIFEST_LOCKH
+    if MANIFEST_LOCKH is not None:
+        logger.debug('Manifest already locked')
+
     manilock = _lockname(manifile)
     MANIFEST_LOCKH = open(manilock, 'w')
     logger.debug('Attempting to lock %s' % manilock)
@@ -154,6 +157,7 @@ def manifest_unlock(manifile):
         os.unlink(manilock)
         lockf(MANIFEST_LOCKH, LOCK_UN)
         MANIFEST_LOCKH.close()
+        MANIFEST_LOCKH = None
 
 def read_manifest(manifile, wait=False):
     while True:

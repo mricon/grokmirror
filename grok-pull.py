@@ -63,6 +63,29 @@ class PullerThread(threading.Thread):
             self.out_queue.put((gitdir, True))
             self.in_queue.task_done()
 
+def cull_manifest(manifest, config):
+    includes = config['include'].split('\n')
+    excludes = config['exclude'].split('\n')
+
+    culled = {}
+
+    for gitdir in manifest.keys():
+        # does it fall under include?
+        for include in includes:
+            if fnmatch.fnmatch(gitdir, include):
+                # Yes, but does it fall under excludes?
+                excluded = False
+                for exclude in excludes:
+                    if fnmatch.fnmatch(gitdir, exclude):
+                        excluded = True
+                        break
+                if excluded:
+                    continue
+
+                culled[gitdir] = manifest[gitdir]
+
+    return culled
+
 def fix_remotes(gitdir, toplevel, site):
     # Remove all existing remotes and set new origin
     repo = Repo(os.path.join(toplevel, gitdir.lstrip('/')))
@@ -78,7 +101,7 @@ def fix_remotes(gitdir, toplevel, site):
     repo.git.remote('add', '--mirror', 'origin', origin)
     logger.debug('\tset new origin as %s' % origin)
 
-def set_owner_description(toplevel, gitdir, owner, description):
+def set_repo_params(toplevel, gitdir, owner, description, reference):
     if owner is None and description is None:
         # Let the default git values be there, then
         return
@@ -93,6 +116,22 @@ def set_owner_description(toplevel, gitdir, owner, description):
     if owner is not None:
         logger.debug('Setting %s owner to: %s' % (gitdir, owner))
         repo.git.config('gitweb.owner', owner)
+
+    if reference is not None:
+        # XXX: Removing alternates involves git repack, so we don't support it
+        #      at this point. We also cowardly refuse to change an existing
+        #      alternates entry, as this has high chance of resulting in
+        #      broken git repositories. Only do this when we're going from
+        #      none to some value.
+        if len(repo.alternates) > 0:
+            return
+
+        objects = os.path.join(toplevel, reference.lstrip('/'), 'objects')
+        altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
+        logger.debug('Setting %s alternates to: %s' % (gitdir, objects))
+        altfh = open(altfile, 'w')
+        altfh.write('%s\n' % objects)
+        altfh.close()
 
 def set_agefile(toplevel, gitdir, last_modified):
     grokmirror.set_repo_timestamp(toplevel, gitdir, last_modified)
@@ -394,23 +433,7 @@ def pull_mirror(name, config, opts):
     includes = config['include'].split('\n')
     excludes = config['exclude'].split('\n')
 
-    # We keep culled, because that becomes our new manifest
-    culled = {}
-
-    for gitdir in manifest.keys():
-        # does it fall under include?
-        for include in includes:
-            if fnmatch.fnmatch(gitdir, include):
-                # Yes, but does it fall under excludes?
-                excluded = False
-                for exclude in excludes:
-                    if fnmatch.fnmatch(gitdir, exclude):
-                        excluded = True
-                        break
-                if excluded:
-                    continue
-
-                culled[gitdir] = manifest[gitdir]
+    culled = cull_manifest(manifest, config)
 
     to_clone = []
     to_pull  = []
@@ -428,7 +451,7 @@ def pull_mirror(name, config, opts):
         try:
             grokmirror.lock_repo(fullpath, nonblocking=True)
         except IOError, ex:
-            logger.info('Could not lock %s, skipping' % fullpath)
+            logger.info('Could not lock %s, skipping' % gitdir)
             continue
 
         # Is the directory in place?
@@ -438,26 +461,31 @@ def pull_mirror(name, config, opts):
                 # This code is hurky and needs to be cleaned up
                 desc    = culled[gitdir].get('description')
                 owner   = culled[gitdir].get('owner')
+                ref     = culled[gitdir].get('reference')
+
                 mydesc  = mymanifest[gitdir].get('description')
                 myowner = mymanifest[gitdir].get('owner')
+                myref   = mymanifest[gitdir].get('reference')
+
                 if owner is None:
                     owner = config['default_owner']
                 if myowner is None:
                     myowner = config['default_owner']
-                if (owner != myowner or desc != mydesc):
+
+                if (desc != mydesc or owner != myowner or ref != myref):
                     # we can do this right away without waiting
-                    set_owner_description(toplevel, gitdir, owner, desc)
+                    set_repo_params(toplevel, gitdir, owner, desc, ref)
+
             else:
                 # It exists on disk, but not in my manifest?
-                if not opts.reuse:
+                if opts.noreuse:
                     logger.critical('Found existing git repo in %s' % fullpath)
-                    logger.critical('Run with -r to reuse existing repos')
+                    logger.critical('But you asked NOT to reuse repos')
                     logger.critical('Skipping %s' % gitdir)
                     grokmirror.unlock_repo(fullpath)
                     continue
 
-                logger.info('Found existing %s, will set new origin' % gitdir)
-                # Accept it, but fix remotes so they are pointing to our origin
+                logger.debug('Setting new origin for %s' % gitdir)
                 fix_remotes(gitdir, toplevel, config['site'])
                 to_pull.append(gitdir)
                 continue
@@ -498,11 +526,7 @@ def pull_mirror(name, config, opts):
 
     hookscript = config['post_update_hook']
 
-    donework = False
-
     if len(to_pull):
-        donework = True
-
         in_queue  = Queue.Queue()
         out_queue = Queue.Queue()
 
@@ -516,6 +540,10 @@ def pull_mirror(name, config, opts):
             # be conservative
             logger.info('pull_threads is not set, consider setting it')
             pull_threads = 5
+
+        # don't use more threads than we have repos to update
+        if pull_threads > len(to_pull):
+            pull_threads = len(to_pull)
 
         logger.info('Will use %d threads to pull repos' % pull_threads)
 
@@ -543,7 +571,6 @@ def pull_mirror(name, config, opts):
                 last_modified -= 1
 
     if len(to_clone):
-        donework = True
         # we use "existing" to track which repos can be used as references
         existing.extend(to_pull)
 
@@ -555,8 +582,18 @@ def pull_mirror(name, config, opts):
 
             reference = culled[gitdir]['reference']
             if reference is not None and reference in existing:
-                clone_repo(toplevel, gitdir, config['site'],
-                        reference=reference)
+                # Make sure we can lock the reference repo
+                refrepo = os.path.join(toplevel, reference.lstrip('/'))
+                try:
+                    grokmirror.lock_repo(refrepo, nonblocking=True)
+                    clone_repo(toplevel, gitdir, config['site'],
+                            reference=reference)
+                    grokmirror.unlock_repo(refrepo)
+                except IOError, ex:
+                    logger.info('Cannot lock reference repo %s, skipping %s' %
+                                (reference, gitdir))
+                    grokmirror.unlock_repo(fullpath)
+                    continue
             else:
                 clone_repo(toplevel, gitdir, config['site'])
 
@@ -568,15 +605,17 @@ def pull_mirror(name, config, opts):
 
                 desc    = culled[gitdir].get('description')
                 owner   = culled[gitdir].get('owner')
+                ref     = culled[gitdir].get('reference')
                 if owner is None:
                     owner = config['default_owner']
-                set_owner_description(toplevel, gitdir, owner, desc)
+                set_repo_params(toplevel, gitdir, owner, desc, ref)
                 set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
                 logger.critical('Was not able to clone %s' % gitdir)
 
             grokmirror.unlock_repo(fullpath)
+
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -589,35 +628,39 @@ def pull_mirror(name, config, opts):
                     symlinks.append(symlink)
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
                 if not os.path.exists(target) and os.path.exists(source):
-                    donework = True
                     logger.info('Symlinking %s -> %s' % (target, source))
                     # Make sure the leading dirs are in place
                     if not os.path.exists(os.path.dirname(target)):
                         os.makedirs(os.path.dirname(target))
                     os.symlink(source, target)
 
+    manifile = config['mymanifest']
+    grokmirror.manifest_lock(manifile)
+
+    # Is the local manifest newer than last_modified? That would indicate
+    # that another process has run and "culled" is no longer the latest info
+    fstat = os.stat(manifile)
+    if fstat[8] > last_modified:
+        logger.info('Local manifest is newer. Not saving outdated manifest.')
+        grokmirror.manifest_unlock(manifile)
+        return 0
+
     if opts.purge:
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
             gitdir = founddir.replace(config['toplevel'], '')
             if gitdir not in culled.keys() and gitdir not in symlinks:
-                donework = True
                 if os.path.islink(founddir):
                     logger.info('Removing unreferenced symlink %s' % gitdir)
                     os.unlink(founddir)
                 else:
-                    logger.info('Purging %s' % gitdir)
-                    shutil.rmtree(founddir)
-
-    if not donework:
-        logger.info('No changes made, exiting')
-        return 0
+                    try:
+                        grokmirror.lock_repo(founddir)
+                        logger.info('Purging %s' % gitdir)
+                        shutil.rmtree(founddir)
+                    except IOError, ex:
+                        logger.info('%s is locked, not purging' % gitdir)
 
     # Go through all repos in culled and get the latest local timestamps.
-    # Since another instance could have run since we were last invoked, what
-    # we have in culled currently may be outdated.
-    manifile = config['mymanifest']
-    grokmirror.manifest_lock(manifile)
-
     for gitdir in culled:
         ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
         culled[gitdir]['modified'] = ts
@@ -659,10 +702,10 @@ if __name__ == '__main__':
     parser.add_option('-y', '--pretty', dest='pretty', action='store_true',
         default=False,
         help='Pretty-print manifest (sort keys and add indentation)')
-    parser.add_option('-r', '--reuse-existing-repos', dest='reuse',
+    parser.add_option('-r', '--no-reuse-existing-repos', dest='noreuse',
         action='store_true', default=False,
-        help='If any existing repositories are found on disk, set new '
-        'remote origin and reuse')
+        help='If any existing repositories are found on disk, do NOT '
+        'update origin and reuse')
     parser.add_option('-c', '--config', dest='config',
         help='Location of repos.conf')
 
