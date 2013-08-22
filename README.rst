@@ -140,7 +140,7 @@ following to ``/etc/cron.d/grokmirror.cron``::
     * * * * * mirror /usr/bin/grok-pull -p -c /etc/grokmirror/repos.conf
 
 Make sure the user "mirror" (or whichever user you specified) is able to
-write to the toplevel, log and lock locations specified in repos.conf.
+write to the toplevel and log locations specified in repos.conf.
 
 If you already have a bunch of repositories in the hierarchy that
 matches the upstream mirror and you'd like to reuse them instead of
@@ -172,10 +172,15 @@ You can force a full run using the ``-f`` flag, but unless you only have
 a few smallish git repositories, it's not recommended, as it may take
 several hours to complete.
 
-Before it runs, grok-fsck will put an advisory lock in the git-directory
-being checked (repository.git/grokmirror.lock). Grok-pull will recognize
-the lock and will postpone any incoming updates to that repository until
-the next grok-pull run.
+Before it runs, grok-fsck will put an advisory lock for the git-directory
+being checked (.repository.git.lock). Grok-pull will recognize the lock
+and will postpone any incoming updates to that repository until the lock
+is freed.
+
+You can also tell grok-fsck to repack repository after checking it for
+errors. To do this, set "repack" value in fsck.conf to "yes". If you
+have repositories using alternates, the safer value for repack flags is
+"-Adlq".
 
 FAQ
 ---

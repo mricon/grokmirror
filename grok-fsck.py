@@ -38,7 +38,7 @@ def run_git_repack(fullpath, config):
         return
 
     if 'repack_flags' not in config.keys():
-        config['repack_flags'] = '-a -d -l -q'
+        config['repack_flags'] = '-A -d -l -q'
 
     flags = config['repack_flags'].split()
 
