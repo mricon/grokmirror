@@ -32,8 +32,18 @@ REPO_LOCKH = {}
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 
+def _lockname(fullpath):
+    lockpath = os.path.dirname(fullpath)
+    lockname = '.%s.lock' % os.path.basename(fullpath)
+    if not os.path.exists(lockpath):
+        os.makedirs(lockpath)
+    repolock = os.path.join(lockpath, lockname)
+    return repolock
+
+
 def lock_repo(fullpath, nonblocking=False):
-    repolock = os.path.join(fullpath, 'grokmirror.lock')
+    repolock = _lockname(fullpath)
+
     logger.debug('Attempting to exclusive-lock %s' % repolock)
     lockfh = open(repolock, 'w')
 
@@ -50,6 +60,8 @@ def unlock_repo(fullpath):
     global REPO_LOCKH
     if fullpath in REPO_LOCKH.keys():
         logger.debug('Unlocking %s' % fullpath)
+        repolock = _lockname(fullpath)
+        os.unlink(repolock)
         lockf(REPO_LOCKH[fullpath], LOCK_UN)
         REPO_LOCKH[fullpath].close()
         del REPO_LOCKH[fullpath]
@@ -68,6 +80,35 @@ def is_bare_git_repo(path):
 
     logger.debug('Skipping %s: not a git repository' % path)
     return False
+
+def get_repo_timestamp(toplevel, gitdir):
+    ts = 0
+
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    tsfile   = os.path.join(fullpath, 'grokmirror.timestamp')
+    if os.path.exists(tsfile):
+        tsfh = open(tsfile, 'r')
+        contents = tsfh.read()
+        tsfh.close()
+        try:
+            ts = int(contents)
+            logger.debug('Timestamp for %s: %s' % (gitdir, ts))
+        except ValueError, ex:
+            logger.warning('Was not able to parse timestamp in %s' % tsfile)
+    else:
+        logger.debug('No existing timestamp for %s' % gitdir)
+
+    return ts
+
+def set_repo_timestamp(toplevel, gitdir, ts):
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    tsfile   = os.path.join(fullpath, 'grokmirror.timestamp')
+
+    tsfh = open(tsfile, 'w')
+    tsfh.write('%d' % ts)
+    tsfh.close()
+
+    logger.debug('Recorded timestamp for %s: %s' % (gitdir, ts))
 
 def find_all_gitdirs(toplevel, ignore=[]):
     logger.info('Finding bare git repos in %s' % toplevel)
@@ -98,10 +139,10 @@ def find_all_gitdirs(toplevel, ignore=[]):
     return gitdirs
 
 def manifest_lock(manifile):
-    (dirname, basename) = os.path.split(manifile)
     global MANIFEST_LOCKH
-    MANIFEST_LOCKH = open(os.path.join(dirname, '.%s.lock' % basename), 'w')
-    logger.debug('Attempting to lock the manifest')
+    manilock = _lockname(manifile)
+    MANIFEST_LOCKH = open(manilock, 'w')
+    logger.debug('Attempting to lock %s' % manilock)
     lockf(MANIFEST_LOCKH, LOCK_EX)
     logger.debug('Manifest lock obtained')
 
@@ -109,6 +150,8 @@ def manifest_unlock(manifile):
     global MANIFEST_LOCKH
     if MANIFEST_LOCKH is not None:
         logger.debug('Unlocking manifest')
+        manilock = _lockname(manifile)
+        os.unlink(manilock)
         lockf(MANIFEST_LOCKH, LOCK_UN)
         MANIFEST_LOCKH.close()
 

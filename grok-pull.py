@@ -52,20 +52,15 @@ class PullerThread(threading.Thread):
         while True:
             (gitdir, modified) = self.in_queue.get()
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
-            try:
-                grokmirror.lock_repo(fullpath, nonblocking=True)
-                logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
-                pull_repo(self.toplevel, gitdir)
-                set_agefile(self.toplevel, gitdir, modified)
-                run_post_update_hook(self.hookscript, self.toplevel, gitdir)
-                grokmirror.unlock_repo(fullpath)
-                self.out_queue.put((gitdir, True))
-            except IOError, ex:
-                logger.info('Could not obtain exclusive lock on %s' % gitdir)
-                logger.info('\tAssuming grok-fsck is running, will try later.')
-                self.out_queue.put((gitdir, False))
+
+            logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
+            pull_repo(self.toplevel, gitdir)
+            set_agefile(self.toplevel, gitdir, modified)
+            run_post_update_hook(self.hookscript, self.toplevel, gitdir)
             logger.debug('[Thread-%s] done pulling %s' % (self.myname, gitdir))
 
+            grokmirror.unlock_repo(fullpath)
+            self.out_queue.put((gitdir, True))
             self.in_queue.task_done()
 
 def fix_remotes(gitdir, toplevel, site):
@@ -100,6 +95,8 @@ def set_owner_description(toplevel, gitdir, owner, description):
         repo.git.config('gitweb.owner', owner)
 
 def set_agefile(toplevel, gitdir, last_modified):
+    grokmirror.set_repo_timestamp(toplevel, gitdir, last_modified)
+
     # set agefile, which can be used by cgit to show idle times
     # cgit recommends it to be yyyy-mm-dd hh:mm:ss
     cgit_fmt = time.strftime('%F %T', time.localtime(last_modified))
@@ -316,18 +313,7 @@ def pull_mirror(name, config, opts):
     # push it into grokmirror to override the default logger
     grokmirror.logger = logger
 
-    # Lock the tree to make sure we only run one instance
-    logger.debug('Attempting to obtain lock on %s' % config['lock'])
-    flockh = open(config['lock'], 'w')
-    try:
-        lockf(flockh, LOCK_EX | LOCK_NB)
-    except IOError, ex:
-        logger.debug('Could not obtain exclusive lock on %s' % config['lock'])
-        logger.info('Skipping [%s] - update already running' % name)
-        return 0
-
     logger.info('Checking [%s]' % name)
-
     mymanifest = config['mymanifest']
 
     if config['manifest'].find('file:///') == 0:
@@ -338,13 +324,14 @@ def pull_mirror(name, config, opts):
 
         fstat = os.stat(manifile)
         last_modified = fstat[8]
+        logger.debug('mtime on %s is: %s' % (manifile, mtime))
+
         if os.path.exists(config['mymanifest']):
             fstat = os.stat(config['mymanifest'])
             my_last_modified = fstat[8]
+            logger.debug('Our last-modified is: %s' % my_last_modified)
             if not (opts.force or opts.nomtime) and last_modified <= my_last_modified:
                 logger.info('Manifest file unchanged. Quitting.')
-                lockf(flockh, LOCK_UN)
-                flockh.close()
                 return 0
 
         logger.info('Reading new manifest from %s' % manifile)
@@ -375,19 +362,13 @@ def pull_mirror(name, config, opts):
         except urllib2.HTTPError, ex:
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. Quitting.')
-                lockf(flockh, LOCK_UN)
-                flockh.close()
                 return 0
             logger.critical('Could not fetch %s' % config['manifest'])
             logger.critical('Server returned: %s' % ex)
-            lockf(flockh, LOCK_UN)
-            flockh.close()
             return 1
         except urllib2.URLError, ex:
             logger.critical('Could not fetch %s' % config['manifest'])
             logger.critical('Error was: %s' % ex)
-            lockf(flockh, LOCK_UN)
-            flockh.close()
             return 1
 
         last_modified = ufh.headers.get('Last-Modified')
@@ -406,8 +387,6 @@ def pull_mirror(name, config, opts):
             manifest = json.load(fh)
         except:
             logger.critical('Failed to parse %s' % config['manifest'])
-            lockf(flockh, LOCK_UN)
-            flockh.close()
             return 1
 
     mymanifest = grokmirror.read_manifest(mymanifest)
@@ -444,88 +423,127 @@ def pull_mirror(name, config, opts):
 
     for gitdir in culled.keys():
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-        if gitdir in mymanifest.keys():
-            # Is the directory in place, too?
-            if os.path.exists(fullpath):
-                # Is it newer than what we have in our old manifest?
-                if gitdir in mymanifest.keys():
-                    # This code is hurky and needs to be cleaned up
-                    desc    = culled[gitdir].get('description')
-                    owner   = culled[gitdir].get('owner')
-                    mydesc  = mymanifest[gitdir].get('description')
-                    myowner = mymanifest[gitdir].get('owner')
-                    if owner is None:
-                        owner = config['default_owner']
-                    if myowner is None:
-                        myowner = config['default_owner']
-                    if (owner != myowner or desc != mydesc):
-                        # we can do this right away without waiting
-                        set_owner_description(toplevel, gitdir, owner, desc)
-
-                    if (opts.force or culled[gitdir]['modified']
-                            > mymanifest[gitdir]['modified']):
-                        to_pull.append(gitdir)
-                    else:
-                        logger.debug('Repo %s unchanged in manifest' % gitdir)
-                        existing.append(gitdir)
-                continue
-
-        # do we have the dir in place?
-        if os.path.exists(fullpath):
-            if not opts.reuse:
-                logger.critical('Found existing repository in %s' % fullpath)
-                logger.critical('Run with -r to use existing repos')
-                sys.exit(1)
-            logger.info('Found existing %s, will set new origin' % gitdir)
-            # Accept it, but fix remotes so they are pointing to our origin
-            fix_remotes(gitdir, toplevel, config['site'])
-            to_pull.append(gitdir)
+        tsfile   = os.path.join(fullpath, 'grokmirror.timestamp')
+        # Attempt to lock the repo
+        try:
+            grokmirror.lock_repo(fullpath, nonblocking=True)
+        except IOError, ex:
+            logger.info('Could not lock %s, skipping' % fullpath)
             continue
 
-        to_clone.append(gitdir)
+        # Is the directory in place?
+        if os.path.exists(fullpath):
+            # Fix owner and description, if necessary
+            if gitdir in mymanifest.keys():
+                # This code is hurky and needs to be cleaned up
+                desc    = culled[gitdir].get('description')
+                owner   = culled[gitdir].get('owner')
+                mydesc  = mymanifest[gitdir].get('description')
+                myowner = mymanifest[gitdir].get('owner')
+                if owner is None:
+                    owner = config['default_owner']
+                if myowner is None:
+                    myowner = config['default_owner']
+                if (owner != myowner or desc != mydesc):
+                    # we can do this right away without waiting
+                    set_owner_description(toplevel, gitdir, owner, desc)
+            else:
+                # It exists on disk, but not in my manifest?
+                if not opts.reuse:
+                    logger.critical('Found existing git repo in %s' % fullpath)
+                    logger.critical('Run with -r to reuse existing repos')
+                    logger.critical('Skipping %s' % gitdir)
+                    grokmirror.unlock_repo(fullpath)
+                    continue
+
+                logger.info('Found existing %s, will set new origin' % gitdir)
+                # Accept it, but fix remotes so they are pointing to our origin
+                fix_remotes(gitdir, toplevel, config['site'])
+                to_pull.append(gitdir)
+                continue
+
+            if opts.force:
+                # force pull, regardless of timestamp
+                to_pull.append(gitdir)
+                continue
+            else:
+                ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
+                if ts == 0:
+                    # Probably upgrade from 0.3 to 0.4
+                    logger.info('Found %s without recorded timestamp' % gitdir)
+                    logger.info('Using timestamp from local manifest')
+                    if mymanifest[gitdir]['modified'] >= culled[gitdir]['modified']:
+                        logger.debug('Repo %s unchanged' % gitdir)
+                        existing.append(gitdir)
+                        grokmirror.unlock_repo(fullpath)
+                        continue
+
+                if ts < culled[gitdir]['modified']:
+                    to_pull.append(gitdir)
+                    continue
+                else:
+                    logger.debug('Repo %s unchanged' % gitdir)
+                    existing.append(gitdir)
+                    grokmirror.unlock_repo(fullpath)
+                    continue
+
+        else:
+            # Newly incoming repo
+            to_clone.append(gitdir)
+            continue
+
+        # If we got here, something is odd.
+        logger.critical('Could not figure out what to do with %s' % gitdir)
+        grokmirror.unlock_repo(fullpath)
 
     hookscript = config['post_update_hook']
 
-    in_queue  = Queue.Queue()
-    out_queue = Queue.Queue()
+    donework = False
 
-    # start out the number of threads we want
-    if 'pull_threads' in config.keys():
-        pull_threads = int(config['pull_threads'])
-        if pull_threads < 1:
-            logger.info('The pull_threads option is less than 1, forcing to 1')
-            pull_threads = 1
-    else:
-        # be conservative
-        logger.info('The pull_threads option is not set, consider setting it')
-        pull_threads = 5
+    if len(to_pull):
+        donework = True
 
-    logger.info('Will use %d threads to pull repos' % pull_threads)
+        in_queue  = Queue.Queue()
+        out_queue = Queue.Queue()
 
-    for gitdir in to_pull:
-        in_queue.put((gitdir, culled[gitdir]['modified']))
+        # start out the number of threads we want
+        if 'pull_threads' in config.keys():
+            pull_threads = int(config['pull_threads'])
+            if pull_threads < 1:
+                logger.info('pull_threads is less than 1, forcing to 1')
+                pull_threads = 1
+        else:
+            # be conservative
+            logger.info('pull_threads is not set, consider setting it')
+            pull_threads = 5
 
-    for i in range(pull_threads):
-        t = PullerThread(in_queue, out_queue, config, i)
-        t.setDaemon(True)
-        t.start()
+        logger.info('Will use %d threads to pull repos' % pull_threads)
 
-    # wait till it's all done
-    in_queue.join()
-    logger.info('All threads finished.')
+        for gitdir in to_pull:
+            in_queue.put((gitdir, culled[gitdir]['modified']))
 
-    while not out_queue.empty():
-        # see if any of it failed
-        (gitdir, status) = out_queue.get()
-        if status == False:
-            # To make sure we check this again during next run,
-            # fudge the manifest accordingly.
-            logger.debug('Will recheck %s during next run' % gitdir)
-            culled[gitdir] = mymanifest[gitdir]
-            # this is rather hackish, but effective
-            last_modified -= 1
+        for i in range(pull_threads):
+            t = PullerThread(in_queue, out_queue, config, i)
+            t.setDaemon(True)
+            t.start()
 
-    if to_clone:
+        # wait till it's all done
+        in_queue.join()
+        logger.info('All threads finished.')
+
+        while not out_queue.empty():
+            # see if any of it failed
+            (gitdir, status) = out_queue.get()
+            if status == False:
+                # To make sure we check this again during next run,
+                # fudge the manifest accordingly.
+                logger.debug('Will recheck %s during next run' % gitdir)
+                culled[gitdir] = mymanifest[gitdir]
+                # this is rather hackish, but effective
+                last_modified -= 1
+
+    if len(to_clone):
+        donework = True
         # we use "existing" to track which repos can be used as references
         existing.extend(to_pull)
 
@@ -533,6 +551,8 @@ def pull_mirror(name, config, opts):
         clone_order(to_clone, manifest, to_clone_sorted, existing)
 
         for gitdir in to_clone_sorted:
+            fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+
             reference = culled[gitdir]['reference']
             if reference is not None and reference in existing:
                 clone_repo(toplevel, gitdir, config['site'],
@@ -541,7 +561,7 @@ def pull_mirror(name, config, opts):
                 clone_repo(toplevel, gitdir, config['site'])
 
             # check dir to make sure cloning succeeded and then add to existing
-            if os.path.exists(os.path.join(toplevel, gitdir.lstrip('/'))):
+            if os.path.exists(fullpath):
                 logger.debug('Cloning of %s succeeded, adding to existing'
                         % gitdir)
                 existing.append(gitdir)
@@ -553,6 +573,10 @@ def pull_mirror(name, config, opts):
                 set_owner_description(toplevel, gitdir, owner, desc)
                 set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
                 run_post_update_hook(hookscript, toplevel, gitdir)
+            else:
+                logger.critical('Was not able to clone %s' % gitdir)
+
+            grokmirror.unlock_repo(fullpath)
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -565,6 +589,7 @@ def pull_mirror(name, config, opts):
                     symlinks.append(symlink)
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
                 if not os.path.exists(target) and os.path.exists(source):
+                    donework = True
                     logger.info('Symlinking %s -> %s' % (target, source))
                     # Make sure the leading dirs are in place
                     if not os.path.exists(os.path.dirname(target)):
@@ -575,6 +600,7 @@ def pull_mirror(name, config, opts):
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
             gitdir = founddir.replace(config['toplevel'], '')
             if gitdir not in culled.keys() and gitdir not in symlinks:
+                donework = True
                 if os.path.islink(founddir):
                     logger.info('Removing unreferenced symlink %s' % gitdir)
                     os.unlink(founddir)
@@ -582,16 +608,28 @@ def pull_mirror(name, config, opts):
                     logger.info('Purging %s' % gitdir)
                     shutil.rmtree(founddir)
 
+    if not donework:
+        logger.info('No changes made, exiting')
+        return 0
+
+    # Go through all repos in culled and get the latest local timestamps.
+    # Since another instance could have run since we were last invoked, what
+    # we have in culled currently may be outdated.
+    manifile = config['mymanifest']
+    grokmirror.manifest_lock(manifile)
+
+    for gitdir in culled:
+        ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
+        culled[gitdir]['modified'] = ts
+
     # Once we're done, save culled as our new manifest
-    grokmirror.write_manifest(config['mymanifest'], culled,
-                              mtime=last_modified, pretty=opts.pretty)
+    grokmirror.write_manifest(manifile, culled, mtime=last_modified,
+                              pretty=opts.pretty)
+
+    grokmirror.manifest_unlock(manifile)
 
     # write out projects.list, if asked to
     write_projects_list(culled, config)
-
-    logger.debug('Unlocking %s' % config['lock'])
-    lockf(flockh, LOCK_UN)
-    flockh.close()
 
     return 127
 
