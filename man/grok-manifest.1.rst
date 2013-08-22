@@ -5,10 +5,10 @@ Create manifest for use with grokmirror
 ---------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2013-04-26
+:Date:      2013-08-22
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.3
+:Version:   0.4
 :Manual section: 1
 
 SYNOPSIS

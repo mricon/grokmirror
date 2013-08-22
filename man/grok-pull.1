@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-PULL 1 "2013-04-26" "0.3" ""
+.TH GROK-PULL 1 "2013-08-22" "0.4" ""
 .SH NAME
 GROK-PULL \- Clone or update local git repositories
 .
@@ -75,9 +75,10 @@ and add indentation). This is much slower, so
 should be used with caution on large
 collections.
 .TP
-.B \-r\fP,\fB  \-\-reuse\-existing\-repos
-If any existing repositories are found on disk, set
-new remote origin and reuse
+.B \-r\fP,\fB  \-\-no\-reuse\-existing\-repos
+If any existing repositories are found on disk,
+do NOT set new remote origin and reuse, just
+skip them entirely
 .TP
 .BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
 Location of repos.conf

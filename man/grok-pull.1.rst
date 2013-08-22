@@ -5,10 +5,10 @@ Clone or update local git repositories
 --------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2013-04-26
+:Date:      2013-08-22
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.3
+:Version:   0.4
 :Manual section: 1
 
 SYNOPSIS
@@ -38,9 +38,10 @@ OPTIONS
                         and add indentation). This is much slower, so
                         should be used with caution on large
                         collections.
-  -r, --reuse-existing-repos
-                        If any existing repositories are found on disk, set
-                        new remote origin and reuse
+  -r, --no-reuse-existing-repos
+                        If any existing repositories are found on disk,
+                        do NOT set new remote origin and reuse, just
+                        skip them entirely
   -c CONFIG, --config=CONFIG
                         Location of repos.conf
 

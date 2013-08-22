@@ -25,7 +25,7 @@ import logging
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 from StringIO import StringIO
 
-VERSION = '0.3.5'
+VERSION = '0.4.0-pre'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 
