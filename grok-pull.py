@@ -639,11 +639,12 @@ def pull_mirror(name, config, opts):
 
     # Is the local manifest newer than last_modified? That would indicate
     # that another process has run and "culled" is no longer the latest info
-    fstat = os.stat(manifile)
-    if fstat[8] > last_modified:
-        logger.info('Local manifest is newer. Not saving outdated manifest.')
-        grokmirror.manifest_unlock(manifile)
-        return 0
+    if os.path.exists(manifile):
+        fstat = os.stat(manifile)
+        if fstat[8] > last_modified:
+            logger.info('Local manifest is newer, not saving.')
+            grokmirror.manifest_unlock(manifile)
+            return 0
 
     if opts.purge:
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
