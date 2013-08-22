@@ -58,7 +58,7 @@ class PullerThread(threading.Thread):
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
             try:
-                grokmirror.lock_repo(fullpath)
+                grokmirror.lock_repo(fullpath, nonblocking=True)
                 logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
                 pull_repo(self.toplevel, gitdir)
                 set_agefile(self.toplevel, gitdir, modified)
@@ -589,7 +589,7 @@ def pull_mirror(name, config, opts):
             fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
 
             try:
-                grokmirror.lock_repo(fullpath)
+                grokmirror.lock_repo(fullpath, nonblocking=True)
             except IOError, ex:
                 logger.info('Could not lock %s, skipping' % gitdir)
                 lock_fails.append(gitdir)
@@ -673,7 +673,7 @@ def pull_mirror(name, config, opts):
                     os.unlink(founddir)
                 else:
                     try:
-                        grokmirror.lock_repo(founddir)
+                        grokmirror.lock_repo(founddir, nonblocking=True)
                         logger.info('Purging %s' % gitdir)
                         shutil.rmtree(founddir)
                     except IOError, ex:
