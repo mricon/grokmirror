@@ -61,7 +61,10 @@ def unlock_repo(fullpath):
     if fullpath in REPO_LOCKH.keys():
         logger.debug('Unlocking %s' % fullpath)
         repolock = _lockname(fullpath)
-        os.unlink(repolock)
+        try:
+            os.unlink(repolock)
+        except OSError, ex:
+            pass
         lockf(REPO_LOCKH[fullpath], LOCK_UN)
         REPO_LOCKH[fullpath].close()
         del REPO_LOCKH[fullpath]
@@ -154,7 +157,10 @@ def manifest_unlock(manifile):
     if MANIFEST_LOCKH is not None:
         logger.debug('Unlocking manifest')
         manilock = _lockname(manifile)
-        os.unlink(manilock)
+        try:
+            os.unlink(manilock)
+        except OSError, ex:
+            pass
         lockf(MANIFEST_LOCKH, LOCK_UN)
         MANIFEST_LOCKH.close()
         MANIFEST_LOCKH = None
