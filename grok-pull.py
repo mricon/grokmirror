@@ -55,10 +55,21 @@ class PullerThread(threading.Thread):
         global lock_fails
         while True:
             (gitdir, modified) = self.in_queue.get()
+            # Do we still need to update it, or has another process
+            # already done this for us?
+            ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
+
+            if ts >= modified:
+                logger.debug('Looks like %s already latest, skipping' % gitdir)
+                self.out_queue.put((gitdir, True))
+                self.in_queue.task_done()
+                continue
+
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
             try:
                 grokmirror.lock_repo(fullpath, nonblocking=True)
+
                 logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
                 pull_repo(self.toplevel, gitdir)
                 set_agefile(self.toplevel, gitdir, modified)
@@ -507,6 +518,8 @@ def pull_mirror(name, config, opts):
             if opts.force:
                 # force pull, regardless of timestamp
                 to_pull.append(gitdir)
+                # set timestamp to 0 as well
+                grokmirror.set_repo_timestamp(toplevel, gitdir, 0)
                 grokmirror.unlock_repo(fullpath)
                 continue
             else:
@@ -586,6 +599,14 @@ def pull_mirror(name, config, opts):
         clone_order(to_clone, manifest, to_clone_sorted, existing)
 
         for gitdir in to_clone_sorted:
+            # Do we still need to clone it, or has another process
+            # already done this for us?
+            ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
+
+            if ts > 0:
+                logger.debug('Looks like %s already cloned, skipping' % gitdir)
+                continue
+
             fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
 
             try:
