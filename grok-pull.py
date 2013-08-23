@@ -71,11 +71,17 @@ class PullerThread(threading.Thread):
                 grokmirror.lock_repo(fullpath, nonblocking=True)
 
                 logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
-                pull_repo(self.toplevel, gitdir)
-                set_agefile(self.toplevel, gitdir, modified)
-                run_post_update_hook(self.hookscript, self.toplevel, gitdir)
-                logger.debug('[Thread-%s] done pulling %s' % 
+                success = pull_repo(self.toplevel, gitdir)
+                logger.debug('[Thread-%s] done pulling %s' %
                              (self.myname, gitdir))
+
+                if success:
+                    set_agefile(self.toplevel, gitdir, modified)
+                    run_post_update_hook(self.hookscript, self.toplevel, gitdir)
+                else:
+                    logger.warning('Pulling unsuccessful, not setting agefile')
+                    lock_fails.append(gitdir)
+
                 grokmirror.unlock_repo(fullpath)
             except IOError, ex:
                 logger.info('Could not lock %s, skipping' % gitdir)
@@ -198,10 +204,15 @@ def pull_repo(toplevel, gitdir):
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, env=env).communicate()
+    child = subprocess.Popen(args, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+    (output, error) = child.communicate()
 
     error = error.strip()
+
+    success = False
+    if child.returncode == 0:
+        success = True
 
     if error:
         # Put things we recognize into debug
@@ -218,6 +229,8 @@ def pull_repo(toplevel, gitdir):
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.warning('Stderr: %s' % '\n'.join(warn))
+
+    return success
 
 def clone_repo(toplevel, gitdir, site, reference=None):
     source = os.path.join(site, gitdir.lstrip('/'))
@@ -238,8 +251,13 @@ def clone_repo(toplevel, gitdir, site, reference=None):
 
     logger.debug('Running: %s' % ' '.join(args))
 
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).communicate()
+    child = subprocess.Popen(args, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+    (output, error) = child.communicate()
+
+    success = False
+    if child.returncode == 0:
+        success = True
 
     error = error.strip()
 
@@ -256,6 +274,8 @@ def clone_repo(toplevel, gitdir, site, reference=None):
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.warning('Stderr: %s' % '\n'.join(warn))
+
+    return success
 
 
 def clone_order(to_clone, manifest, to_clone_sorted, existing):
@@ -625,8 +645,8 @@ def pull_mirror(name, config, opts):
                 refrepo = os.path.join(toplevel, reference.lstrip('/'))
                 try:
                     grokmirror.lock_repo(refrepo, nonblocking=True)
-                    clone_repo(toplevel, gitdir, config['site'],
-                            reference=reference)
+                    success = clone_repo(toplevel, gitdir, config['site'],
+                                         reference=reference)
                     grokmirror.unlock_repo(refrepo)
                 except IOError, ex:
                     logger.info('Cannot lock reference repo %s, skipping %s' %
@@ -637,10 +657,10 @@ def pull_mirror(name, config, opts):
                     grokmirror.unlock_repo(fullpath)
                     continue
             else:
-                clone_repo(toplevel, gitdir, config['site'])
+                success = clone_repo(toplevel, gitdir, config['site'])
 
             # check dir to make sure cloning succeeded and then add to existing
-            if os.path.exists(fullpath):
+            if os.path.exists(fullpath) and success:
                 logger.debug('Cloning of %s succeeded, adding to existing'
                         % gitdir)
                 existing.append(gitdir)
@@ -655,6 +675,7 @@ def pull_mirror(name, config, opts):
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
                 logger.critical('Was not able to clone %s' % gitdir)
+                lock_fails.append(gitdir)
 
             grokmirror.unlock_repo(fullpath)
 
@@ -711,7 +732,7 @@ def pull_mirror(name, config, opts):
     # If there were any lock failures, we fudge last_modified to always
     # be older than the server, which will force the next grokmirror run.
     if len(lock_fails):
-        logger.info('%s repos could not be locked. Forcing next run.' %
+        logger.info('%s repos failed or could not be locked. Forcing next run.' %
                 len(lock_fails))
         last_modified -= 1
 
