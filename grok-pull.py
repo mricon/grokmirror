@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 # We use it to bluntly track if there were any repos we couldn't lock
 lock_fails = []
+# The same repos that didn't clone/pull successfully
+git_fails  = []
 
 class PullerThread(threading.Thread):
     def __init__(self, in_queue, out_queue, config, thread_name):
@@ -52,7 +54,10 @@ class PullerThread(threading.Thread):
         self.myname     = thread_name
 
     def run(self):
+        # XXX: This is not thread-safe, but okay for now,
+        #      as we only use this for very blunt throttling
         global lock_fails
+        global git_fails
         while True:
             (gitdir, modified) = self.in_queue.get()
             # Do we still need to update it, or has another process
@@ -80,7 +85,7 @@ class PullerThread(threading.Thread):
                     run_post_update_hook(self.hookscript, self.toplevel, gitdir)
                 else:
                     logger.warning('Pulling unsuccessful, not setting agefile')
-                    lock_fails.append(gitdir)
+                    git_fails.append(gitdir)
 
                 grokmirror.unlock_repo(fullpath)
             except IOError, ex:
@@ -252,7 +257,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     logger.debug('Running: %s' % ' '.join(args))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=env)
+                             stderr=subprocess.PIPE)
     (output, error) = child.communicate()
 
     success = False
@@ -608,9 +613,9 @@ def pull_mirror(name, config, opts):
                 last_modified -= 1
 
     # how many lockfiles have we seen?
-    # If there are more than twice as many lock_fails as there are
+    # If there are more lock_fails than there are
     # pull_threads configured, we skip cloning out of caution
-    if len(to_clone) and len(lock_fails) > pull_threads * 2:
+    if len(to_clone) and len(lock_fails) > pull_threads:
         logger.info('Too many repositories locked. Skipping cloning new repos.')
         to_clone = []
 
@@ -675,7 +680,7 @@ def pull_mirror(name, config, opts):
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
                 logger.critical('Was not able to clone %s' % gitdir)
-                lock_fails.append(gitdir)
+                git_fails.append(gitdir)
 
             grokmirror.unlock_repo(fullpath)
 
@@ -732,7 +737,11 @@ def pull_mirror(name, config, opts):
     # If there were any lock failures, we fudge last_modified to always
     # be older than the server, which will force the next grokmirror run.
     if len(lock_fails):
-        logger.info('%s repos failed or could not be locked. Forcing next run.' %
+        logger.info('%s repos could not be locked. Forcing next run.' %
+                len(lock_fails))
+        last_modified -= 1
+    elif len(git_fails):
+        logger.info('%s repos failed. Forcing next run.' %
                 len(lock_fails))
         last_modified -= 1
 
