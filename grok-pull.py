@@ -547,26 +547,22 @@ def pull_mirror(name, config, opts):
 
     hookscript = config['post_update_hook']
 
+    # start out the number of threads we want
+    if 'pull_threads' in config.keys():
+        pull_threads = int(config['pull_threads'])
+        if pull_threads < 1:
+            logger.info('pull_threads is less than 1, forcing to 1')
+            pull_threads = 1
+    else:
+        # be conservative
+        logger.info('pull_threads is not set, consider setting it')
+        pull_threads = 5
+
+    logger.info('Will use %d threads to pull repos' % pull_threads)
+
     if len(to_pull):
         in_queue  = Queue.Queue()
         out_queue = Queue.Queue()
-
-        # start out the number of threads we want
-        if 'pull_threads' in config.keys():
-            pull_threads = int(config['pull_threads'])
-            if pull_threads < 1:
-                logger.info('pull_threads is less than 1, forcing to 1')
-                pull_threads = 1
-        else:
-            # be conservative
-            logger.info('pull_threads is not set, consider setting it')
-            pull_threads = 5
-
-        # don't use more threads than we have repos to update
-        if pull_threads > len(to_pull):
-            pull_threads = len(to_pull)
-
-        logger.info('Will use %d threads to pull repos' % pull_threads)
 
         for gitdir in to_pull:
             in_queue.put((gitdir, culled[gitdir]['modified']))
@@ -590,6 +586,13 @@ def pull_mirror(name, config, opts):
                 culled[gitdir] = mymanifest[gitdir]
                 # this is rather hackish, but effective
                 last_modified -= 1
+
+    # how many lockfiles have we seen?
+    # If there are more than twice as many lock_fails as there are
+    # pull_threads configured, we skip cloning out of caution
+    if len(to_clone) and len(lock_fails) > pull_threads * 2:
+        logger.info('Too many repositories locked. Skipping cloning new repos.')
+        to_clone = []
 
     if len(to_clone):
         # we use "existing" to track which repos can be used as references
@@ -654,7 +657,6 @@ def pull_mirror(name, config, opts):
                 logger.critical('Was not able to clone %s' % gitdir)
 
             grokmirror.unlock_repo(fullpath)
-
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
