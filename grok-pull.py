@@ -472,7 +472,7 @@ def pull_mirror(name, config, opts):
                 fh = ufh
 
             manifest = json.load(fh)
-        except:
+        except Exception, ex:
             logger.warning('Failed to parse %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
@@ -801,6 +801,9 @@ if __name__ == '__main__':
     retval = 0
 
     for section in ini.sections():
+        # Reset fail trackers for each section
+        lock_fails = []
+        git_fails  = []
         config = {}
         for (option, value) in ini.items(section):
             config[option] = value
@@ -818,7 +821,7 @@ if __name__ == '__main__':
         if sect_retval == 1:
             # Fatal error encountered at some point
             retval = 1
-        elif sect_retval == 127:
+        elif sect_retval == 127 and retval != 1:
             # Successful run with contents modified
             retval = 127
 
