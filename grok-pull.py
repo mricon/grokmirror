@@ -450,12 +450,12 @@ def pull_mirror(name, config, opts):
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. Quitting.')
                 return 0
-            logger.critical('Could not fetch %s' % config['manifest'])
-            logger.critical('Server returned: %s' % ex)
+            logger.warning('Could not fetch %s' % config['manifest'])
+            logger.warning('Server returned: %s' % ex)
             return 1
         except urllib2.URLError, ex:
-            logger.critical('Could not fetch %s' % config['manifest'])
-            logger.critical('Error was: %s' % ex)
+            logger.warning('Could not fetch %s' % config['manifest'])
+            logger.warning('Error was: %s' % ex)
             return 1
 
         last_modified = ufh.headers.get('Last-Modified')
@@ -465,15 +465,16 @@ def pull_mirror(name, config, opts):
         # We don't use read_manifest for the remote manifest, as it can be
         # anything, really. For now, blindly open it with gzipfile if it ends
         # with .gz. XXX: some http servers will auto-deflate such files.
-        if config['manifest'].find('.gz') > 0:
-            fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
-        else:
-            fh = ufh
-
         try:
+            if config['manifest'].find('.gz') > 0:
+                fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
+            else:
+                fh = ufh
+
             manifest = json.load(fh)
         except:
-            logger.critical('Failed to parse %s' % config['manifest'])
+            logger.warning('Failed to parse %s' % config['manifest'])
+            logger.warning('Error was: %s' % ex)
             return 1
 
     mymanifest = grokmirror.read_manifest(mymanifest)
