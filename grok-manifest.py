@@ -211,6 +211,10 @@ if __name__ == '__main__':
     if not len(manifest.keys()):
         opts.usenow = False
 
+    #Keep gitdir consistent by ensuring toplevel has trailing slash
+    if not opts.toplevel.endswith('/'):
+        opts.toplevel += '/'
+
     if opts.remove and len(args):
         # Remove the repos as required, write new manfiest and exit
         for fullpath in args:
@@ -242,6 +246,10 @@ if __name__ == '__main__':
 
     symlinks = []
     for gitdir in gitdirs:
+
+        #keep gitdir consistent be ensuring it does not have trailing slash
+        gitdir = gitdir.rstrip('/')
+
         # check to make sure this gitdir is ok to export
         if (opts.check_export_ok and
             not os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
