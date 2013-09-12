@@ -31,6 +31,31 @@ from git import Repo
 
 logger = logging.getLogger(__name__)
 
+def git_rev_parse_all(gitdir):
+    logger.debug('Running: GIT_DIR=%s git rev-parse --all', gitdir)
+
+    env  = {'GIT_DIR': gitdir}
+    args = ['git', 'rev-parse', '--all']
+
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, env=env).communicate()
+
+    error = error.strip()
+
+    if error:
+        # Put things we recognize into debug
+        debug = []
+        warn  = []
+        for line in error.split('\n'):
+                warn.append(line)
+        if debug:
+            logger.debug('Stderr: %s' % '\n'.join(debug))
+        if warn:
+            logger.warning('Stderr: %s' % '\n'.join(warn))
+
+    return output
+
+
 def git_remote_update(args, env):
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -75,8 +100,11 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
 
     env = {'GIT_DIR': gitdir}
 
+    old_revs = git_rev_parse_all(gitdir)
+
     if svn:
         logger.debug('Using git-svn for %s' % gitdir)
+
         for remote in remotes:
             # arghie-argh-argh
             if remote == '*':
@@ -85,39 +113,42 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
             logger.info('Running git-svn fetch %s in %s' % (remote, gitdir))
             args = ['/usr/bin/git', 'svn', 'fetch', remote]
             git_remote_update(args, env)
-            grokmirror.unlock_repo(gitdir)
 
-        return True
+    else:
+        # Not an svn remote
+        hasremotes = repo.git.remote()
+        if not len(hasremotes.strip()):
+            logger.info('Repository %s has no defined remotes!' % gitdir)
+            return False
 
-    # Not an svn remote
-    hasremotes = repo.git.remote()
-    if not len(hasremotes.strip()):
-        logger.info('Repository %s has no defined remotes!' % gitdir)
-        return False
+        logger.debug('existing remotes: %s' % hasremotes)
+        for remote in remotes:
+            remotefound = False
+            for hasremote in hasremotes.split('\n'):
+                if fnmatch.fnmatch(hasremote, remote):
+                    remotefound = True
+                    logger.debug('existing remote %s matches %s' % (
+                        hasremote, remote))
+                    args = ['/usr/bin/git', 'remote', 'update', hasremote]
+                    logger.info('Updating remote %s in %s' % 
+                                (hasremote, gitdir))
 
-    didwork = False
+                    git_remote_update(args, env)
+                    didwork = True
 
-    logger.debug('existing remotes: %s' % hasremotes)
-    for remote in remotes:
-        remotefound = False
-        for hasremote in hasremotes.split('\n'):
-            if fnmatch.fnmatch(hasremote, remote):
-                remotefound = True
-                logger.debug('existing remote %s matches requested %s' % (
-                    hasremote, remote))
-                args = ['/usr/bin/git', 'remote', 'update', hasremote]
-                logger.info('Updating remote %s in %s' % (hasremote, gitdir))
+            if not remotefound:
+                logger.info('Could not find any remotes matching %s in %s' % (
+                    remote, gitdir))
 
-                git_remote_update(args, env)
-                didwork = True
-
-        if not remotefound:
-            logger.info('Could not find any remotes matching %s in %s' % (
-                remote, gitdir))
-
+    new_revs = git_rev_parse_all(gitdir)
     grokmirror.unlock_repo(gitdir)
 
-    return didwork
+    if old_revs == new_revs:
+        logger.debug('No new revs, no updates')
+        return False
+
+    logger.debug('New revs found -- new content pulled')
+    return True
 
 def run_post_update_hook(hookscript, gitdir):
     if hookscript == '':
