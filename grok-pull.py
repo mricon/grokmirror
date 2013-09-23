@@ -411,7 +411,7 @@ def pull_mirror(name, config, opts):
 
         fstat = os.stat(manifile)
         last_modified = fstat[8]
-        logger.debug('mtime on %s is: %s' % (manifile, mtime))
+        logger.debug('mtime on %s is: %s' % (manifile, fstat[8]))
 
         if os.path.exists(config['mymanifest']):
             fstat = os.stat(config['mymanifest'])
