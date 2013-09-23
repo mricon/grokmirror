@@ -645,7 +645,10 @@ def pull_mirror(name, config, opts):
                 lock_fails.append(gitdir)
                 continue
 
-            reference = culled[gitdir]['reference']
+            reference = None
+            if config['ignore_repo_references'] != 'yes':
+                reference = culled[gitdir]['reference']
+
             if reference is not None and reference in existing:
                 # Make sure we can lock the reference repo
                 refrepo = os.path.join(toplevel, reference.lstrip('/'))
@@ -804,18 +807,17 @@ if __name__ == '__main__':
         # Reset fail trackers for each section
         lock_fails = []
         git_fails  = []
-        config = {}
+
+        config = {
+            'default_owner'         : 'Grokmirror User',
+            'post_update_hook'      : '',
+            'include'               : '*',
+            'exclude'               : '',
+            'ignore_repo_references': 'no'
+        }
+
         for (option, value) in ini.items(section):
             config[option] = value
-
-        if 'default_owner' not in config.keys():
-            config['default_owner'] = 'Grokmirror User'
-        if 'post_update_hook' not in config.keys():
-            config['post_update_hook'] = ''
-        if 'include' not in config.keys():
-            config['include'] = '*'
-        if 'exclude' not in config.keys():
-            config['exclude'] = ''
 
         sect_retval = pull_mirror(section, config, opts)
         if sect_retval == 1:
