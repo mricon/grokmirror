@@ -509,13 +509,17 @@ def pull_mirror(name, config, opts):
             # Fix owner and description, if necessary
             if gitdir in mymanifest.keys():
                 # This code is hurky and needs to be cleaned up
-                desc    = culled[gitdir].get('description')
-                owner   = culled[gitdir].get('owner')
-                ref     = culled[gitdir].get('reference')
+                desc  = culled[gitdir].get('description')
+                owner = culled[gitdir].get('owner')
+                ref   = None
+                if config['ignore_repo_references'] != 'yes':
+                    ref = culled[gitdir].get('reference')
 
                 mydesc  = mymanifest[gitdir].get('description')
                 myowner = mymanifest[gitdir].get('owner')
-                myref   = mymanifest[gitdir].get('reference')
+                myref   = None
+                if config['ignore_repo_references'] != 'yes':
+                    myref = mymanifest[gitdir].get('reference')
 
                 if owner is None:
                     owner = config['default_owner']
