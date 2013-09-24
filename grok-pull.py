@@ -761,7 +761,7 @@ def pull_mirror(name, config, opts):
         last_modified -= 1
     elif len(git_fails):
         logger.info('%s repos failed. Forcing next run.' %
-                len(lock_fails))
+                len(git_fails))
         last_modified -= 1
 
     # Once we're done, save culled as our new manifest
