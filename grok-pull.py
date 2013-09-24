@@ -577,6 +577,8 @@ def pull_mirror(name, config, opts):
 
     hookscript = config['post_update_hook']
 
+    # XXX: 0.4.0 final: fix so we can ctrl-c out of threads
+
     # start out the number of threads we want
     if 'pull_threads' in config.keys():
         pull_threads = int(config['pull_threads'])
@@ -587,6 +589,15 @@ def pull_mirror(name, config, opts):
         # be conservative
         logger.info('pull_threads is not set, consider setting it')
         pull_threads = 5
+
+    if len(lock_fails) >= pull_threads:
+        logger.info('Too many repositories locked (%s). Exiting.'
+                % len(lock_fails))
+        return 0
+    elif len(lock_fails) > 0:
+        pull_threads = pull_threads - len(lock_fails)
+        logger.info('Reducing number of threads to %s to match locked repos.'
+                % pull_threads)
 
     logger.info('Will use %d threads to pull repos' % pull_threads)
 
