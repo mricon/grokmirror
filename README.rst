@@ -30,6 +30,7 @@ the manifest file is as follows::
         "description": "Repository description",
         "reference":   "/path/to/reference/repository.git",
         "modified":    timestamp,
+        "fingerprint": sha1sum(git show-ref),
         "symlinks": [
             "/location/to/symlink",
             ...

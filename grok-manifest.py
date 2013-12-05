@@ -90,10 +90,18 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     else:
         logger.info('Updating %s in the manifest' % path)
 
+    # we need a way to quickly compare whether mirrored repositories match
+    # what is in the master manifest. To this end, we calculate a so-called
+    # "state fingerprint" -- basically the output of "git show-ref | sha1sum".
+    # git show-ref output is deterministic and should accurately list all refs
+    # and their relation to heads/tags/etc.
+    fingerprint = grokmirror.get_repo_fingerprint(toplevel, path, force=True)
+
     manifest[path]['owner']       = owner
     manifest[path]['description'] = description
     manifest[path]['reference']   = reference
     manifest[path]['modified']    = modified
+    manifest[path]['fingerprint'] = fingerprint
 
 def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:

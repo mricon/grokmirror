@@ -22,8 +22,12 @@ import fnmatch
 
 import logging
 
+import hashlib
+
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 from StringIO import StringIO
+
+from git import Repo
 
 VERSION = '0.4.0-pre'
 MANIFEST_LOCKH = None
@@ -108,6 +112,40 @@ def set_repo_timestamp(toplevel, gitdir, ts):
     tsfh.close()
 
     logger.debug('Recorded timestamp for %s: %s' % (gitdir, ts))
+
+def get_repo_fingerprint(toplevel, gitdir, force=False):
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    fpfile   = os.path.join(fullpath, 'grokmirror.fingerprint')
+    if not force and os.path.exists(fpfile):
+        fpfh = open(fpfile, 'r')
+        fingerprint = fpfh.read()
+        fpfh.close()
+        logger.debug('Fingerprint for %s: %s' % (gitdir, fingerprint))
+    else:
+        logger.debug('Generating fingerprint for %s' % gitdir)
+        repo = Repo(fullpath)
+        #except:
+        #    logger.critical('Error opening %s.' % gitdir)
+        #    logger.critical('Make sure it is a bare git repository.')
+        #    sys.exit(1)
+
+        # We add the final "\n" to be compatible with cmdline output
+        # of git-show-ref
+        fingerprint = hashlib.sha1(repo.git.show_ref()+"\n").hexdigest()
+
+    return fingerprint
+
+def set_repo_fingerprint(toplevel, gitdir):
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    fpfile   = os.path.join(fullpath, 'grokmirror.fingerprint')
+
+    fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
+    fpfh = open(fpfile, 'w')
+    fpfh.write('%s' % fingerprint)
+    fpfh.close()
+
+    logger.debug('Recorded fingerprint for %s: %s' % (gitdir, fingerprint))
+    return fingerprint
 
 def find_all_gitdirs(toplevel, ignore=[]):
     logger.info('Finding bare git repos in %s' % toplevel)
