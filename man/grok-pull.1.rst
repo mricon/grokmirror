@@ -42,6 +42,10 @@ OPTIONS
                         If any existing repositories are found on disk,
                         do NOT set new remote origin and reuse, just
                         skip them entirely
+  -m, --verify-mirror   Do not perform any updates, just verify that mirror
+                        matches upstream manifest.
+  -s SUBPATH, --verify-subpath=SUBPATH
+                        Only verify a subpath (accepts shell globbing)
   -c CONFIG, --config=CONFIG
                         Location of repos.conf
 

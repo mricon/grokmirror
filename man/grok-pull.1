@@ -80,6 +80,13 @@ If any existing repositories are found on disk,
 do NOT set new remote origin and reuse, just
 skip them entirely
 .TP
+.B \-m\fP,\fB  \-\-verify\-mirror
+Do not perform any updates, just verify that mirror
+matches upstream manifest.
+.TP
+.BI \-s \ SUBPATH\fP,\fB \ \-\-verify\-subpath\fB= SUBPATH
+Only verify a subpath (accepts shell globbing)
+.TP
 .BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
 Location of repos.conf
 .UNINDENT
