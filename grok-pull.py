@@ -518,6 +518,12 @@ def pull_mirror(name, config, opts):
     for gitdir in culled.keys():
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         tsfile   = os.path.join(fullpath, 'grokmirror.timestamp')
+
+        # fingerprints were added in later versions, so deal if the upstream
+        # manifest doesn't have a fingerprint
+        if 'fingerprint' not in culled[gitdir]:
+            culled[gitdir]['fingerprint'] = None
+
         # Attempt to lock the repo
         try:
             grokmirror.lock_repo(fullpath, nonblocking=True)
@@ -525,11 +531,6 @@ def pull_mirror(name, config, opts):
             logger.info('Could not lock %s, skipping' % gitdir)
             lock_fails.append(gitdir)
             continue
-
-        # fingerprints were added in later versions, so deal if the upstream
-        # manifest doesn't have a fingerprint
-        if 'fingerprint' not in culled[gitdir]:
-            culled[gitdir]['fingerprint'] = None
 
         if opts.verify:
             if culled[gitdir]['fingerprint'] is None:
