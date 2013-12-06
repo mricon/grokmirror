@@ -63,22 +63,26 @@ class PullerThread(threading.Thread):
             # Do we still need to update it, or has another process
             # already done this for us?
             todo = True
-            fpr = grokmirror.get_repo_fingerprint(self.toplevel, gitdir)
+            my_fingerprint = grokmirror.get_repo_fingerprint(self.toplevel,
+                    gitdir, force=True)
             if fingerprint is not None:
-                if fpr == fingerprint:
+                if fingerprint == my_fingerprint:
+                    logger.debug('Fingeprints match, not pulling %s' % gitdir)
                     todo = False
             else:
                 ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
                 if ts >= modified:
+                    logger.debug('TS same or newer, not pulling %s' % gitdir)
                     todo = False
 
             if not todo:
                 logger.debug('Looks like %s already latest, skipping' % gitdir)
-                self.out_queue.put((gitdir, fpr, True))
+                self.out_queue.put((gitdir, my_fingerprint, True))
                 self.in_queue.task_done()
                 continue
 
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
+            success  = False
 
             try:
                 grokmirror.lock_repo(fullpath, nonblocking=True)
@@ -90,19 +94,21 @@ class PullerThread(threading.Thread):
 
                 if success:
                     set_agefile(self.toplevel, gitdir, modified)
-                    fingerprint = grokmirror.set_repo_fingerprint(self.toplevel,
-                            gitdir)
                     run_post_update_hook(self.hookscript, self.toplevel, gitdir)
                 else:
                     logger.warning('Pulling unsuccessful, not setting agefile')
                     git_fails.append(gitdir)
+
+                # Record our current fingerprint and return it
+                my_fingerprint = grokmirror.set_repo_fingerprint(self.toplevel,
+                        gitdir)
 
                 grokmirror.unlock_repo(fullpath)
             except IOError, ex:
                 logger.info('Could not lock %s, skipping' % gitdir)
                 lock_fails.append(gitdir)
 
-            self.out_queue.put((gitdir, fingerprint, True))
+            self.out_queue.put((gitdir, my_fingerprint, success))
             self.in_queue.task_done()
 
 def cull_manifest(manifest, config):
@@ -563,14 +569,19 @@ def pull_mirror(name, config, opts):
             # in the remote manifest, fall back on using timestamps
             changed = False
             if culled[gitdir]['fingerprint'] is not None:
-                fpr = grokmirror.get_repo_fingerprint(toplevel, gitdir,
-                                                    force=opts.force)
+                logger.debug('Will use fingerprints to compare %s' % gitdir)
+                my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
+                        gitdir, force=opts.force)
 
-                if fpr != culled[gitdir]['fingerprint']:
+                if my_fingerprint != culled[gitdir]['fingerprint']:
+                    logger.debug('No fingerprint match, will pull %s' % gitdir)
                     changed = True
+                else:
+                    logger.debug('Fingerprints match, skipping %s' % gitdir)
             else:
+                logger.debug('Will use timestamps to compare %s'% gitdir)
                 if opts.force:
-                    # force pull, regardless of timestamp
+                    logger.debug('Will force-pull %s' % gitdir)
                     changed = True
                     # set timestamp to 0 as well
                     grokmirror.set_repo_timestamp(toplevel, gitdir, 0)
@@ -644,8 +655,9 @@ def pull_mirror(name, config, opts):
 
         while not out_queue.empty():
             # see if any of it failed
-            (gitdir, fingerprint, status) = out_queue.get()
-            culled[gitdir]['fingerprint'] = fingerprint
+            (gitdir, my_fingerprint, status) = out_queue.get()
+            # We always record our fingerprint in our manifest
+            culled[gitdir]['fingerprint'] = my_fingerprint
             if status == False:
                 # To make sure we check this again during next run,
                 # fudge the manifest accordingly.
@@ -778,6 +790,11 @@ def pull_mirror(name, config, opts):
     for gitdir in culled:
         ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
         culled[gitdir]['modified'] = ts
+        # Get any missing fingerprints and fill them with our data, so our
+        # manifest always carry fingerprint info, even if upstream doesn't.
+        if culled[gitdir]['fingerprint'] is None:
+            my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
+            culled[gitdir]['fingerprint'] = my_fingerprint
 
     # If there were any lock failures, we fudge last_modified to always
     # be older than the server, which will force the next grokmirror run.
