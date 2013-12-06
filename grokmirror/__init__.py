@@ -124,22 +124,23 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
     else:
         logger.debug('Generating fingerprint for %s' % gitdir)
         repo = Repo(fullpath)
-        #except:
-        #    logger.critical('Error opening %s.' % gitdir)
-        #    logger.critical('Make sure it is a bare git repository.')
-        #    sys.exit(1)
 
         # We add the final "\n" to be compatible with cmdline output
         # of git-show-ref
         fingerprint = hashlib.sha1(repo.git.show_ref()+"\n").hexdigest()
+        # Save it for future use
+        if not force:
+            set_repo_fingerprint(toplevel, gitdir, fingerprint)
 
     return fingerprint
 
-def set_repo_fingerprint(toplevel, gitdir):
+def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     fpfile   = os.path.join(fullpath, 'grokmirror.fingerprint')
 
-    fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
+    if fingerprint is None:
+        fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
+
     fpfh = open(fpfile, 'w')
     fpfh.write('%s' % fingerprint)
     fpfh.close()

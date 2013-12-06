@@ -830,7 +830,7 @@ def pull_mirror(name, config, opts):
         ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
         culled[gitdir]['modified'] = ts
         # Get any missing fingerprints and fill them with our data, so our
-        # manifest always carry fingerprint info, even if upstream doesn't.
+        # manifest always carries fingerprint info, even if upstream doesn't.
         if culled[gitdir]['fingerprint'] is None:
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
             culled[gitdir]['fingerprint'] = my_fingerprint
