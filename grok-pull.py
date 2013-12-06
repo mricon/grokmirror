@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 lock_fails = []
 # The same repos that didn't clone/pull successfully
 git_fails  = []
+# The same for repos that didn't verify successfully
+verify_fails = []
 
 class PullerThread(threading.Thread):
     def __init__(self, in_queue, out_queue, config, thread_name):
@@ -419,6 +421,10 @@ def pull_mirror(name, config, opts):
     logger.info('Checking [%s]' % name)
     mymanifest = config['mymanifest']
 
+    if opts.verify:
+        logger.info('Verifying mirror against %s' % config['manifest'])
+        opts.nomtime = True
+
     if config['manifest'].find('file:///') == 0:
         manifile = config['manifest'].replace('file://', '')
         if not os.path.exists(manifile):
@@ -519,10 +525,35 @@ def pull_mirror(name, config, opts):
             logger.info('Could not lock %s, skipping' % gitdir)
             lock_fails.append(gitdir)
             continue
+
         # fingerprints were added in later versions, so deal if the upstream
         # manifest doesn't have a fingerprint
         if 'fingerprint' not in culled[gitdir]:
             culled[gitdir]['fingerprint'] = None
+
+        if opts.verify:
+            if culled[gitdir]['fingerprint'] is None:
+                logger.debug('No fingerprint for %s, not verifying' % gitdir)
+                continue
+
+            if not fnmatch.fnmatch(gitdir, opts.verify_subpath):
+                continue
+
+            logger.debug('Verifying %s' % gitdir)
+            if not os.path.exists(fullpath):
+                verify_fails.append(gitdir)
+                logger.info('Verify: %s ABSENT' % gitdir)
+                continue
+
+            my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
+                    gitdir, force=opts.force)
+            if my_fingerprint == culled[gitdir]['fingerprint']:
+                logger.info('Verify: %s OK' % gitdir)
+            else:
+                logger.critical('Verify: %s FAILED' % gitdir)
+                verify_fails.append(gitdir)
+
+            continue
 
         # Is the directory in place?
         if os.path.exists(fullpath):
@@ -609,6 +640,14 @@ def pull_mirror(name, config, opts):
         # If we got here, something is odd.
         logger.critical('Could not figure out what to do with %s' % gitdir)
         grokmirror.unlock_repo(fullpath)
+
+    if opts.verify:
+        if len(verify_fails):
+            logger.critical('%s repos failed to verify' % len(verify_fails))
+            return 1
+        else:
+            logger.info('Verification successful')
+            return 0
 
     hookscript = config['post_update_hook']
 
@@ -848,6 +887,13 @@ if __name__ == '__main__':
         action='store_true', default=False,
         help='If any existing repositories are found on disk, do NOT '
         'update origin and reuse')
+    parser.add_option('-m', '--verify-mirror', dest='verify',
+        action='store_true', default=False,
+        help='Do not perform any updates, just verify that mirror matches '
+        'upstream manifest.')
+    parser.add_option('-s', '--verify-subpath', dest='verify_subpath',
+        default='*',
+        help='Only verify a subpath (accepts shell globbing)')
     parser.add_option('-c', '--config', dest='config',
         help='Location of repos.conf')
 
