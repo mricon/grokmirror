@@ -535,25 +535,30 @@ def pull_mirror(name, config, opts):
         if opts.verify:
             if culled[gitdir]['fingerprint'] is None:
                 logger.debug('No fingerprint for %s, not verifying' % gitdir)
+                grokmirror.unlock_repo(fullpath)
                 continue
 
             if not fnmatch.fnmatch(gitdir, opts.verify_subpath):
+                grokmirror.unlock_repo(fullpath)
                 continue
 
             logger.debug('Verifying %s' % gitdir)
             if not os.path.exists(fullpath):
                 verify_fails.append(gitdir)
                 logger.info('Verify: %s ABSENT' % gitdir)
+                grokmirror.unlock_repo(fullpath)
                 continue
 
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
                     gitdir, force=opts.force)
+
             if my_fingerprint == culled[gitdir]['fingerprint']:
                 logger.info('Verify: %s OK' % gitdir)
             else:
                 logger.critical('Verify: %s FAILED' % gitdir)
                 verify_fails.append(gitdir)
 
+            grokmirror.unlock_repo(fullpath)
             continue
 
         # Is the directory in place?
