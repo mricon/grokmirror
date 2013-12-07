@@ -635,6 +635,10 @@ def pull_mirror(name, config, opts):
                 continue
             else:
                 logger.debug('Repo %s unchanged' % gitdir)
+                # if we don't have a fingerprint for it, add it now
+                if culled[gitdir]['fingerprint'] is None:
+                    fpr = grokmirror.get_repo_fingerprint(toplevel, gitdir)
+                    culled[gitdir]['fingerprint'] = fpr
                 existing.append(gitdir)
                 grokmirror.unlock_repo(fullpath)
                 continue
@@ -781,6 +785,9 @@ def pull_mirror(name, config, opts):
                     owner = config['default_owner']
                 set_repo_params(toplevel, gitdir, owner, desc, ref)
                 set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
+                my_fingerprint = grokmirror.set_repo_fingerprint(toplevel,
+                                                                 gitdir)
+                culled[gitdir]['fingerprint'] = my_fingerprint
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
                 logger.critical('Was not able to clone %s' % gitdir)
@@ -837,11 +844,6 @@ def pull_mirror(name, config, opts):
     for gitdir in culled:
         ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
         culled[gitdir]['modified'] = ts
-        # Get any missing fingerprints and fill them with our data, so our
-        # manifest always carries fingerprint info, even if upstream doesn't.
-        if culled[gitdir]['fingerprint'] is None:
-            my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
-            culled[gitdir]['fingerprint'] = my_fingerprint
 
     # If there were any lock failures, we fudge last_modified to always
     # be older than the server, which will force the next grokmirror run.

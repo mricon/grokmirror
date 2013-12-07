@@ -127,7 +127,12 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
 
         # We add the final "\n" to be compatible with cmdline output
         # of git-show-ref
-        fingerprint = hashlib.sha1(repo.git.show_ref()+"\n").hexdigest()
+        try:
+            fingerprint = hashlib.sha1(repo.git.show_ref()+"\n").hexdigest()
+        except:
+            logger.critical('Could not fingerprint %s. Bad repo?' % gitdir)
+            return None
+
         # Save it for future use
         if not force:
             set_repo_fingerprint(toplevel, gitdir, fingerprint)
