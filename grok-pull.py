@@ -515,6 +515,8 @@ def pull_mirror(name, config, opts):
         logger.critical('Toplevel %s does not exist or is not writable' % toplevel)
         sys.exit(1)
 
+    logger.info('Comparing repository info')
+
     for gitdir in culled.keys():
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         tsfile   = os.path.join(fullpath, 'grokmirror.timestamp')
