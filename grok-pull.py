@@ -515,6 +515,16 @@ def pull_mirror(name, config, opts):
         logger.critical('Toplevel %s does not exist or is not writable' % toplevel)
         sys.exit(1)
 
+    if 'pull_threads' in config.keys():
+        pull_threads = int(config['pull_threads'])
+        if pull_threads < 1:
+            logger.info('pull_threads is less than 1, forcing to 1')
+            pull_threads = 1
+    else:
+        # be conservative
+        logger.info('pull_threads is not set, consider setting it')
+        pull_threads = 5
+
     logger.info('Comparing repository info')
 
     for gitdir in culled.keys():
@@ -532,6 +542,10 @@ def pull_mirror(name, config, opts):
         except IOError, ex:
             logger.info('Could not lock %s, skipping' % gitdir)
             lock_fails.append(gitdir)
+            if len(lock_fails) >= pull_threads:
+                logger.info('Too many repositories locked (%s). Exiting.'
+                        % len(lock_fails))
+                return 0
             continue
 
         if opts.verify:
@@ -665,29 +679,16 @@ def pull_mirror(name, config, opts):
 
     # XXX: 0.4.0 final: fix so we can ctrl-c out of threads
 
-    # start out the number of threads we want
-    if 'pull_threads' in config.keys():
-        pull_threads = int(config['pull_threads'])
-        if pull_threads < 1:
-            logger.info('pull_threads is less than 1, forcing to 1')
-            pull_threads = 1
-    else:
-        # be conservative
-        logger.info('pull_threads is not set, consider setting it')
-        pull_threads = 5
-
-    if len(lock_fails) >= pull_threads:
-        logger.info('Too many repositories locked (%s). Exiting.'
-                % len(lock_fails))
-        return 0
-    elif len(lock_fails) > 0:
+    if len(lock_fails) > 0:
         pull_threads = pull_threads - len(lock_fails)
         logger.info('Reducing number of threads to %s to match locked repos.'
                 % pull_threads)
 
-    logger.info('Will use %d threads to pull repos' % pull_threads)
+    logger.debug('Will use %d threads to pull repos' % pull_threads)
 
     if len(to_pull):
+        logger.info('Updating %s repos from %s' %
+                (len(to_pull), config['site']))
         in_queue  = Queue.Queue()
         out_queue = Queue.Queue()
 
@@ -725,6 +726,8 @@ def pull_mirror(name, config, opts):
         to_clone = []
 
     if len(to_clone):
+        logger.info('Cloning %s repos from %s' %
+                (len(to_clone), config['site']))
         # we use "existing" to track which repos can be used as references
         existing.extend(to_pull)
 
