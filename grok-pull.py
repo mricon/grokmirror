@@ -542,6 +542,11 @@ def pull_mirror(name, config, opts):
         except IOError, ex:
             logger.info('Could not lock %s, skipping' % gitdir)
             lock_fails.append(gitdir)
+            # Force the fingerprint to what we have in mymanifest,
+            # if we have it.
+            culled[gitdir]['fingerprint'] = None
+            if gitdir in mymanifest and 'fingerprint' in mymanifest[gitdir]:
+                culled[gitdir]['fingerprint'] = mymanifest[gitdir]['fingerprint']
             if len(lock_fails) >= pull_threads:
                 logger.info('Too many repositories locked (%s). Exiting.'
                         % len(lock_fails))
