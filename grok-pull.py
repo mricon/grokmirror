@@ -79,6 +79,9 @@ class PullerThread(threading.Thread):
 
             if not todo:
                 logger.debug('Looks like %s already latest, skipping' % gitdir)
+                # Update the fingerprint stored in-repo
+                grokmirror.set_repo_fingerprint(self.toplevel, gitdir,
+                        fingerprint=my_fingerprint)
                 self.out_queue.put((gitdir, my_fingerprint, True))
                 self.in_queue.task_done()
                 continue
