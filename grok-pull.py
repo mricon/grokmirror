@@ -379,7 +379,10 @@ def write_projects_list(manifest, config):
                     fh.write('%s\n' % symlink)
 
         fh.close()
-        os.chmod(tmpfile, 0644)
+        # set mode to current umask
+        curmask = os.umask(0)
+        os.chmod(tmpfile, 0o0666 ^ curmask)
+        os.umask(curmask)
         shutil.move(tmpfile, plpath)
 
     finally:

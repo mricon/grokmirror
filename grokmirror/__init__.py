@@ -266,7 +266,10 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
 
         os.fsync(fd)
         fh.close()
-        os.chmod(tmpfile, 0644)
+        # set mode to current umask
+        curmask = os.umask(0)
+        os.chmod(tmpfile, 0o0666 ^ curmask)
+        os.umask(curmask)
         if mtime is not None:
             logger.debug('Setting mtime to %s' % mtime)
             os.utime(tmpfile, (mtime, mtime))
