@@ -18,6 +18,7 @@ import os
 import sys
 import logging
 import time
+import fnmatch
 
 import grokmirror
 
@@ -175,6 +176,9 @@ if __name__ == '__main__':
         action='store_true', default=False,
         help='When running with arguments, wait if manifest is not there '
              '(can be useful when multiple writers are writing the manifest)')
+    parser.add_option('-f', '--manifest-permissions', dest='manifest_permissions',
+        default='0644',
+        help='File permissions of the manifest.js or manifest.js.gz file in octal. Default is 0644')
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
         default=False,
         help='Be verbose and tell us what you are doing')
@@ -187,6 +191,8 @@ if __name__ == '__main__':
         parser.error('You must provide the toplevel path')
     if not len(args) and opts.wait:
         parser.error('--wait option only makes sense when dirs are passed')
+    if not fnmatch.fnmatch(opts.manifest_permissions,'0[0-7][0-7][0-7]'):
+        parser.error('Manifest permissions must be a 4 digit octal number')
 
     logger.setLevel(logging.DEBUG)
 
@@ -233,7 +239,7 @@ if __name__ == '__main__':
         #      by removing a repository used as a reference for others
         #      also make sure we clean up any dangling symlinks
 
-        grokmirror.write_manifest(opts.manifile, manifest, pretty=opts.pretty)
+        grokmirror.write_manifest(opts.manifile, manifest, opts.manifest_permissions, pretty=opts.pretty)
         grokmirror.manifest_unlock(opts.manifile)
         sys.exit(0)
 
@@ -273,6 +279,6 @@ if __name__ == '__main__':
     if len(symlinks):
         set_symlinks(manifest, opts.toplevel, symlinks)
 
-    grokmirror.write_manifest(opts.manifile, manifest, pretty=opts.pretty)
+    grokmirror.write_manifest(opts.manifile, manifest, opts.manifest_permissions, pretty=opts.pretty)
     grokmirror.manifest_unlock(opts.manifile)
 

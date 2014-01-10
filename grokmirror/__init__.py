@@ -238,7 +238,7 @@ def read_manifest(manifile, wait=False):
 
     return manifest
 
-def write_manifest(manifile, manifest, mtime=None, pretty=False):
+def write_manifest(manifile, manifest, manifest_permissions, mtime=None, pretty=False):
     import tempfile
     import shutil
     import gzip
@@ -266,7 +266,7 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
 
         os.fsync(fd)
         fh.close()
-        os.chmod(tmpfile, 0644)
+        os.chmod(tmpfile, int(manifest_permissions,8))
         if mtime is not None:
             logger.debug('Setting mtime to %s' % mtime)
             os.utime(tmpfile, (mtime, mtime))
