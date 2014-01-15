@@ -10,7 +10,8 @@ GERRIT_GIT=/srv/gerrit/git
 GROK_MANIFEST_BIN=/usr/bin/grok-manifest
 GROK_MANIFEST_LOG=${GERRIT_HOME}/logs/grok-manifest.log
 # You'll need to place this where you can serve it with httpd
-GROK_MANIFEST=/var/www/html/manifest.js.gz
+# Make sure the gerrit process can write to this location
+GROK_MANIFEST=/var/www/html/grokmirror/manifest.js.gz
 
 # Yank out the project out of the passed params
 args=$(getopt -l "project:" -- "$@")
