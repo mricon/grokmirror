@@ -1,0 +1,37 @@
+#!/bin/bash
+# Gerrit's hook system is very different from standard git, so
+# minor modifications to the hook are required to make it work.
+# Place this file in your gerrit/hooks/ref-updated and modify the
+# variables below to make it work for you.
+
+GERRIT_HOME=/var/lib/gerrit
+GERRIT_GIT=/srv/gerrit/git
+
+GROK_MANIFEST_BIN=/usr/bin/grok-manifest
+GROK_MANIFEST_LOG=${GERRIT_HOME}/logs/grok-manifest.log
+# You'll need to place this where you can serve it with httpd
+GROK_MANIFEST=/var/www/html/manifest.js.gz
+
+# Yank out the project out of the passed params
+args=$(getopt -l "project:" -- "$@")
+
+eval set -- "$args"
+while [ $# -ge 1 ]; do
+    case "$1" in
+        --)
+            # No more options left.
+            shift
+            break
+            ;;
+        --project)
+            project="$2"
+            shift
+            ;;
+    esac
+    shift
+done
+
+${GROK_MANIFEST_BIN} -y -w -l ${GROK_MANIFEST_LOG} \
+    -m ${GROK_MANIFEST} \
+    -t ${GERRIT_GIT} \
+    -n "${GERRIT_GIT}/${project}.git"
