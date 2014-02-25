@@ -1,16 +1,16 @@
-#!/usr/bin/python -tt
+#-*- coding: utf-8 -*-
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -390,7 +390,9 @@ def write_projects_list(manifest, config):
         if os.path.exists(tmpfile):
             os.unlink(tmpfile)
 
-def pull_mirror(name, config, opts):
+def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
+                verify=False, verify_subpath='*', noreuse=False,
+                purge=False, pretty=False):
     global logger
     global lock_fails
 
@@ -414,7 +416,7 @@ def pull_mirror(name, config, opts):
     formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
 
-    if opts.verbose:
+    if verbose:
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
@@ -427,9 +429,9 @@ def pull_mirror(name, config, opts):
     logger.info('Checking [%s]' % name)
     mymanifest = config['mymanifest']
 
-    if opts.verify:
+    if verify:
         logger.info('Verifying mirror against %s' % config['manifest'])
-        opts.nomtime = True
+        nomtime = True
 
     if config['manifest'].find('file:///') == 0:
         manifile = config['manifest'].replace('file://', '')
@@ -445,7 +447,7 @@ def pull_mirror(name, config, opts):
             fstat = os.stat(config['mymanifest'])
             my_last_modified = fstat[8]
             logger.debug('Our last-modified is: %s' % my_last_modified)
-            if not (opts.force or opts.nomtime) and last_modified <= my_last_modified:
+            if not (force or nomtime) and last_modified <= my_last_modified:
                 logger.info('Manifest file unchanged. Quitting.')
                 return 0
 
@@ -463,7 +465,7 @@ def pull_mirror(name, config, opts):
         opener  = urllib2.build_opener()
 
         # Find out if we need to run at all first
-        if not (opts.force or opts.nomtime) and os.path.exists(mymanifest):
+        if not (force or nomtime) and os.path.exists(mymanifest):
             fstat = os.stat(mymanifest)
             mtime = fstat[8]
             logger.debug('mtime on %s is: %s' % (mymanifest, mtime))
@@ -559,13 +561,13 @@ def pull_mirror(name, config, opts):
                 return 0
             continue
 
-        if opts.verify:
+        if verify:
             if culled[gitdir]['fingerprint'] is None:
                 logger.debug('No fingerprint for %s, not verifying' % gitdir)
                 grokmirror.unlock_repo(fullpath)
                 continue
 
-            if not fnmatch.fnmatch(gitdir, opts.verify_subpath):
+            if not fnmatch.fnmatch(gitdir, verify_subpath):
                 grokmirror.unlock_repo(fullpath)
                 continue
 
@@ -577,7 +579,7 @@ def pull_mirror(name, config, opts):
                 continue
 
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
-                    gitdir, force=opts.force)
+                    gitdir, force=force)
 
             if my_fingerprint == culled[gitdir]['fingerprint']:
                 logger.info('Verify: %s OK' % gitdir)
@@ -616,7 +618,7 @@ def pull_mirror(name, config, opts):
 
             else:
                 # It exists on disk, but not in my manifest?
-                if opts.noreuse:
+                if noreuse:
                     logger.critical('Found existing git repo in %s' % fullpath)
                     logger.critical('But you asked NOT to reuse repos')
                     logger.critical('Skipping %s' % gitdir)
@@ -635,7 +637,7 @@ def pull_mirror(name, config, opts):
             if culled[gitdir]['fingerprint'] is not None:
                 logger.debug('Will use fingerprints to compare %s' % gitdir)
                 my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
-                        gitdir, force=opts.force)
+                        gitdir, force=force)
 
                 if my_fingerprint != culled[gitdir]['fingerprint']:
                     logger.debug('No fingerprint match, will pull %s' % gitdir)
@@ -644,7 +646,7 @@ def pull_mirror(name, config, opts):
                     logger.debug('Fingerprints match, skipping %s' % gitdir)
             else:
                 logger.debug('Will use timestamps to compare %s'% gitdir)
-                if opts.force:
+                if force:
                     logger.debug('Will force-pull %s' % gitdir)
                     changed = True
                     # set timestamp to 0 as well
@@ -678,7 +680,7 @@ def pull_mirror(name, config, opts):
         logger.critical('Could not figure out what to do with %s' % gitdir)
         grokmirror.unlock_repo(fullpath)
 
-    if opts.verify:
+    if verify:
         if len(verify_fails):
             logger.critical('%s repos failed to verify' % len(verify_fails))
             return 1
@@ -838,7 +840,7 @@ def pull_mirror(name, config, opts):
             grokmirror.manifest_unlock(manifile)
             return 0
 
-    if opts.purge:
+    if purge:
         for founddir in grokmirror.find_all_gitdirs(config['toplevel']):
             gitdir = founddir.replace(config['toplevel'], '')
             if gitdir not in culled.keys() and gitdir not in symlinks:
@@ -872,7 +874,7 @@ def pull_mirror(name, config, opts):
 
     # Once we're done, save culled as our new manifest
     grokmirror.write_manifest(manifile, culled, mtime=last_modified,
-                              pretty=opts.pretty)
+                              pretty=pretty)
 
     grokmirror.manifest_unlock(manifile)
 
@@ -882,9 +884,8 @@ def pull_mirror(name, config, opts):
     return 127
 
 
-if __name__ == '__main__':
+def parse_args():
     from optparse import OptionParser
-    from ConfigParser import ConfigParser
 
     usage = '''usage: %prog -c repos.conf
     Create a grok mirror using the repository configuration found in repos.conf
@@ -921,13 +922,19 @@ if __name__ == '__main__':
     parser.add_option('-c', '--config', dest='config',
         help='Location of repos.conf')
 
-    (opts, args) = parser.parse_args()
+    return parser.parse_args()
 
-    if not opts.config:
+
+def grok_pull(config, verbose=False, force=False, nomtime=False,
+              verify=False, verify_subpath='*', noreuse=False,
+              purge=False, pretty=False):
+    from ConfigParser import ConfigParser
+
+    if not config:
         parser.error('You must provide the path to the config file')
 
     ini = ConfigParser()
-    ini.read(opts.config)
+    ini.read(config)
 
     retval = 0
 
@@ -947,12 +954,21 @@ if __name__ == '__main__':
         for (option, value) in ini.items(section):
             config[option] = value
 
-        sect_retval = pull_mirror(section, config, opts)
+        sect_retval = pull_mirror(
+            section, config, verbose, force, nomtime, verify verify_subpath,
+            noreuse, purge, pretty)
         if sect_retval == 1:
             # Fatal error encountered at some point
             retval = 1
         elif sect_retval == 127 and retval != 1:
             # Successful run with contents modified
             retval = 127
+    return retval
 
-    sys.exit(retval)
+def command():
+
+    opts, args = parse_args()
+
+    return grok_pull(
+        opts.config, opts.verbose, opts.force, opts.nomtime, opts.verify,
+        opts.verify_subpath, opts.noreuse, opts.purge, opts.pretty)
