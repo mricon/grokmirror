@@ -1,16 +1,16 @@
-#!/usr/bin/python -tt
+#-*- coding: utf-8 -*-
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -107,7 +107,7 @@ def run_git_fsck(fullpath, config):
 
     grokmirror.unlock_repo(fullpath)
 
-def fsck_mirror(name, config, opts):
+def fsck_mirror(name, config, verbose=False, force=False):
     global logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
@@ -129,7 +129,7 @@ def fsck_mirror(name, config, opts):
     formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
 
-    if opts.verbose:
+    if verbose:
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
@@ -218,7 +218,7 @@ def fsck_mirror(name, config, opts):
         nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'],
                 '%Y-%m-%d')
 
-        if opts.force or nextcheck <= today:
+        if force or nextcheck <= today:
             logger.debug('Queueing to check %s' % fullpath)
             # Calculate elapsed seconds
             startt = time.time()
@@ -228,7 +228,7 @@ def fsck_mirror(name, config, opts):
             status[fullpath]['lastcheck'] = todayiso
             status[fullpath]['s_elapsed'] = round(endt - startt, 2)
 
-            if opts.force:
+            if force:
                 # Use randomization for next check, again
                 delay = random.randint(1, frequency)
             else:
@@ -303,9 +303,8 @@ def fsck_mirror(name, config, opts):
     flockh.close()
 
 
-if __name__ == '__main__':
+def parse_args():
     from optparse import OptionParser
-    from ConfigParser import ConfigParser
 
     usage = '''usage: %prog -c fsck.conf
     Run a git-fsck check on grokmirror-managed repositories.
@@ -321,13 +320,17 @@ if __name__ == '__main__':
     parser.add_option('-c', '--config', dest='config',
         help='Location of fsck.conf')
 
-    (opts, args) = parser.parse_args()
+    return parser.parse_args()
 
-    if not opts.config:
+
+def grok_fsck(config, verbose=False, force=False)
+    from ConfigParser import ConfigParser
+
+    if not config:
         parser.error('You must provide the path to the config file')
 
     ini = ConfigParser()
-    ini.read(opts.config)
+    ini.read(config)
 
     retval = 0
 
@@ -350,6 +353,12 @@ if __name__ == '__main__':
                 ignore_errors.append(estring.strip())
             config['ignore_errors'] = ignore_errors
 
-        fsck_mirror(section, config, opts)
+        fsck_mirror(section, config, verbose, force)
 
+
+def command():
+
+    opts, args = parse_args()
+
+    return grok_fsck(opts.config, opts.verbose, opts.force)
 
