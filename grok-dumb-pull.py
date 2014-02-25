@@ -1,16 +1,16 @@
-#!/usr/bin/python -tt
+#-*- coding: utf-8 -*-
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -130,7 +130,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                     logger.debug('existing remote %s matches %s' % (
                         hasremote, remote))
                     args = ['/usr/bin/git', 'remote', 'update', hasremote]
-                    logger.info('Updating remote %s in %s' % 
+                    logger.info('Updating remote %s in %s' %
                                 (hasremote, gitdir))
 
                     git_remote_update(args, env)
@@ -171,7 +171,7 @@ def run_post_update_hook(hookscript, gitdir):
         # Put hook stdout into info
         logger.info('Hook Stdout: %s' % output)
 
-if __name__ == '__main__':
+def parse_args():
     from optparse import OptionParser
 
     usage = '''usage: %prog [options] /path/to/repos
@@ -197,13 +197,16 @@ if __name__ == '__main__':
         default=None,
         help='Put debug logs into this file')
 
-    (opts, args) = parser.parse_args()
+    return parser.parse_args()
 
+
+def dumb_pull(args, verbose=False, svn=False, remotes=[], posthook='',
+              logfile=None):
     if not len(args):
         parser.error('You must provide at least a path to the repos to pull')
 
-    if not len(opts.remotes):
-        opts.remotes = ['*']
+    if not len(remotes):
+        remotes = ['*']
 
     logger.setLevel(logging.DEBUG)
 
@@ -211,15 +214,15 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
 
-    if opts.verbose:
+    if verbose:
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
 
     logger.addHandler(ch)
 
-    if opts.logfile is not None:
-        ch = logging.FileHandler(opts.logfile)
+    if logfile is not None:
+        ch = logging.FileHandler(logfile)
         formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
@@ -237,14 +240,22 @@ if __name__ == '__main__':
                 continue
 
             logger.debug('Found %s' % entry)
-            didwork = dumb_pull_repo(entry, opts.remotes, svn=opts.svn)
+            didwork = dumb_pull_repo(entry, remotes, svn=svn)
             if didwork:
-                run_post_update_hook(opts.posthook, entry)
+                run_post_update_hook(posthook, entry)
 
         else:
             logger.debug('Finding all git repos in %s' % entry)
             for founddir in grokmirror.find_all_gitdirs(entry):
-                didwork = dumb_pull_repo(founddir, opts.remotes, svn=opts.svn)
+                didwork = dumb_pull_repo(founddir, remotes, svn=svn)
                 if didwork:
-                    run_post_update_hook(opts.posthook, founddir)
+                    run_post_update_hook(posthook, founddir)
 
+
+def command():
+
+    opts, args = parse_args()
+
+    return dumb_pull(
+        args, opts.verbose=False, opts.svn=False,
+        opts.remotes=[], opts.posthook='', opts.logfile=None)
