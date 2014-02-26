@@ -323,7 +323,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def grok_fsck(config, verbose=False, force=False)
+def grok_fsck(config, verbose=False, force=False):
     from ConfigParser import ConfigParser
 
     if not config:

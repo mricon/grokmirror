@@ -955,7 +955,7 @@ def grok_pull(config, verbose=False, force=False, nomtime=False,
             config[option] = value
 
         sect_retval = pull_mirror(
-            section, config, verbose, force, nomtime, verify verify_subpath,
+            section, config, verbose, force, nomtime, verify, verify_subpath,
             noreuse, purge, pretty)
         if sect_retval == 1:
             # Fatal error encountered at some point
