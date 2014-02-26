@@ -288,7 +288,7 @@ def command():
     opts, args = parse_args()
 
     return grok_manifest(
-        opts.manifile, opts.toplevel, args, opts.logfile=None,
-        opts.usenow=False, opts.check_export_ok=False, opts.purge=False,
-        opts.remove=False, opts.pretty=False, opts.ignore=[],
-        opts.wait=False, opts.verbose=False)
+        opts.manifile, opts.toplevel, args=args, logfile=opt.logfile,
+        usenow=opts.usenow, check_export_ok=opts.check_export_ok,
+        purge=opts.purge, remove=opts.remove, pretty=opts.pretty,
+        ignore=opts.ignore, wait=opts.wait, verbose=opts.verbose)

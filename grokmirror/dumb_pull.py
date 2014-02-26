@@ -257,5 +257,5 @@ def command():
     opts, args = parse_args()
 
     return dumb_pull(
-        args, opts.verbose=False, opts.svn=False,
-        opts.remotes=[], opts.posthook='', opts.logfile=None)
+        args, verbose=opts.verbose, svn=opts.svn, remotes=opts.remotes,
+        posthook=opts.posthook, logfile=opts.logfile)
