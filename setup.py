@@ -25,10 +25,10 @@ setup(
     long_description=read('README.rst'),
     entry_points={
         'console_scripts': [
-            "grok-dumb-pull=grokmirror/dumb_pull:command",
-            "grok-pull=grokmirror/pull:command",
-            "grok-fsck=grokmirror/fsck:command",
-            "grok-manifest=grokmirror/manifest:command",
+            "grok-dumb-pull=grokmirror.dumb_pull:command",
+            "grok-pull=grokmirror.pull:command",
+            "grok-fsck=grokmirror.fsck:command",
+            "grok-manifest=grokmirror.manifest:command",
         ]
     }
 )

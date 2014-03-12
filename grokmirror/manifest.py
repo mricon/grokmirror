@@ -180,19 +180,21 @@ def parse_args():
         default=False,
         help='Be verbose and tell us what you are doing')
 
-    return parser.parse_args()
+    opts, args = parser.parse_args()
+
+    if not opts.manifile:
+        parser.error('You must provide the path to the manifest file')
+    if not opts.toplevel:
+        parser.error('You must provide the toplevel path')
+    if not len(args) and opts.wait:
+        parser.error('--wait option only makes sense when dirs are passed')
+
+    return opts, args
 
 
 def grok_manifest(manifile, toplevel, args=[], logfile=None, usenow=False,
                   check_export_ok=False, purge=False, remove=False,
                   pretty=False, ignore=[], wait=False, verbose=False):
-
-    if not manifile:
-        parser.error('You must provide the path to the manifest file')
-    if not toplevel:
-        parser.error('You must provide the toplevel path')
-    if not len(args) and wait:
-        parser.error('--wait option only makes sense when dirs are passed')
 
     logger.setLevel(logging.DEBUG)
 
@@ -288,7 +290,10 @@ def command():
     opts, args = parse_args()
 
     return grok_manifest(
-        opts.manifile, opts.toplevel, args=args, logfile=opt.logfile,
+        opts.manifile, opts.toplevel, args=args, logfile=opts.logfile,
         usenow=opts.usenow, check_export_ok=opts.check_export_ok,
         purge=opts.purge, remove=opts.remove, pretty=opts.pretty,
         ignore=opts.ignore, wait=opts.wait, verbose=opts.verbose)
+
+if __name__ == '__main__':
+    command()

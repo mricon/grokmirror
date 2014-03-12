@@ -197,13 +197,16 @@ def parse_args():
         default=None,
         help='Put debug logs into this file')
 
-    return parser.parse_args()
+    opts, args = parser.parse_args()
+
+    if not len(args):
+        parser.error('You must provide at least a path to the repos to pull')
+
+    return opts, args
 
 
 def dumb_pull(args, verbose=False, svn=False, remotes=[], posthook='',
               logfile=None):
-    if not len(args):
-        parser.error('You must provide at least a path to the repos to pull')
 
     if not len(remotes):
         remotes = ['*']
@@ -259,3 +262,6 @@ def command():
     return dumb_pull(
         args, verbose=opts.verbose, svn=opts.svn, remotes=opts.remotes,
         posthook=opts.posthook, logfile=opts.logfile)
+
+if __name__ == '__main__':
+    command()

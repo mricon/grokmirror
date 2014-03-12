@@ -320,14 +320,16 @@ def parse_args():
     parser.add_option('-c', '--config', dest='config',
         help='Location of fsck.conf')
 
-    return parser.parse_args()
+    opts, args = parser.parse_args()
+
+    if not opts.config:
+        parser.error('You must provide the path to the config file')
+
+    return opts, args
 
 
 def grok_fsck(config, verbose=False, force=False):
     from ConfigParser import ConfigParser
-
-    if not config:
-        parser.error('You must provide the path to the config file')
 
     ini = ConfigParser()
     ini.read(config)
@@ -357,8 +359,9 @@ def grok_fsck(config, verbose=False, force=False):
 
 
 def command():
-
     opts, args = parse_args()
 
     return grok_fsck(opts.config, opts.verbose, opts.force)
 
+if __name__ == '__main__':
+    command()

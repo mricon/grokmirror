@@ -922,16 +922,19 @@ def parse_args():
     parser.add_option('-c', '--config', dest='config',
         help='Location of repos.conf')
 
-    return parser.parse_args()
+    opts, args = parser.parse_args()
+
+    if not opts.config:
+        parser.error('You must provide the path to the config file')
+
+    return opts, args
 
 
 def grok_pull(config, verbose=False, force=False, nomtime=False,
               verify=False, verify_subpath='*', noreuse=False,
               purge=False, pretty=False):
-    from ConfigParser import ConfigParser
 
-    if not config:
-        parser.error('You must provide the path to the config file')
+    from ConfigParser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)
@@ -969,6 +972,11 @@ def command():
 
     opts, args = parse_args()
 
-    return grok_pull(
+    retval = grok_pull(
         opts.config, opts.verbose, opts.force, opts.nomtime, opts.verify,
         opts.verify_subpath, opts.noreuse, opts.purge, opts.pretty)
+
+    sys.exit(retval)
+
+if __name__ == '__main__':
+    command()
