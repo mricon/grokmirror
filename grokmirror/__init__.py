@@ -17,7 +17,7 @@ import os
 import sys
 
 import time
-import json
+import anyjson
 import fnmatch
 
 import logging
@@ -226,14 +226,16 @@ def read_manifest(manifile, wait=False):
         fh = open(manifile, 'r')
 
     logger.info('Reading %s' % manifile)
+    jdata = fh.read()
+    fh.close()
+
     try:
-        manifest = json.load(fh)
+        manifest = anyjson.deserialize(jdata)
     except:
         # We'll regenerate the file entirely on failure to parse
         logger.critical('Unable to parse %s, will regenerate' % manifile)
         manifest = {}
 
-    fh.close()
     logger.debug('Manifest contains %s entries' % len(manifest.keys()))
 
     return manifest
@@ -254,15 +256,19 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
         if manifile.find('.gz') > 0:
             gfh = gzip.GzipFile(fileobj=fh, mode='wb')
             if pretty:
+                import json
                 json.dump(manifest, gfh, indent=2, sort_keys=True)
             else:
-                json.dump(manifest, gfh)
+                jdata = anyjson.serialize(manifest)
+                gfh.write(jdata)
             gfh.close()
         else:
             if pretty:
+                import json
                 json.dump(manifest, fh, indent=2, sort_keys=True)
             else:
-                json.dump(manifest, fh)
+                jdata = anyjson.serialize(manifest)
+                fh.write(jdata)
 
         os.fsync(fd)
         fh.close()

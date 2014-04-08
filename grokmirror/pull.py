@@ -22,7 +22,7 @@ import logging
 import urllib2
 import time
 import gzip
-import json
+import anyjson
 import fnmatch
 import subprocess
 import shutil
@@ -501,7 +501,11 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             else:
                 fh = ufh
 
-            manifest = json.load(fh)
+            jdata = fh.read()
+            fh.close()
+
+            manifest = anyjson.deserialize(jdata)
+
         except Exception, ex:
             logger.warning('Failed to parse %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)

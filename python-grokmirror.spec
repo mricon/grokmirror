@@ -15,7 +15,7 @@ Source0:        https://www.kernel.org/pub/software/network/grokmirror/grokmirro
 
 BuildArch:      noarch
 BuildRequires:  python2-devel, python-setuptools
-Requires:       GitPython
+Requires:       GitPython, python-anyjson
 
 %description
 Grokmirror was written to make mirroring large git repository
