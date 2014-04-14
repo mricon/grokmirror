@@ -6,7 +6,7 @@
 
 Name:           python-grokmirror
 Version:        0.4.0
-Release:        0.pre.12%{?dist}
+Release:        0.pre.13%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
 License:        GPLv3+
@@ -15,7 +15,7 @@ Source0:        https://www.kernel.org/pub/software/network/grokmirror/grokmirro
 
 BuildArch:      noarch
 BuildRequires:  python2-devel, python-setuptools
-Requires:       GitPython, python-anyjson
+Requires:       GitPython, python-anyjson, python-setuptools
 
 %description
 Grokmirror was written to make mirroring large git repository
@@ -53,7 +53,7 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Thu Aug 22 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.4.0-0.pre.5
+* Mon Apr 14 2014 Konstantin Ryabitsev <mricon@kernel.org> - 0.4.0-0.pre.13
 - Update to 0.4.0-pre with new features
 
 * Fri Aug 16 2013 Konstantin Ryabitsev <mricon@kernel.org> - 0.3.5-1
