@@ -947,6 +947,9 @@ def grok_pull(config, verbose=False, force=False, nomtime=False,
 
     for section in ini.sections():
         # Reset fail trackers for each section
+        global lock_fails
+        global git_fails
+
         lock_fails = []
         git_fails  = []
 
