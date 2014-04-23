@@ -25,6 +25,7 @@ from git import Repo
 
 logger = logging.getLogger(__name__)
 
+
 def update_manifest(manifest, toplevel, gitdir, usenow):
     path = gitdir.replace(toplevel, '', 1)
 
@@ -32,7 +33,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     logger.debug('Examining %s' % gitdir)
     try:
         repo = Repo(gitdir)
-        assert repo.bare == True
+        assert repo.bare is True
     except:
         logger.critical('Error opening %s.' % gitdir)
         logger.critical('Make sure it is a bare git repository.')
@@ -54,7 +55,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         description = 'Unnamed repository'
 
     try:
-        rcr   = repo.config_reader()
+        rcr = repo.config_reader()
         owner = rcr.get('gitweb', 'owner')
     except:
         owner = None
@@ -97,11 +98,12 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     # and their relation to heads/tags/etc.
     fingerprint = grokmirror.get_repo_fingerprint(toplevel, path, force=True)
 
-    manifest[path]['owner']       = owner
+    manifest[path]['owner'] = owner
     manifest[path]['description'] = description
-    manifest[path]['reference']   = reference
-    manifest[path]['modified']    = modified
+    manifest[path]['reference'] = reference
+    manifest[path]['modified'] = modified
     manifest[path]['fingerprint'] = fingerprint
+
 
 def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:
@@ -112,7 +114,7 @@ def set_symlinks(manifest, toplevel, symlinks):
         tgtgitdir = target.replace(toplevel, '')
         if tgtgitdir not in manifest.keys():
             logger.info('Symlink %s points to %s, which we do not recognize'
-                    % (symlink, target))
+                        % (symlink, target))
             continue
         relative = symlink.replace(toplevel, '')
         if 'symlinks' in manifest[tgtgitdir].keys():
@@ -128,8 +130,9 @@ def set_symlinks(manifest, toplevel, symlinks):
         for gitdir in manifest.keys():
             if manifest[gitdir]['reference'] == relative:
                 logger.info('Adjusted symlinked reference for %s: %s->%s'
-                        % (gitdir, relative, tgtgitdir))
+                            % (gitdir, relative, tgtgitdir))
                 manifest[gitdir]['reference'] = tgtgitdir
+
 
 def purge_manifest(manifest, toplevel, gitdirs):
     for oldrepo in manifest.keys():
@@ -145,56 +148,64 @@ def parse_args():
     Create or update manifest.js with the latest repository information.
     '''
 
-    parser = OptionParser(usage=usage, version=grokmirror.VERSION)
-    parser.add_option('-m', '--manifest', dest='manifile',
-        help='Location of manifest.js or manifest.js.gz')
-    parser.add_option('-t', '--toplevel', dest='toplevel',
-        help='Top dir where all repositories reside')
-    parser.add_option('-l', '--logfile', dest='logfile',
-        default=None,
-        help='When specified, will put debug logs in this location')
-    parser.add_option('-n', '--use-now', dest='usenow', action='store_true',
-        default=False,
-        help='Use current timestamp instead of parsing commits')
-    parser.add_option('-c', '--check-export-ok', dest='check_export_ok',
-        action='store_true', default=False,
-        help='Export only repositories marked as git-daemon-export-ok')
-    parser.add_option('-p', '--purge', dest='purge', action='store_true',
-        default=False,
-        help='Purge deleted git repositories from manifest')
-    parser.add_option('-x', '--remove', dest='remove', action='store_true',
-        default=False,
-        help='Remove repositories passed as arguments from manifest')
-    parser.add_option('-y', '--pretty', dest='pretty', action='store_true',
-        default=False,
-        help='Pretty-print manifest (sort keys and add indentation)')
-    parser.add_option('-i', '--ignore-paths', dest='ignore', action='append',
-        default=[],
-        help='When finding git dirs, ignore these paths '
-             '(can be used multiple times, accepts shell-style globbing)')
-    parser.add_option('-w', '--wait-for-manifest', dest='wait',
-        action='store_true', default=False,
-        help='When running with arguments, wait if manifest is not there '
-             '(can be useful when multiple writers are writing the manifest)')
-    parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
-        default=False,
-        help='Be verbose and tell us what you are doing')
+    op = OptionParser(usage=usage, version=grokmirror.VERSION)
+    op.add_option('-m', '--manifest', dest='manifile',
+                  help='Location of manifest.js or manifest.js.gz')
+    op.add_option('-t', '--toplevel', dest='toplevel',
+                  help='Top dir where all repositories reside')
+    op.add_option('-l', '--logfile', dest='logfile',
+                  default=None,
+                  help='When specified, will put debug logs in this location')
+    op.add_option('-n', '--use-now', dest='usenow', action='store_true',
+                  default=False,
+                  help='Use current timestamp instead of parsing commits')
+    op.add_option('-c', '--check-export-ok', dest='check_export_ok',
+                  action='store_true', default=False,
+                  help='Export only repositories marked as '
+                       'git-daemon-export-ok')
+    op.add_option('-p', '--purge', dest='purge', action='store_true',
+                  default=False,
+                  help='Purge deleted git repositories from manifest')
+    op.add_option('-x', '--remove', dest='remove', action='store_true',
+                  default=False,
+                  help='Remove repositories passed as arguments from manifest')
+    op.add_option('-y', '--pretty', dest='pretty', action='store_true',
+                  default=False,
+                  help='Pretty-print manifest (sort keys and add indentation)')
+    op.add_option('-i', '--ignore-paths', dest='ignore', action='append',
+                  default=[],
+                  help='When finding git dirs, ignore these paths '
+                       '(can be used multiple times, accepts shell-style '
+                       'globbing wildcards)')
+    op.add_option('-w', '--wait-for-manifest', dest='wait',
+                  action='store_true', default=False,
+                  help='When running with arguments, wait if manifest is not '
+                       'there (can be useful when multiple writers are writing '
+                       'the manifest)')
+    op.add_option('-v', '--verbose', dest='verbose', action='store_true',
+                  default=False,
+                  help='Be verbose and tell us what you are doing')
 
-    opts, args = parser.parse_args()
+    opts, args = op.parse_args()
 
     if not opts.manifile:
-        parser.error('You must provide the path to the manifest file')
+        op.error('You must provide the path to the manifest file')
     if not opts.toplevel:
-        parser.error('You must provide the toplevel path')
+        op.error('You must provide the toplevel path')
     if not len(args) and opts.wait:
-        parser.error('--wait option only makes sense when dirs are passed')
+        op.error('--wait option only makes sense when dirs are passed')
 
     return opts, args
 
 
-def grok_manifest(manifile, toplevel, args=[], logfile=None, usenow=False,
+def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
                   check_export_ok=False, purge=False, remove=False,
-                  pretty=False, ignore=[], wait=False, verbose=False):
+                  pretty=False, ignore=None, wait=False, verbose=False):
+
+    if args is None:
+        args = []
+    if ignore is None:
+        ignore = []
 
     logger.setLevel(logging.DEBUG)
 
@@ -211,7 +222,8 @@ def grok_manifest(manifile, toplevel, args=[], logfile=None, usenow=False,
 
     if logfile is not None:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)
@@ -245,6 +257,8 @@ def grok_manifest(manifile, toplevel, args=[], logfile=None, usenow=False,
         grokmirror.manifest_unlock(manifile)
         return 0
 
+    gitdirs = []
+
     if purge or not len(args) or not len(manifest.keys()):
         # We automatically purge when we do a full tree walk
         gitdirs = grokmirror.find_all_gitdirs(toplevel, ignore=ignore)
@@ -259,13 +273,13 @@ def grok_manifest(manifile, toplevel, args=[], logfile=None, usenow=False,
     symlinks = []
     for gitdir in gitdirs:
         # check to make sure this gitdir is ok to export
-        if (check_export_ok and
-            not os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
+        if (check_export_ok and not
+                os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
             # is it curently in the manifest?
             repo = gitdir.replace(toplevel, '', 1)
             if repo in manifest.keys():
                 logger.info('Repository %s is no longer exported, '
-                    'removing from manifest' % repo)
+                            'removing from manifest' % repo)
                 del manifest[repo]
 
             # XXX: need to add logic to make sure we don't break the world

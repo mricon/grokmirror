@@ -31,21 +31,23 @@ from git import Repo
 
 logger = logging.getLogger(__name__)
 
+
 def git_rev_parse_all(gitdir):
     logger.debug('Running: GIT_DIR=%s git rev-parse --all', gitdir)
 
-    env  = {'GIT_DIR': gitdir}
+    env = {'GIT_DIR': gitdir}
     args = ['git', 'rev-parse', '--all']
 
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, env=env).communicate()
+    (output, error) = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=env).communicate()
 
     error = error.strip()
 
     if error:
         # Put things we recognize into debug
         debug = []
-        warn  = []
+        warn = []
         for line in error.split('\n'):
                 warn.append(line)
         if debug:
@@ -59,15 +61,16 @@ def git_rev_parse_all(gitdir):
 def git_remote_update(args, env):
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, env=env).communicate()
+    (output, error) = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=env).communicate()
 
     error = error.strip()
 
     if error:
         # Put things we recognize into debug
         debug = []
-        warn  = []
+        warn = []
         for line in error.split('\n'):
             if line.find('From ') == 0:
                 debug.append(line)
@@ -80,12 +83,13 @@ def git_remote_update(args, env):
         if warn:
             logger.warning('Stderr: %s' % '\n'.join(warn))
 
+
 def dumb_pull_repo(gitdir, remotes, svn=False):
     # verify it's a git repo and fetch all remotes
     logger.debug('Will pull %s with following remotes: %s' % (gitdir, remotes))
     try:
         repo = Repo(gitdir)
-        assert repo.bare == True
+        assert repo.bare is True
     except:
         logger.critical('Error opening %s.' % gitdir)
         logger.critical('Make sure it is a bare git repository.')
@@ -93,7 +97,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
 
     try:
         grokmirror.lock_repo(gitdir, nonblocking=True)
-    except IOError, ex:
+    except IOError:
         logger.info('Could not obtain exclusive lock on %s' % gitdir)
         logger.info('\tAssuming another process is running.')
         return False
@@ -134,7 +138,6 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                                 (hasremote, gitdir))
 
                     git_remote_update(args, env)
-                    didwork = True
 
             if not remotefound:
                 logger.info('Could not find any remotes matching %s in %s' % (
@@ -150,6 +153,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     logger.debug('New revs found -- new content pulled')
     return True
 
+
 def run_post_update_hook(hookscript, gitdir):
     if hookscript == '':
         return
@@ -159,10 +163,10 @@ def run_post_update_hook(hookscript, gitdir):
 
     args = [hookscript, gitdir]
     logger.debug('Running: %s' % ' '.join(args))
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).communicate()
+    (output, error) = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
-    error  = error.strip()
+    error = error.strip()
     output = output.strip()
     if error:
         # Put hook stderror into warning
@@ -171,6 +175,7 @@ def run_post_update_hook(hookscript, gitdir):
         # Put hook stdout into info
         logger.info('Hook Stdout: %s' % output)
 
+
 def parse_args():
     from optparse import OptionParser
 
@@ -178,37 +183,37 @@ def parse_args():
     Bluntly fetch remotes in specified git repositories.
     '''
 
-    parser = OptionParser(usage=usage, version=grokmirror.VERSION)
-    parser.add_option('-v', '--verbose', dest='verbose', action='store_true',
-        default=False,
-        help='Be verbose and tell us what you are doing')
-    parser.add_option('-s', '--svn', dest='svn', action='store_true',
-        default=False,
-        help='The remotes for these repositories are Subversion')
-    parser.add_option('-r', '--remote-names', dest='remotes', action='append',
-        default=[],
-        help='Only fetch remotes matching this name (accepts globbing, '
-             'can be passed multiple times)')
-    parser.add_option('-u', '--post-update-hook', dest='posthook',
-        default='',
-        help='Run this hook after each repository is updated. Passes '
-             'full path to the repository as the sole argument.')
-    parser.add_option('-l', '--logfile', dest='logfile',
-        default=None,
-        help='Put debug logs into this file')
+    op = OptionParser(usage=usage, version=grokmirror.VERSION)
+    op.add_option('-v', '--verbose', dest='verbose', action='store_true',
+                  default=False,
+                  help='Be verbose and tell us what you are doing')
+    op.add_option('-s', '--svn', dest='svn', action='store_true',
+                  default=False,
+                  help='The remotes for these repositories are Subversion')
+    op.add_option('-r', '--remote-names', dest='remotes', action='append',
+                  default=[],
+                  help='Only fetch remotes matching this name (accepts '
+                       'shell globbing, can be passed multiple times)')
+    op.add_option('-u', '--post-update-hook', dest='posthook',
+                  default='',
+                  help='Run this hook after each repository is updated. Passes '
+                       'full path to the repository as the sole argument.')
+    op.add_option('-l', '--logfile', dest='logfile',
+                  default=None,
+                  help='Put debug logs into this file')
 
-    opts, args = parser.parse_args()
+    opts, args = op.parse_args()
 
     if not len(args):
-        parser.error('You must provide at least a path to the repos to pull')
+        op.error('You must provide at least a path to the repos to pull')
 
     return opts, args
 
 
-def dumb_pull(args, verbose=False, svn=False, remotes=[], posthook='',
+def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
               logfile=None):
 
-    if not len(remotes):
+    if remotes is None:
         remotes = ['*']
 
     logger.setLevel(logging.DEBUG)
@@ -226,7 +231,8 @@ def dumb_pull(args, verbose=False, svn=False, remotes=[], posthook='',
 
     if logfile is not None:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)
