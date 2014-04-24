@@ -120,6 +120,10 @@ def set_repo_timestamp(toplevel, gitdir, ts):
 
 def get_repo_fingerprint(toplevel, gitdir, force=False):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    if not os.path.exists(fullpath):
+        logger.debug('Cannot fingerprint %s, as it does not exist' % fullpath)
+        return None
+
     fpfile = os.path.join(fullpath, 'grokmirror.fingerprint')
     if not force and os.path.exists(fpfile):
         fpfh = open(fpfile, 'r')
