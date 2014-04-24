@@ -132,7 +132,12 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
         logger.debug('Fingerprint for %s: %s' % (gitdir, fingerprint))
     else:
         logger.debug('Generating fingerprint for %s' % gitdir)
-        repo = Repo(fullpath)
+
+        try:
+            repo = Repo(fullpath)
+        except:
+            logger.critical('Could not open %s. Bad repo?' % gitdir)
+            return None
 
         if not len(repo.heads):
             logger.debug('No heads in %s, nothing to fingerprint.' % fullpath)
