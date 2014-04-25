@@ -65,32 +65,36 @@ class PullerThread(threading.Thread):
             # Do we still need to update it, or has another process
             # already done this for us?
             todo = True
-            my_fingerprint = grokmirror.get_repo_fingerprint(
-                self.toplevel, gitdir, force=True)
-            if fingerprint is not None:
-                if fingerprint == my_fingerprint:
-                    logger.debug('Fingeprints match, not pulling %s' % gitdir)
-                    todo = False
-            else:
-                ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
-                if ts >= modified:
-                    logger.debug('TS same or newer, not pulling %s' % gitdir)
-                    todo = False
-
-            if not todo:
-                logger.debug('Looks like %s already latest, skipping' % gitdir)
-                # Update the fingerprint stored in-repo
-                grokmirror.set_repo_fingerprint(self.toplevel, gitdir,
-                                                fingerprint=my_fingerprint)
-                self.out_queue.put((gitdir, my_fingerprint, True))
-                self.in_queue.task_done()
-                continue
-
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
-            success = False
 
             try:
                 grokmirror.lock_repo(fullpath, nonblocking=True)
+                logger.info('[Thread-%s] Checking fingerprint in %s' % (self.myname, gitdir))
+
+                my_fingerprint = grokmirror.get_repo_fingerprint(
+                    self.toplevel, gitdir, force=True)
+                if fingerprint is not None:
+                    if fingerprint == my_fingerprint:
+                        logger.debug('Fingeprints match, not pulling %s' % gitdir)
+                        todo = False
+                else:
+                    ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
+                    if ts >= modified:
+                        logger.debug('TS same or newer, not pulling %s' % gitdir)
+                        todo = False
+
+                if not todo:
+                    logger.debug('Looks like %s already latest, skipping' % gitdir)
+                    # Update the fingerprint stored in-repo
+                    grokmirror.set_repo_fingerprint(self.toplevel, gitdir,
+                                                    fingerprint=my_fingerprint)
+
+                    grokmirror.unlock_repo(fullpath)
+                    self.out_queue.put((gitdir, my_fingerprint, True))
+                    self.in_queue.task_done()
+                    continue
+
+                success = False
 
                 logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
                 success = pull_repo(self.toplevel, gitdir)
@@ -707,14 +711,16 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
     # XXX: 0.4.0 final: fix so we can ctrl-c out of threads
 
-    if len(lock_fails) > 0:
-        pull_threads -= len(lock_fails)
-        logger.info('Reducing number of threads to %s to match locked repos.'
-                    % pull_threads)
-
-    logger.debug('Will use %d threads to pull repos' % pull_threads)
-
     if len(to_pull):
+        if len(lock_fails) > 0:
+            pull_threads -= len(lock_fails)
+
+        # Don't spin up more threads than we need
+        if pull_threads > len(to_pull):
+            pull_threads = len(to_pull)
+
+        logger.info('Will use %d threads to pull repos' % pull_threads)
+
         logger.info('Updating %s repos from %s'
                     % (len(to_pull), config['site']))
         in_queue = Queue.Queue()
@@ -725,6 +731,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                           culled[gitdir]['modified']))
 
         for i in range(pull_threads):
+            logger.debug('Spun up thread %s' % i)
             t = PullerThread(in_queue, out_queue, config, i)
             t.setDaemon(True)
             t.start()
