@@ -642,7 +642,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                     grokmirror.unlock_repo(fullpath)
                     continue
 
-                logger.debug('Setting new origin for %s' % gitdir)
+                logger.info('Setting new origin for %s' % gitdir)
                 fix_remotes(gitdir, toplevel, config['site'])
                 to_pull.append(gitdir)
                 grokmirror.unlock_repo(fullpath)
