@@ -65,6 +65,8 @@ class PullerThread(threading.Thread):
             # Do we still need to update it, or has another process
             # already done this for us?
             todo = True
+            success = False
+
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
             try:
@@ -94,8 +96,6 @@ class PullerThread(threading.Thread):
                     self.in_queue.task_done()
                     continue
 
-                success = False
-
                 logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
                 success = pull_repo(self.toplevel, gitdir)
                 logger.debug('[Thread-%s] done pulling %s' %
@@ -114,6 +114,7 @@ class PullerThread(threading.Thread):
 
                 grokmirror.unlock_repo(fullpath)
             except IOError:
+                my_fingerprint = fingerprint
                 logger.info('Could not lock %s, skipping' % gitdir)
                 lock_fails.append(gitdir)
 
@@ -718,6 +719,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         # Don't spin up more threads than we need
         if pull_threads > len(to_pull):
             pull_threads = len(to_pull)
+
+        # exit if we're ever at 0 pull_threads. Shouldn't happen, but some extra
+        # precaution doesn't hurt
+        if pull_threads <= 0:
+            logger.info('Too many repositories locked. Exiting.')
+            return 0
 
         logger.info('Will use %d threads to pull repos' % pull_threads)
 
