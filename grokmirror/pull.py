@@ -115,7 +115,7 @@ class PullerThread(threading.Thread):
                 grokmirror.unlock_repo(fullpath)
             except IOError:
                 my_fingerprint = fingerprint
-                logger.info('Could not lock %s, skipping' % gitdir)
+                logger.info('[Thread-%s] Could not lock %s, skipping' % (self.myname, gitdir))
                 lock_fails.append(gitdir)
 
             self.out_queue.put((gitdir, my_fingerprint, success))
