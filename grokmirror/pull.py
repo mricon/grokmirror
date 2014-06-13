@@ -477,7 +477,11 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         # Load it from remote host using http and header magic
         logger.info('Fetching remote manifest from %s' % config['manifest'])
         request = urllib2.Request(config['manifest'])
-        opener = urllib2.build_opener()
+
+        password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        password_mgr.add_password(None, config['manifest'], config['http_user'], config['http_pwd'])
+        auth_handler = urllib2.HTTPBasicAuthHandler(password_mgr)
+        opener = urllib2.build_opener(auth_handler)
 
         # Find out if we need to run at all first
         if not (force or nomtime) and os.path.exists(mymanifest):
