@@ -77,13 +77,17 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     if modified == 0:
         modified = int(time.time())
 
-    reference = None
+    references = None
 
-    if len(repo.alternates) == 1:
-        # use this to hint which repo to use as reference when cloning
-        alternate = repo.alternates[0]
-        if alternate.find(toplevel) == 0:
-            reference = alternate.replace(toplevel, '').replace('/objects', '')
+    if len(repo.alternates):
+        # use this to hint which repos to use as reference when cloning
+        references = []
+        for alternate in repo.alternates:
+            if alternate.find(toplevel) == 0:
+                references.append(alternate.replace(toplevel, '').replace('/objects', ''))
+
+    if not references:
+        references = None
 
     if path not in manifest.keys():
         logger.info('Adding %s to manifest' % path)
@@ -100,7 +104,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
 
     manifest[path]['owner'] = owner
     manifest[path]['description'] = description
-    manifest[path]['reference'] = reference
+    manifest[path]['reference'] = references
     manifest[path]['modified'] = modified
     manifest[path]['fingerprint'] = fingerprint
 

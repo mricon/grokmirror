@@ -162,7 +162,68 @@ def fix_remotes(gitdir, toplevel, site):
     logger.debug('\tset new origin as %s' % origin)
 
 
-def set_repo_params(toplevel, gitdir, owner, description, reference):
+def set_repo_references(toplevel, gitdir, references):
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    repo = Repo(fullpath)
+
+    if not references:
+        references = []
+    elif type(references) is not list:
+        references = [references]
+
+    lockedrefs = []
+
+    # Go through references and change them into alternates locations
+    newalts = []
+    for refrepo in references:
+        fullrefpath = os.path.join(toplevel, refrepo.lstrip('/'))
+        objpath = os.path.join(fullrefpath, 'objects')
+        # Check if it exists at all
+        if os.path.exists(objpath):
+            # try to lock it for upcoming repacking
+            try:
+                grokmirror.lock_repo(fullrefpath, nonblocking=True)
+                lockedrefs.append(fullrefpath)
+                newalts.append(objpath)
+            except IOError:
+                logger.info('Reference repo %s could not be locked, not modifying alternates' % fullrefpath)
+                return False
+
+        else:
+            logger.info('Reference path %s not found, not modifying alternates' % objpath)
+            return False
+
+    workdone = False
+    if sorted(newalts) != sorted(repo.alternates):
+        workdone = True
+        # This is a slightly crazy operation. We do the following steps:
+        # 1. git repack -Adq
+        # 2. change alternates
+        # 3. git repack -Adlq
+        logger.info('Repacking %s for alternates modification' % fullpath)
+        repo.git.repack('-A', '-d', '-q')
+
+        altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
+
+        if references:
+            logger.info('Setting %s alternates to: %s' % (gitdir, references))
+            altfh = open(altfile, 'w')
+            altfh.write('\n'.join(newalts) + '\n')
+            altfh.close()
+            logger.info('Repacking %s to engage new alternates and free up space' % fullpath)
+            repo.git.repack('-A', '-d', '-l', '-q')
+        else:
+            os.unlink(altfile)
+            logger.info('Removed alternates for %s' % gitdir)
+
+    # Unlock any locked reference repos
+    for fullrefpath in lockedrefs:
+        grokmirror.unlock_repo(fullrefpath)
+
+    return workdone
+
+
+def set_repo_params(toplevel, gitdir, owner, description):
     if owner is None and description is None:
         # Let the default git values be there, then
         return
@@ -177,22 +238,6 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
     if owner is not None:
         logger.debug('Setting %s owner to: %s' % (gitdir, owner))
         repo.git.config('gitweb.owner', owner)
-
-    if reference is not None:
-        # XXX: Removing alternates involves git repack, so we don't support it
-        #      at this point. We also cowardly refuse to change an existing
-        #      alternates entry, as this has high chance of resulting in
-        #      broken git repositories. Only do this when we're going from
-        #      none to some value.
-        if len(repo.alternates) > 0:
-            return
-
-        objects = os.path.join(toplevel, reference.lstrip('/'), 'objects')
-        altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
-        logger.debug('Setting %s alternates to: %s' % (gitdir, objects))
-        altfh = open(altfile, 'w')
-        altfh.write('%s\n' % objects)
-        altfh.close()
 
 
 def set_agefile(toplevel, gitdir, last_modified):
@@ -269,22 +314,21 @@ def pull_repo(toplevel, gitdir):
     return success
 
 
-def clone_repo(toplevel, gitdir, site, reference=None):
+def clone_repo(toplevel, gitdir, site, references=None):
     source = os.path.join(site, gitdir.lstrip('/'))
     dest = os.path.join(toplevel, gitdir.lstrip('/'))
 
     args = ['/usr/bin/git', 'clone', '--mirror']
-    if reference is not None:
-        reference = os.path.join(toplevel, reference.lstrip('/'))
-        args.append('--reference')
-        args.append(reference)
+    logger.info('Cloning %s into %s' % (source, dest))
+    if references is not None:
+        for refrepo in references:
+            logger.info('\t...with reference to %s' % refrepo)
+            refrepo = os.path.join(toplevel, refrepo.lstrip('/'))
+            args.append('--reference')
+            args.append(refrepo)
 
     args.append(source)
     args.append(dest)
-
-    logger.info('Cloning %s into %s' % (source, dest))
-    if reference is not None:
-        logger.info('With reference to %s' % reference)
 
     logger.debug('Running: %s' % ' '.join(args))
 
@@ -321,16 +365,31 @@ def clone_order(to_clone, manifest, to_clone_sorted, existing):
     num_received = len(to_clone)
     logger.debug('Another clone_order loop')
     for gitdir in to_clone:
-        reference = manifest[gitdir]['reference']
-        logger.debug('reference: %s' % reference)
-        if (reference in existing
-            or reference in to_clone_sorted
-                or reference is None):
-            logger.debug('%s: reference found in existing' % gitdir)
+        references = manifest[gitdir]['reference']
+        if references is None:
+            logger.debug('No references for %s' % gitdir)
+            to_clone_sorted.append(gitdir)
+            continue
+
+        # Legacy manifest assumed only one reference, ever,
+        # so work around it by converting a string to a list,
+        # if string is found
+        if type(references) is not list:
+            references = [references]
+
+        found = True
+        for refrepo in references:
+            logger.debug('checking reference: %s' % refrepo)
+            if refrepo not in existing and refrepo not in to_clone_sorted:
+                found = False
+
+        if found:
+            logger.debug('%s: all references satisfied' % gitdir)
             to_clone_sorted.append(gitdir)
         else:
-            logger.debug('%s: reference not found' % gitdir)
+            logger.debug('%s: references not satisfied yet' % gitdir)
             new_to_clone.append(gitdir)
+
     if len(new_to_clone) == 0 or len(new_to_clone) == num_received:
         # we can resolve no more dependencies, break out
         logger.debug('Finished resolving dependencies, quitting')
@@ -630,9 +689,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 if myowner is None:
                     myowner = config['default_owner']
 
-                if desc != mydesc or owner != myowner or ref != myref:
+                if desc != mydesc or owner != myowner:
                     # we can do this right away without waiting
-                    set_repo_params(toplevel, gitdir, owner, desc, ref)
+                    set_repo_params(toplevel, gitdir, owner, desc)
+
+                if ref != myref:
+                    set_repo_references(toplevel, gitdir, ref)
 
             else:
                 # It exists on disk, but not in my manifest?
@@ -794,26 +856,37 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 lock_fails.append(gitdir)
                 continue
 
-            reference = None
+            references = None
             if config['ignore_repo_references'] != 'yes':
-                reference = culled[gitdir]['reference']
+                references = culled[gitdir]['reference']
 
-            if reference is not None and reference in existing:
-                # Make sure we can lock the reference repo
-                refrepo = os.path.join(toplevel, reference.lstrip('/'))
-                try:
-                    grokmirror.lock_repo(refrepo, nonblocking=True)
+            if references is not None:
+                if type(references) is not list:
+                    references = [references]
+
+                reflocks = []
+                for refrepo in references:
+                    # Make sure we can lock the reference repos
+                    try:
+                        refpath = os.path.join(toplevel, refrepo.lstrip('/'))
+                        grokmirror.lock_repo(refpath, nonblocking=True)
+                        reflocks.append(refpath)
+                    except IOError:
+                        logger.info('Cannot lock reference repo %s, skipping %s' %
+                                    (refrepo, gitdir))
+                        if refrepo not in lock_fails:
+                            lock_fails.append(refrepo)
+                        break
+                if len(reflocks) == len(references):
                     success = clone_repo(toplevel, gitdir, config['site'],
-                                         reference=reference)
-                    grokmirror.unlock_repo(refrepo)
-                except IOError:
-                    logger.info('Cannot lock reference repo %s, skipping %s' %
-                                (reference, gitdir))
-                    if reference not in lock_fails:
-                        lock_fails.append(reference)
+                                         references=references)
 
-                    grokmirror.unlock_repo(fullpath)
-                    continue
+                for refrepo in reflocks:
+                    grokmirror.unlock_repo(refrepo)
+
+                grokmirror.unlock_repo(fullpath)
+                continue
+
             else:
                 success = clone_repo(toplevel, gitdir, config['site'])
 
@@ -825,11 +898,10 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
                 desc = culled[gitdir].get('description')
                 owner = culled[gitdir].get('owner')
-                ref = culled[gitdir].get('reference')
 
                 if owner is None:
                     owner = config['default_owner']
-                set_repo_params(toplevel, gitdir, owner, desc, ref)
+                set_repo_params(toplevel, gitdir, owner, desc)
                 set_agefile(toplevel, gitdir, culled[gitdir]['modified'])
                 my_fingerprint = grokmirror.set_repo_fingerprint(toplevel,
                                                                  gitdir)
