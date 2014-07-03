@@ -20,6 +20,7 @@ import sys
 import grokmirror
 import logging
 import urllib2
+import urlparse
 import time
 import gzip
 import anyjson
@@ -476,8 +477,30 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
     else:
         # Load it from remote host using http and header magic
         logger.info('Fetching remote manifest from %s' % config['manifest'])
-        request = urllib2.Request(config['manifest'])
-        opener = urllib2.build_opener()
+
+        # Do we have username:password@ in the URL?
+        chunks = urlparse.urlparse(config['manifest'])
+        if chunks.netloc.find('@') > 0:
+            logger.debug('Taking username and password from the URL string and building basic auth')
+            (upass, netloc) = chunks.netloc.split('@')
+            if upass.find(':') > 0:
+                (username, password) = upass.split(':')
+            else:
+                username = upass
+                password = ''
+
+            manifesturl = config['manifest'].replace(chunks.netloc, netloc)
+            logger.debug('manifesturl=%s' % manifesturl)
+            request = urllib2.Request(manifesturl)
+
+            password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+            password_mgr.add_password(None, manifesturl, username, password)
+            auth_handler = urllib2.HTTPBasicAuthHandler(password_mgr)
+            opener = urllib2.build_opener(auth_handler)
+
+        else:
+            request = urllib2.Request(config['manifest'])
+            opener = urllib2.build_opener()
 
         # Find out if we need to run at all first
         if not (force or nomtime) and os.path.exists(mymanifest):
