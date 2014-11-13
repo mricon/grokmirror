@@ -55,11 +55,28 @@ def run_git_repack(fullpath, config):
 
     error = error.strip()
 
-    # Shouldn't return any errors, normally, so dump any of them into warn
+    # With newer versions of git, repack may return warnings that are safe to ignore
+    # so use the same strategy to weed out things we aren't interested in seeing
     if error:
-        logger.critical('Repacking %s returned errors:' % fullpath)
-        for entry in error.split('\n'):
-            logger.critical("\t%s" % entry)
+        # Put things we recognize as fairly benign into debug
+        debug = []
+        warn = []
+        for line in error.split('\n'):
+            ignored = False
+            for estring in config['ignore_errors']:
+                if line.find(estring) != -1:
+                    ignored = True
+                    debug.append(line)
+                    break
+            if not ignored:
+                warn.append(line)
+
+        if debug:
+            logger.debug('Stderr: %s' % '\n'.join(debug))
+        if warn:
+            logger.critical('Repacking %s returned critical errors:' % fullpath)
+            for entry in warn:
+                logger.critical("\t%s" % entry)
 
 
 def run_git_fsck(fullpath, config):
