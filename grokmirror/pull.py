@@ -1,4 +1,4 @@
-#-*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
@@ -171,9 +171,18 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     repo = Repo(fullpath)
 
-    if description is not None and repo.description != description:
-        logger.debug('Setting %s description to: %s' % (gitdir, description))
-        repo.description = description
+    if description is not None:
+        try:
+            if repo.description != description:
+                logger.debug('Setting %s description to: %s' %
+                             (gitdir, description))
+                repo.description = description
+        except IOError:
+            # Bug in git-python will throw an exception if description
+            # file is not found
+            logger.debug('%s description file missing, setting to: %s' %
+                         (gitdir, description))
+            repo.description = description
 
     if owner is not None:
         logger.debug('Setting %s owner to: %s' % (gitdir, owner))
