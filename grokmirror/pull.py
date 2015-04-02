@@ -67,46 +67,61 @@ class PullerThread(threading.Thread):
             # already done this for us?
             todo = True
             success = False
+            logger.debug('[Thread-%s] gitdir=%s, figerprint=%s, modified=%s'
+                         % (self.myname, gitdir, fingerprint, modified))
 
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
             try:
                 grokmirror.lock_repo(fullpath, nonblocking=True)
-                logger.info('[Thread-%s] Checking fingerprint in %s' % (self.myname, gitdir))
-
+                # First, get fingerprint as reported in grokmirror.fingerprint
                 my_fingerprint = grokmirror.get_repo_fingerprint(
-                    self.toplevel, gitdir, force=True)
-                if fingerprint is not None:
-                    if fingerprint == my_fingerprint:
-                        logger.debug('Fingeprints match, not pulling %s' % gitdir)
-                        todo = False
+                    self.toplevel, gitdir, force=False)
+
+                ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
+                if ts >= modified:
+                    logger.debug('[Thread-%s] TS same or newer, not pulling %s'
+                                 % (self.myname, gitdir))
+                    todo = False
                 else:
-                    ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
-                    if ts >= modified:
-                        logger.debug('TS same or newer, not pulling %s' % gitdir)
-                        todo = False
+                    if fingerprint is not None:
+                        # Timestamp is older than what we have. To be sure, get
+                        # the latest true fingerprint, by re-fingerprinting repo
+                        logger.debug('[Thread-%s] Checking fingerprint in %s' %
+                                     (self.myname, gitdir))
+                        my_fingerprint = grokmirror.get_repo_fingerprint(
+                            self.toplevel, gitdir, force=True)
+
+                        # Update the fingerprint stored in-repo
+                        grokmirror.set_repo_fingerprint(
+                            self.toplevel, gitdir, fingerprint=my_fingerprint)
+
+                        if fingerprint == my_fingerprint:
+                            logger.debug('[Thread-%s] FP match, not pulling %s'
+                                         % (self.myname, gitdir))
+                            todo = False
 
                 if not todo:
-                    logger.debug('Looks like %s already latest, skipping' % gitdir)
-                    # Update the fingerprint stored in-repo
-                    grokmirror.set_repo_fingerprint(self.toplevel, gitdir,
-                                                    fingerprint=my_fingerprint)
-
+                    logger.debug('[Thread-%s] %s already latest, skipping'
+                                 % (self.myname, gitdir))
+                    set_agefile(self.toplevel, gitdir, modified)
                     grokmirror.unlock_repo(fullpath)
                     self.out_queue.put((gitdir, my_fingerprint, True))
                     self.in_queue.task_done()
                     continue
 
-                logger.info('[Thread-%s] Updating %s' % (self.myname, gitdir))
-                success = pull_repo(self.toplevel, gitdir)
+                logger.info('[Thread-%s] updating %s' % (self.myname, gitdir))
+                success = pull_repo(self.toplevel, gitdir, threadid=self.myname)
                 logger.debug('[Thread-%s] done pulling %s' %
                              (self.myname, gitdir))
 
                 if success:
                     set_agefile(self.toplevel, gitdir, modified)
-                    run_post_update_hook(self.hookscript, self.toplevel, gitdir)
+                    run_post_update_hook(self.hookscript, self.toplevel, gitdir,
+                                         threadid=self.myname)
                 else:
-                    logger.warning('Pulling unsuccessful, not setting agefile')
+                    logger.warning('[Thread-%s] pulling %s unsuccessful'
+                                   % (self.myname, gitdir))
                     git_fails.append(gitdir)
 
                 # Record our current fingerprint and return it
@@ -116,7 +131,8 @@ class PullerThread(threading.Thread):
                 grokmirror.unlock_repo(fullpath)
             except IOError:
                 my_fingerprint = fingerprint
-                logger.info('[Thread-%s] Could not lock %s, skipping' % (self.myname, gitdir))
+                logger.info('[Thread-%s] Could not lock %s, skipping'
+                            % (self.myname, gitdir))
                 lock_fails.append(gitdir)
 
             self.out_queue.put((gitdir, my_fingerprint, success))
@@ -221,16 +237,17 @@ def set_agefile(toplevel, gitdir, last_modified):
     logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
 
 
-def run_post_update_hook(hookscript, toplevel, gitdir):
+def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     if hookscript == '':
         return
     if not os.access(hookscript, os.X_OK):
-        logger.warning('post_update_hook %s is not executable' % hookscript)
+        logger.warning('[Thread-%s] post_update_hook %s is not executable'
+                       % (threadid, hookscript))
         return
 
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     args = [hookscript, fullpath]
-    logger.debug('Running: %s' % ' '.join(args))
+    logger.debug('[Thread-%s] Running: %s' % (threadid, ' '.join(args)))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE).communicate()
 
@@ -238,17 +255,18 @@ def run_post_update_hook(hookscript, toplevel, gitdir):
     output = output.strip()
     if error:
         # Put hook stderror into warning
-        logger.warning('Hook Stderr: %s' % error)
+        logger.warning('[Thread-%s] Hook Stderr: %s' % (threadid, error))
     if output:
         # Put hook stdout into info
-        logger.info('Hook Stdout: %s' % output)
+        logger.info('[Thread-%s] Hook Stdout: %s' % (threadid, output))
 
 
-def pull_repo(toplevel, gitdir):
+def pull_repo(toplevel, gitdir, threadid='X'):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
     args = ['/usr/bin/git', 'remote', 'update', '--prune']
 
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('[Thread-%s] Running: GIT_DIR=%s %s'
+                 % (threadid, env['GIT_DIR'], ' '.join(args)))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, env=env)
@@ -272,9 +290,11 @@ def pull_repo(toplevel, gitdir):
             else:
                 warn.append(line)
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('[Thread-%s] Stderr: %s'
+                         % (threadid, '\n'.join(debug)))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('[Thread-%s] Stderr: %s'
+                           % (threadid, '\n'.join(warn)))
 
     return success
 
@@ -490,7 +510,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         # Do we have username:password@ in the URL?
         chunks = urlparse.urlparse(config['manifest'])
         if chunks.netloc.find('@') > 0:
-            logger.debug('Taking username and password from the URL string and building basic auth')
+            logger.debug('Taking username/password from the URL for basic auth')
             (upass, netloc) = chunks.netloc.split('@')
             if upass.find(':') > 0:
                 (username, password) = upass.split(':')
