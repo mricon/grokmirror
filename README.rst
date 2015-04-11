@@ -4,11 +4,11 @@ GROKMIRROR
 Framework to smartly mirror git repositories
 --------------------------------------------
 
-:Author:    mricon@kernel.org
-:Date:      2013-08-22
+:Author:    konstantin@linuxfoundation.org
+:Date:      2015-04-11
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.4.0-pre
+:Version:   0.4.0
 
 DESCRIPTION
 -----------

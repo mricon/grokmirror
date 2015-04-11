@@ -10,7 +10,7 @@ from setuptools import setup
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-VERSION='0.4.0-pre'
+VERSION='0.4.0'
 NAME='grokmirror'
 
 setup(
