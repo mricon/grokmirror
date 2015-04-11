@@ -903,12 +903,27 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 if symlink not in symlinks:
                     symlinks.append(symlink)
                 target = os.path.join(config['toplevel'], symlink.lstrip('/'))
-                if not os.path.exists(target) and os.path.exists(source):
-                    logger.info('Symlinking %s -> %s' % (target, source))
-                    # Make sure the leading dirs are in place
-                    if not os.path.exists(os.path.dirname(target)):
-                        os.makedirs(os.path.dirname(target))
-                    os.symlink(source, target)
+
+                if os.path.exists(source):
+                    if os.path.islink(target):
+                        # are you pointing to where we need you?
+                        if os.path.realpath(target) != source:
+                            # Remove symlink and recreate below
+                            logger.debug('Removed existing wrong symlink %s'
+                                         % target)
+                            os.unlink(target)
+                    elif os.path.exists(target):
+                        logger.warn('Deleted repo %s, because it is now'
+                                    ' a symlink to %s' % (target, source))
+                        shutil.rmtree(target)
+
+                    # Here we re-check if we still need to do anything
+                    if not os.path.exists(target):
+                        logger.info('Symlinking %s -> %s' % (target, source))
+                        # Make sure the leading dirs are in place
+                        if not os.path.exists(os.path.dirname(target)):
+                            os.makedirs(os.path.dirname(target))
+                        os.symlink(source, target)
 
     manifile = config['mymanifest']
     grokmirror.manifest_lock(manifile)
