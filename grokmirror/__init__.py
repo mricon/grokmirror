@@ -13,6 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import,
+                        division,
+                        print_function)
+
+__author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
+
 import os
 import sys
 
@@ -21,28 +27,54 @@ import anyjson
 import fnmatch
 
 import logging
-
 import hashlib
+import subprocess
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
-from StringIO import StringIO
 
-from git import Repo
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
-VERSION = '0.4.0-pre'
+import pygit2
+
+VERSION = '0.5.0-pre'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 
+BINGIT = '/usr/bin/git'
+
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
+
+
+def run_git_command(args=(), env=None):
+    if env is None:
+        env = {}
+
+    args = [BINGIT] + args
+
+    logger.debug('Running: %s' % ' '.join(args))
+
+    if env:
+        logger.debug('With env: %s' % env)
+
+    child = subprocess.Popen(args, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+    (stdout, stderror) = child.communicate()
+
+    return child.returncode, stdout, stderror
 
 
 def _lockname(fullpath):
     lockpath = os.path.dirname(fullpath)
     lockname = '.%s.lock' % os.path.basename(fullpath)
     if not os.path.exists(lockpath):
+        logger.debug('Creating parent dirs for %s' % fullpath)
         os.makedirs(lockpath)
     repolock = os.path.join(lockpath, lockname)
+    logger.debug('repolock=%s' % repolock)
     return repolock
 
 
@@ -60,6 +92,7 @@ def lock_repo(fullpath, nonblocking=False):
     lockf(lockfh, flags)
     global REPO_LOCKH
     REPO_LOCKH[fullpath] = lockfh
+    logger.debug('REPO_LOCKH=%s' % REPO_LOCKH)
 
 
 def unlock_repo(fullpath):

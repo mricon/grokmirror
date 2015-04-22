@@ -14,6 +14,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import,
+                        division,
+                        print_function)
+
+__author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
+
 import os
 import sys
 import logging
@@ -21,7 +27,7 @@ import time
 
 import grokmirror
 
-from git import Repo
+import pygit2
 
 logger = logging.getLogger(__name__)
 

@@ -1,2 +1,2 @@
 anyjson
-git
+pygit2
