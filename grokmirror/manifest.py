@@ -1,4 +1,4 @@
-#-*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright (C) 2013 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
@@ -38,47 +38,28 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     # Try to open git dir
     logger.debug('Examining %s' % gitdir)
     try:
-        repo = Repo(gitdir)
-        assert repo.bare is True
-    except:
+        repo = pygit2.Repository(gitdir)
+        assert repo.is_bare is True
+    except Exception as ex:
         logger.critical('Error opening %s.' % gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
     # Ignore it if it's an empty git repository
     try:
-        if len(repo.heads) == 0:
-            logger.info('%s has no heads, ignoring' % gitdir)
+        if repo.is_empty:
+            logger.info('%s is empty, ignoring' % gitdir)
             return
-    except:
+    except Exception as ex:
         # Errors when listing heads usually means repository is no good
         logger.info('Error listing heads in %s, ignoring' % gitdir)
         return
 
-    try:
-        description = repo.description
-    except:
-        description = 'Unnamed repository'
-
-    try:
-        rcr = repo.config_reader()
-        owner = rcr.get('gitweb', 'owner')
-    except:
-        owner = None
-
-    modified = 0
+    description = grokmirror.get_repo_description(toplevel, path)
+    owner = grokmirror.get_repo_owner(toplevel, path)
 
     if not usenow:
-        for branch in repo.branches:
-            try:
-                if branch.commit.committed_date > modified:
-                    modified = branch.commit.committed_date
-                    # Older versions of GitPython returned time.struct_time
-                    if type(modified) == time.struct_time:
-                        modified = int(time.mktime(modified))
-
-            except:
-                pass
+        modified = grokmirror.get_repo_latest_modified_ts(toplevel, path)
 
     if modified == 0:
         modified = int(time.time())
