@@ -219,13 +219,13 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
     # push our logger into grokmirror to override the default
     grokmirror.logger = logger
 
-    grokmirror.manifest_lock(manifile)
-    manifest = grokmirror.read_manifest(manifile, wait=wait)
+    manifest = grokmirror.Manifest(manifile, wait=wait)
 
     # If manifest is empty, don't use current timestamp
-    if not len(manifest.keys()):
+    if not len(manifest.repos):
         usenow = False
 
+    # XXX: Broken
     if remove and len(args):
         # Remove the repos as required, write new manfiest and exit
         for fullpath in args:
@@ -244,14 +244,11 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         grokmirror.manifest_unlock(manifile)
         return 0
 
-    gitdirs = []
-
     if purge or not len(args) or not len(manifest.keys()):
         # We automatically purge when we do a full tree walk
-        gitdirs = grokmirror.find_all_gitdirs(toplevel, ignore=ignore)
-        purge_manifest(manifest, toplevel, gitdirs)
+        manifest.populate(only_export_ok=check_export_ok, ignore=ignore)
 
-    if len(manifest.keys()) and len(args):
+    if len(manifest.repos) and len(args):
         # limit ourselves to passed dirs only when there is something
         # in the manifest. This precaution makes sure we regenerate the
         # whole file when there is nothing in it or it can't be parsed.

@@ -39,7 +39,6 @@ from io import open
 import pygit2
 
 VERSION = '0.5.0-pre'
-MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 
 BINGIT = '/usr/bin/git'
@@ -89,6 +88,7 @@ def find_all_gitdirs(toplevel, ignore=None):
     logger.info('Finding bare git repos in %s' % toplevel)
     logger.debug('Ignore list: %s' % ' '.join(ignore))
     gitdirs = []
+    symlinks = {}
     for root, dirs, files in os.walk(toplevel, topdown=True):
         if not len(dirs):
             continue
@@ -98,20 +98,54 @@ def find_all_gitdirs(toplevel, ignore=None):
             # Should we ignore this dir?
             ignored = False
             for ignoredir in ignore:
-                if fnmatch.fnmatch(os.path.join(root, name), ignoredir):
+                if (fnmatch.fnmatch(os.path.join(root, name), ignoredir)
+                        or fnmatch.fnmatch(name, ignoredir)):
                     torm.append(name)
                     ignored = True
                     break
-            if not ignored and is_bare_git_repo(os.path.join(root, name)):
+
+            if ignored:
+                continue
+
+            fullpath = os.path.join(root, name)
+            if not is_bare_git_repo(fullpath):
+                continue
+
+            if os.path.islink(fullpath):
+                target = os.path.realpath(fullpath)
+                if target.find(toplevel) < 0:
+                    logger.info('Symlink %s points outside toplevel, ignored'
+                                % symlink)
+                    continue
+
+                logger.debug('Found symlink %s -> %s' % (fullpath, target))
+                if target not in symlinks.keys():
+                    symlinks[target] = []
+                symlinks[target].append(fullpath)
+
+            else:
                 logger.debug('Found %s' % os.path.join(root, name))
                 gitdirs.append(os.path.join(root, name))
-                torm.append(name)
+
+            torm.append(name)
 
         for name in torm:
             # don't recurse into the found *.git dirs
             dirs.remove(name)
 
-    return gitdirs
+    return gitdirs, symlinks
+
+
+def _lockname(fullpath):
+    lockpath = os.path.dirname(fullpath)
+    lockname = '.%s.lock' % os.path.basename(fullpath)
+
+    if not os.path.exists(lockpath):
+        logger.debug('Creating parent dirs for %s' % fullpath)
+        os.makedirs(lockpath)
+
+    repolock = os.path.join(lockpath, lockname)
+    return repolock
 
 
 class Repository(object):
@@ -126,19 +160,29 @@ class Repository(object):
         self.__description = None
         self.__owner = None
         self.__modified = None
+        self.__alternates = None
+        self.__export_ok = None
 
     def _lockname(self):
-        lockpath = os.path.dirname(self.fullpath)
-        lockname = '.%s.lock' % os.path.basename(self.fullpath)
-
-        if not os.path.exists(lockpath):
-            logger.debug('Creating parent dirs for %s' % self.fullpath)
-            os.makedirs(lockpath)
-
-        repolock = os.path.join(lockpath, lockname)
+        repolock = _lockname(self.fullpath)
         logger.debug('repolock=%s' % repolock)
 
         return repolock
+
+    def to_manifest(self):
+        # For backwards-compatible "reference" we get either the first entry
+        # in the alternates list, or use "None"
+        reference = None
+        if len(self.alternates):
+            reference = self.alternates[0]
+        return {
+            'description': self.description,
+            'fingerprint': self.fingerprint,
+            'modified': self.modified,
+            'owner': self.owner,
+            'reference': reference,
+            'alternates': self.alternates,
+        }
 
     def lock(self, nonblocking=False):
         repolock = self._lockname()
@@ -164,6 +208,81 @@ class Repository(object):
             lockf(REPO_LOCKH[self.fullpath], LOCK_UN)
             REPO_LOCKH[self.fullpath].close()
             del REPO_LOCKH[self.fullpath]
+
+    @property
+    def alternates(self):
+        if self.__alternates is not None:
+            return self.__alternates
+
+        altfile = os.path.join(self.fullpath, 'objects/info/alternates')
+        if not os.path.exists(altfile):
+            logger.debug('No alternates file found, returning []')
+            self.__alternates = []
+            return self.__alternates
+
+        fh = open(altfile, 'r', encoding='ascii')
+        while True:
+            line = fh.readline()
+            if not len(line):
+                break
+
+            altpath = os.path.realpath(line.rstrip())
+            if altpath.find(self.toplevel) != 0:
+                logger.error('Alternate %s in %s is pointing outside toplevel!'
+                             % (altpath, self.gitdir))
+                continue
+
+            if not os.path.exists(altpath):
+                # TODO: This is a broken repo!
+                continue
+            reponame = altpath.replace(self.toplevel, '', 1).lstrip('/')
+            reponame = reponame.replace('/objects', '')
+
+            if self.__alternates is None:
+                self.__alternates = []
+            if reponame not in self.__alternates:
+                self.__alternates.append(reponame)
+
+        fh.close()
+        logger.debug('Loaded %s alternates from file: %s'
+                     % (self.gitdir, self.__alternates))
+
+        return self.__alternates
+
+    @alternates.setter
+    def alternates(self, alternates):
+        # first things first, are you trying to remove alternates?
+        # we don't currently support it, as that requires a full repack
+        # and can't reasonably be done on huge repos
+        for existing_alternate in self.alternates:
+            if existing_alternate not in alternates:
+                logger.error('Ignoring request to delete %s alternate from %s!'
+                             % (existing_alternate, self.gitdir))
+                alternates.append(existing_alternate)
+
+        altfile = os.path.join(self.fullpath, 'objects/info/alternates')
+        fh = open(altfile, 'w', encoding='ascii')
+
+        self.__alternates = []
+        for alternate in alternates:
+            altpath = os.path.join(self.toplevel, alternate, 'objects')
+            if os.path.exists(altpath):
+                self.__alternates.append(alternate)
+                logger.debug('Adding verified alternate %s to %s'
+                             % (alternate, self.gitdir))
+                fh.write(u'%s\n' % altpath)
+            else:
+                logger.debug('Not adding bogus alternate %s to %s'
+                             % (alternate, self.gitdir))
+        fh.close()
+        logger.debug('Wrote new alternates file with: %s' % self.__alternates)
+
+    @alternates.deleter
+    def alternates(self):
+        # I can't let you do that, Dave.
+        logger.error('Received request to delete all alternates from %s!'
+                     % self.gitdir)
+        return
 
     @property
     def timestamp(self):
@@ -192,9 +311,11 @@ class Repository(object):
     def timestamp(self, ts):
         tsfile = os.path.join(self.fullpath, 'grokmirror.timestamp')
 
+        self.lock()
         tsfh = open(tsfile, 'w', encoding='ascii')
         tsfh.write(u'%d' % ts)
         tsfh.close()
+        self.unlock()
 
         logger.debug('Recorded timestamp for %s: %s' % (self.gitdir, ts))
         self.__timestamp = ts
@@ -203,17 +324,21 @@ class Repository(object):
     def timestamp(self):
         tsfile = os.path.join(self.fullpath, 'grokmirror.timestamp')
         if os.path.exists(tsfile):
+            self.lock()
             os.unlink(tsfile)
+            self.unlock()
             logger.debug('Deleted %s' % tsfile)
 
     def gen_fingerprint(self):
         logger.debug('Generating fingerprint for %s' % self.gitdir)
 
+        self.lock()
         refs = self.repo.listall_references()
         if not len(refs):
             logger.debug('No refs in %s, nothing to fingerprint.'
                          % self.gitdir)
             self.__fingerprint = None
+            self.unlock()
             return
 
         # generate git show-ref compatible output
@@ -223,6 +348,7 @@ class Repository(object):
             line = u'%s %s\n' % (gitobj, refname)
             fprhash.update(line.encode('utf-8'))
 
+        self.unlock()
         self.fingerprint = fprhash.hexdigest()
 
         logger.debug('Generated fresh %s fingerprint: %s'
@@ -250,8 +376,11 @@ class Repository(object):
     def fingerprint(self):
         fpfile = os.path.join(self.fullpath, 'grokmirror.fingerprint')
         if os.path.exists(fpfile):
+            self.lock()
             os.unlink(fpfile)
             logger.debug('Deleted %s' % fpfile)
+            self.unlock()
+
         self.__fingerprint = None
 
     @fingerprint.setter
@@ -262,9 +391,11 @@ class Repository(object):
 
         fpfile = os.path.join(self.fullpath, 'grokmirror.fingerprint')
 
+        self.lock()
         fpfh = open(fpfile, 'w', encoding='ascii')
         fpfh.write(u'%s' % fingerprint)
         fpfh.close()
+        self.unlock()
 
         logger.debug('Recorded fingerprint for %s: %s' % (self.gitdir,
                                                           fingerprint))
@@ -289,9 +420,11 @@ class Repository(object):
         descfile = os.path.join(self.fullpath, 'description')
         logger.debug('Setting %s description to: %s' % (self.gitdir,
                                                         description))
+        self.lock()
         fh = open(descfile, 'w', encoding='utf-8')
         fh.write(description)
         fh.close()
+        self.unlock()
 
         self.__description = description
 
@@ -299,8 +432,10 @@ class Repository(object):
     def description(self):
         descfile = os.path.join(self.fullpath, 'description')
         if os.path.exists(descfile):
+            self.lock()
             os.unlink(descfile)
             logger.debug('Deleted %s' % descfile)
+            self.unlock()
 
         self.__description = None
 
@@ -323,7 +458,9 @@ class Repository(object):
 
     @owner.setter
     def owner(self, owner):
+        self.lock()
         self.repo.config.set_multivar('gitweb.owner', '.*', owner)
+        self.unlock()
         logger.debug('Set %s owner to: %s' % (self.gitdir, owner))
         self.__owner = owner
 
@@ -340,121 +477,207 @@ class Repository(object):
             return self.__modified
 
         self.__modified = 0
+        self.lock()
         for refname in self.repo.listall_references():
             obj = self.repo.lookup_reference(refname).get_object()
             commit_time = obj.commit_time + obj.commit_time_offset
             if commit_time > self.__modified:
                 self.__modified = commit_time
+        self.unlock()
 
         logger.debug('%s last modified: %s' % (self.gitdir, self.__modified))
         return self.__modified
 
+    @property
+    def export_ok(self):
+        if self.__export_ok is not None:
+            return self.__export_ok
 
-def manifest_lock(manifile):
-    global MANIFEST_LOCKH
-    if MANIFEST_LOCKH is not None:
-        logger.debug('Manifest %s already locked' % manifile)
-
-    manilock = _lockname(manifile)
-    MANIFEST_LOCKH = open(manilock, 'w')
-    logger.debug('Attempting to lock %s' % manilock)
-    lockf(MANIFEST_LOCKH, LOCK_EX)
-    logger.debug('Manifest lock obtained')
-
-
-def manifest_unlock(manifile):
-    global MANIFEST_LOCKH
-    if MANIFEST_LOCKH is not None:
-        logger.debug('Unlocking manifest %s' % manifile)
-        lockf(MANIFEST_LOCKH, LOCK_UN)
-        MANIFEST_LOCKH.close()
-        MANIFEST_LOCKH = None
-
-
-def read_manifest(manifile, wait=False):
-    while True:
-        if not wait or os.path.exists(manifile):
-            break
-        logger.info('Manifest file not yet found, waiting...')
-        # Unlock the manifest so other processes aren't waiting for us
-        was_locked = False
-        if MANIFEST_LOCKH is not None:
-            was_locked = True
-            manifest_unlock(manifile)
-        time.sleep(1)
-        if was_locked:
-            manifest_lock(manifile)
-
-    if not os.path.exists(manifile):
-        logger.info('%s not found, assuming initial run' % manifile)
-        return {}
-
-    if manifile.find('.gz') > 0:
-        import gzip
-        fh = gzip.open(manifile, 'rb')
-    else:
-        fh = open(manifile, 'r')
-
-    logger.info('Reading %s' % manifile)
-    jdata = fh.read()
-    fh.close()
-
-    try:
-        manifest = anyjson.deserialize(jdata)
-    except:
-        # We'll regenerate the file entirely on failure to parse
-        logger.critical('Unable to parse %s, will regenerate' % manifile)
-        manifest = {}
-
-    logger.debug('Manifest contains %s entries' % len(manifest.keys()))
-
-    return manifest
-
-
-def write_manifest(manifile, manifest, mtime=None, pretty=False):
-    import tempfile
-    import shutil
-    import gzip
-
-    logger.info('Writing new %s' % manifile)
-
-    (dirname, basename) = os.path.split(manifile)
-    (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
-    fh = os.fdopen(fd, 'w', 0)
-    logger.debug('Created a temporary file in %s' % tmpfile)
-    logger.debug('Writing to %s' % tmpfile)
-    try:
-        if manifile.find('.gz') > 0:
-            gfh = gzip.GzipFile(fileobj=fh, mode='wb')
-            if pretty:
-                import json
-                json.dump(manifest, gfh, indent=2, sort_keys=True)
-            else:
-                jdata = anyjson.serialize(manifest)
-                gfh.write(jdata)
-            gfh.close()
+        self.__export_ok = False
+        expfile = os.path.join(self.fullpath, 'git-daemon-export-ok')
+        if os.path.exists(expfile):
+            self.__export_ok = True
+            logger.debug('Found %s, marking as export ok' % expfile)
         else:
-            if pretty:
-                import json
-                json.dump(manifest, fh, indent=2, sort_keys=True)
-            else:
-                jdata = anyjson.serialize(manifest)
-                fh.write(jdata)
+            logger.debug('Did not find %s, marking as not exported' % expfile)
+        return self.__export_ok
 
-        os.fsync(fd)
+    @export_ok.setter
+    def export_ok(self, is_ok):
+        expfile = os.path.join(self.fullpath, 'git-daemon-export-ok')
+        if not is_ok and os.path.exists(expfile):
+            os.unlink(expfile)
+            logger.debug('Removed export permission on %s' % self.gitdir)
+        else:
+            fh = open(expfile, 'w')
+            fh.write(u'Set by grokmirror\n')
+            logger.debug('Set export permission on %s' % self.gitdir)
+            fh.close()
+        self.__export_ok = is_ok
+
+
+class Manifest(object):
+    def __init__(self, manifile, wait=False):
+        self.manifile = manifile
+        self.wait = wait
+        self._lockh = None
+
+        self.__repos = None
+
+    def _lockname(self):
+        manilock = _lockname(self.manifile)
+        logger.debug('manilock=%s' % manilock)
+
+        return manilock
+
+    def lock(self):
+        if self._lockh is not None:
+            logger.debug('Manifest %s already locked' % self.manifile)
+
+        self._lockh = open(self._lockname(), 'w')
+        logger.debug('Attempting to lock %s' % self.manifile)
+        lockf(self._lockh, LOCK_EX)
+        logger.debug('Manifest lock obtained')
+
+    def unlock(self):
+        if self._lockh is not None:
+            logger.debug('Unlocking manifest %s' % self.manifile)
+            lockf(self._lockh, LOCK_UN)
+            self._lockh.close()
+            self._lockh = None
+
+    @property
+    def repos(self):
+        if self.__repos is not None:
+            return self.__repos
+
+        # On NFS, sometimes the file shows up as not present, which is why
+        # we're always waiting for it to exist first before we try to do any
+        # work with it.
+        while True:
+            if not self.wait or os.path.exists(self.manifile):
+                break
+            logger.info('Manifest file not yet found, waiting...')
+
+            # Unlock the manifest so other processes aren't waiting for us
+            was_locked = False
+            if self._lockh is not None:
+                was_locked = True
+                self.unlock()
+            time.sleep(1)
+            if was_locked:
+                self.lock()
+
+        if not os.path.exists(self.manifile):
+            logger.info('%s not found, assuming initial run' % self.manifile)
+            self.__repos = {}
+            return self.__repos
+
+        self.lock()
+        if self.manifile.find('.gz') > 0:
+            import gzip
+            fh = gzip.open(self.manifile, 'rb')
+            jdata = fh.read().decode('utf-8')
+        else:
+            fh = open(self.manifile, 'r', encoding='utf-8')
+            jdata = fh.read()
+
+        logger.info('Reading %s' % self.manifile)
+
         fh.close()
-        # set mode to current umask
-        curmask = os.umask(0)
-        os.chmod(tmpfile, 0o0666 ^ curmask)
-        os.umask(curmask)
-        if mtime is not None:
-            logger.debug('Setting mtime to %s' % mtime)
-            os.utime(tmpfile, (mtime, mtime))
-        logger.debug('Moving %s to %s' % (tmpfile, manifile))
-        shutil.move(tmpfile, manifile)
 
-    finally:
-        # If something failed, don't leave these trailing around
-        if os.path.exists(tmpfile):
-            logger.debug('Removing %s' % tmpfile)
-            os.unlink(tmpfile)
+        self.__repos = anyjson.deserialize(jdata)
+
+        self.unlock()
+        logger.debug('Manifest contains %s entries' % len(self.__repos))
+
+        return self.__repos
+
+    def populate(self, toplevel, ignore=None, only_export_ok=False):
+        # Blow away whatever we know about repos
+        self.__repos = {}
+        (gitdirs, symlinks) = find_all_gitdirs(toplevel, ignore)
+
+        for fullpath in gitdirs:
+            gitdir = fullpath.replace(toplevel, '', 1).lstrip('/')
+            repo = Repository(toplevel, gitdir)
+
+            if only_export_ok and not repo.export_ok:
+                logger.debug('Skipping %s because it is not export_ok'
+                             % gitdir)
+            else:
+                self.__repos[gitdir] = repo.to_manifest()
+                # Do any symlinks point to us?
+                if fullpath in symlinks.keys():
+                    for fullspath in symlinks[fullpath]:
+                        symlink = fullspath.replace(toplevel, '', 1).lstrip('/')
+                        self.set_symlink(gitdir, symlink)
+
+    def set_symlink(self, gitdir, symlink):
+        if 'symlinks' not in self.__repos[gitdir].keys():
+            self.__repos[gitdir]['symlinks'] = []
+
+        if symlink not in self.__repos[gitdir]['symlinks']:
+            self.__repos[gitdir]['symlinks'].append(symlink)
+            logger.info('Recording symlink %s to %s' % (symlink, gitdir))
+
+        # Now go through all repos and fix any references pointing to the
+        # symlinked location.
+        # TODO: Fix for alternates
+        #for gitdir in manifest.keys():
+        #    if manifest[gitdir]['reference'] == relative:
+        #        logger.info('Adjusted symlinked reference for %s: %s->%s'
+        #                    % (gitdir, relative, tgtgitdir))
+        #        manifest[gitdir]['reference'] = tgtgitdir
+
+    def save(self, mtime=None, pretty=False):
+        import tempfile
+        import shutil
+        import gzip
+
+        logger.info('Writing new %s' % self.manifile)
+
+        (dirname, basename) = os.path.split(self.manifile)
+        (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
+        logger.debug('Created a temporary file in %s' % tmpfile)
+        logger.debug('Writing to %s' % tmpfile)
+        try:
+            if self.manifile.find('.gz') > 0:
+                fh = os.fdopen(fd, 'wb')
+                gfh = gzip.GzipFile(fileobj=fh, mode='wb')
+                if pretty:
+                    import json
+                    json.dump(self.repos, gfh, indent=2, sort_keys=True)
+                else:
+                    jdata = anyjson.serialize(self.repos)
+                    gfh.write(jdata.encode('utf-8'))
+                gfh.close()
+            else:
+                fh = os.fdopen(fd, 'w')
+                if pretty:
+                    import json
+                    json.dump(self.repos, fh, indent=2, sort_keys=True)
+                else:
+                    jdata = anyjson.serialize(self.repos)
+                    fh.write(jdata)
+
+            os.fsync(fd)
+            fh.close()
+            # set mode to current umask
+            curmask = os.umask(0)
+            os.chmod(tmpfile, 0o0666 ^ curmask)
+            os.umask(curmask)
+            if mtime is not None:
+                logger.debug('Setting mtime to %s' % mtime)
+                os.utime(tmpfile, (mtime, mtime))
+            logger.debug('Moving %s to %s' % (tmpfile, self.manifile))
+
+            self.lock()
+            shutil.move(tmpfile, self.manifile)
+            self.unlock()
+
+        finally:
+            # If something failed, don't leave these trailing around
+            if os.path.exists(tmpfile):
+                logger.debug('Removing %s' % tmpfile)
+                os.unlink(tmpfile)

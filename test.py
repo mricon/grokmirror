@@ -52,10 +52,17 @@ logger.addHandler(ch)
 MASTER1FPR = '5ac4b08d8b42b4edfe9d39eaafbda93fc35cae9d'
 MASTER1MODIFIED = 1429729359
 
+
 def fullpathify(path):
     path = path.lstrip('/')
     fullpath = os.path.join(os.path.realpath(os.path.curdir), path)
     return fullpath
+
+
+def clone_bundle_into(bundle, dest):
+    grokmirror.run_git_command(
+        args=['clone', '--bare', bundle, dest], env=None
+    )
 
 
 class GATest(unittest.TestCase):
@@ -65,10 +72,7 @@ class GATest(unittest.TestCase):
         logger.debug('Setting up test/sources/master1.git')
         os.mkdir('test/sources')
         os.mkdir('test/targets')
-        grokmirror.run_git_command(args=['clone', '--bare',
-                                         'test/master1.bundle',
-                                         'test/sources/master1.git'],
-                                   env=None)
+        clone_bundle_into('test/master1.bundle', 'test/sources/master1.git')
 
     def tearDown(self):
         logger.debug('Cleaning up')
@@ -155,21 +159,15 @@ class GATest(unittest.TestCase):
     def testFindGitdirs(self):
         logger.info('Test finding all gitdirs')
         logger.info('Creating some extra gitdirs for test')
-        grokmirror.run_git_command(args=['clone', '--bare',
-                                         'test/master1.bundle',
-                                         'test/sources/findme.git'],
-                                   env=None)
-        grokmirror.run_git_command(args=['clone', '--bare',
-                                         'test/master1.bundle',
-                                         'test/sources/missme.git'],
-                                   env=None)
+        clone_bundle_into('test/master1.bundle', 'test/sources/findme.git')
+        clone_bundle_into('test/master1.bundle', 'test/sources/missme.git')
         toplevel = fullpathify('test/sources')
         shouldfind = [
             os.path.join(toplevel, 'findme.git'),
             os.path.join(toplevel, 'master1.git'),
             os.path.join(toplevel, 'missme.git'),
         ]
-        found = grokmirror.find_all_gitdirs(toplevel)
+        (found, symlinks) = grokmirror.find_all_gitdirs(toplevel)
         found.sort()
         self.assertListEqual(found, shouldfind)
         logger.info('Retrying with ignores')
@@ -177,7 +175,7 @@ class GATest(unittest.TestCase):
             os.path.join(toplevel, 'findme.git'),
             os.path.join(toplevel, 'master1.git'),
         ]
-        found = grokmirror.find_all_gitdirs(toplevel, ignore=['*/miss*'])
+        (found, symlinks) = grokmirror.find_all_gitdirs(toplevel, ignore=['*/miss*'])
         found.sort()
         self.assertListEqual(found, shouldfind)
 
@@ -223,12 +221,143 @@ class GATest(unittest.TestCase):
         grepo = grokmirror.Repository(toplevel, 'master1.git')
         self.assertEqual(grepo.modified, MASTER1MODIFIED)
 
+    def testRepoAlternates(self):
+        logger.info('Testing repo alternates')
+        toplevel = fullpathify('test/sources')
+        grepo = grokmirror.Repository(toplevel, 'master1.git')
+        self.assertEqual(grepo.alternates, [])
+
+        # This should ignore an attempt to set alternates to a non-existing repo
+        grepo.alternates = ['bupkes.git']
+        self.assertEqual(grepo.alternates, [])
+
+        clone_bundle_into('test/master1.bundle', 'test/sources/altmaster.git')
+        agrepo = grokmirror.Repository(toplevel, 'altmaster.git')
+        agrepo.alternates = ['master1.git']
+
+        altfile = os.path.join(agrepo.fullpath, 'objects/info/alternates')
+        fh = open(altfile, 'r', encoding='ascii')
+        contents = fh.read()
+        fh.close()
+
+        destpath = os.path.join(toplevel, 'master1.git', 'objects')
+        self.assertEqual(contents.strip(), destpath)
+
+        # This should ignore an attempt to remove an alternate
+        agrepo.aternates = []
+        self.assertEqual(agrepo.alternates, ['master1.git'])
+
+        clone_bundle_into('test/master1.bundle', 'test/sources/foomaster.git')
+        agrepo.alternates = ['master1.git', 'foomaster.git']
+        fh = open(altfile, 'r', encoding='ascii')
+        contents = fh.read()
+        fh.close()
+        expected_contents = u'%s\n%s' % (
+            destpath, os.path.join(toplevel, 'foomaster.git', 'objects'))
+        self.assertEqual(contents.strip(), expected_contents)
+
+        # Attempt to remove alternates. This should be ignored.
+        agrepo.alternates = ['master1.git']
+        self.assertEqual(agrepo.alternates, ['master1.git', 'foomaster.git'])
+
     def testBasicManifest(self):
-        return
         logger.info('Testing basic manifest creation')
         logger.info('Testing uncompressed manifest')
         toplevel = fullpathify('test/sources')
-        manifest.grok_manifest('test/sources/manifest.js', toplevel)
+        grepo = grokmirror.Repository(toplevel, 'master1.git')
+        desc_to_set = u'Le répo de Bupkes'
+        grepo.description = desc_to_set
+
+        testdict = {
+            'master1.git': {
+                'description': u"Le répo de Bupkes",
+                'reference': None,
+                'modified': MASTER1MODIFIED,
+                'fingerprint': MASTER1FPR,
+                'owner': u'Grokmirror',
+                'alternates': []}}
+
+        for manifmt in ('manifest.js', 'manifest.js.gz'):
+            manifile = fullpathify(os.path.join('test', 'sources', manifmt))
+            mani = grokmirror.Manifest(manifile)
+
+            #  Nothing there, so should return an empty dict
+            self.assertEqual(mani.repos, {})
+            mani.populate(toplevel)
+            self.assertEqual(mani.repos, testdict)
+            # Attempt simple save
+            mani.save()
+
+            # Now load it again
+            mani = grokmirror.Manifest(manifile)
+            self.assertEqual(mani.repos, testdict)
+
+        # Check setting of mtime
+        mtime = 1000000000
+        mani.save(mtime=mtime)
+        statinfo = os.stat(manifile)
+        self.assertEqual(mtime, statinfo[8])
+
+        # Check saving of alternates into manifest
+        clone_bundle_into('test/master1.bundle', 'test/sources/altmaster.git')
+        clone_bundle_into('test/master1.bundle', 'test/sources/foomaster.git')
+        grepo = grokmirror.Repository(toplevel, 'master1.git')
+        grepo.alternates = ['altmaster.git', 'foomaster.git']
+
+        mani.populate(toplevel)
+        mani.save()
+        mani = grokmirror.Manifest(manifile)
+
+        self.assertEqual(mani.repos['master1.git'], {
+            'description': u"Le répo de Bupkes",
+            'reference': 'altmaster.git',
+            'modified': MASTER1MODIFIED,
+            'fingerprint': MASTER1FPR,
+            'owner': u'Grokmirror',
+            'alternates': ['altmaster.git', 'foomaster.git']})
+
+        # Mark one of them export-ok and make sure manifest matches
+        grepo.export_ok = True
+        mani.populate(toplevel, only_export_ok=True)
+        self.assertEqual(len(mani.repos), 1)
+        agrepo = grokmirror.Repository(toplevel, 'foomaster.git')
+        agrepo.export_ok = True
+        mani.populate(toplevel, only_export_ok=True)
+        self.assertEqual(len(mani.repos), 2)
+        grepo.export_ok = False
+        mani.populate(toplevel, only_export_ok=True)
+        self.assertEqual(len(mani.repos), 1)
+
+        # Ignore repos starting with "foomaster.git"
+        mani.populate(toplevel, ignore=['foomaster.git'])
+        self.assertEqual(len(mani.repos), 2)
+
+        # Test to make sure symlinks are recorded properly
+        os.symlink(os.path.join(toplevel, 'master1.git'),
+                   os.path.join(toplevel, 'symlinked1.git'))
+        os.symlink(os.path.join(toplevel, 'master1.git'),
+                   os.path.join(toplevel, 'symlinked2.git'))
+        mani.populate(toplevel)
+        mani.save()
+
+        mani = grokmirror.Manifest(manifile)
+        checklinks = mani.repos['master1.git']['symlinks']
+        checklinks.sort()
+
+        self.assertEqual(checklinks, ['symlinked1.git', 'symlinked2.git'])
+
+
+    def testManifestCommand(self):
+        logger.info('Testing manifest command')
+        clone_bundle_into('test/master1.bundle', 'test/sources/repo2.git')
+        clone_bundle_into('test/master1.bundle', 'test/sources/repo3.git')
+
+        # Create a new manifest
+        toplevel = fullpathify('test/sources')
+        manifile = fullpathify(os.path.join(toplevel, 'manifest.js'))
+
+        #manifest.grok_manifest(manifile, toplevel)
+
 
 
 if __name__ == '__main__':
