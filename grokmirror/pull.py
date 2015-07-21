@@ -889,6 +889,9 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
                 logger.critical('Was not able to clone %s' % gitdir)
+                # Remove it from our manifest so we can try re-cloning
+                # next time grok-pull runs
+                del culled[gitdir]
                 git_fails.append(gitdir)
 
             grokmirror.unlock_repo(fullpath)
