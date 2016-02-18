@@ -38,6 +38,13 @@ def run_git_repack(fullpath, config):
     if 'repack' not in config.keys() or config['repack'] != 'yes':
         return
 
+    try:
+        grokmirror.lock_repo(fullpath, nonblocking=True)
+    except IOError:
+        logger.info('Could not obtain exclusive lock on %s' % fullpath)
+        logger.info('Will repack next time')
+        return
+
     if 'repack_flags' not in config.keys():
         config['repack_flags'] = '-A -d -l -q'
 
@@ -78,6 +85,41 @@ def run_git_repack(fullpath, config):
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
+    # repacking refs requires a separate command, so run it now
+    args = ['/usr/bin/git', 'pack-refs', '--all']
+    logger.debug('Repacking refs in %s' % fullpath)
+
+    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+
+    (output, error) = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=env).communicate()
+
+    # pack-refs shouldn't return anything, but use the same ignore_errors block
+    # to weed out any future potential benign warnings
+    if error:
+        # Put things we recognize as fairly benign into debug
+        debug = []
+        warn = []
+        for line in error.split('\n'):
+            ignored = False
+            for estring in config['ignore_errors']:
+                if line.find(estring) != -1:
+                    ignored = True
+                    debug.append(line)
+                    break
+            if not ignored:
+                warn.append(line)
+
+        if debug:
+            logger.debug('Stderr: %s' % '\n'.join(debug))
+        if warn:
+            logger.critical('Repacking refs %s returned critical errors:' % fullpath)
+            for entry in warn:
+                logger.critical("\t%s" % entry)
+
+    grokmirror.unlock_repo(fullpath)
+
 
 def run_git_fsck(fullpath, config):
     # Lock the git repository so no other grokmirror process attempts to
@@ -85,10 +127,10 @@ def run_git_fsck(fullpath, config):
     # may not check the repo again for a long time, so block until the lock
     # is available.
     try:
-        grokmirror.lock_repo(fullpath, nonblocking=False)
+        grokmirror.lock_repo(fullpath, nonblocking=True)
     except IOError:
         logger.info('Could not obtain exclusive lock on %s' % fullpath)
-        logger.info('Will run next time')
+        logger.info('Will fsck next time')
         return
 
     env = {'GIT_DIR': fullpath}
@@ -123,8 +165,6 @@ def run_git_fsck(fullpath, config):
             logger.critical('%s has critical errors:' % fullpath)
             for entry in warn:
                 logger.critical("\t%s" % entry)
-
-    run_git_repack(fullpath, config)
 
     grokmirror.unlock_repo(fullpath)
 
@@ -203,8 +243,6 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
     today = datetime.datetime.today()
 
-    workdone = False
-
     # Go through the manifest and compare with status
     for gitdir in manifest.keys():
         fullpath = os.path.join(config['toplevel'], gitdir.lstrip('/'))
@@ -248,6 +286,20 @@ def fsck_mirror(name, config, verbose=False, force=False):
             run_git_fsck(fullpath, config)
             endt = time.time()
 
+            # Did the fingerprint change since last time we repacked?
+            oldfpr = None
+            if 'fingerprint' in status[fullpath].keys():
+                oldfpr = status[fullpath]['fingerprint']
+
+            fpr = grokmirror.get_repo_fingerprint(config['toplevel'],
+                                                  os.path.relpath(fullpath, config['toplevel']))
+
+            if fpr != oldfpr:
+                run_git_repack(fullpath, config)
+            else:
+                logger.debug('No changes to %s since last run, not repacking' % fullpath)
+
+            status[fullpath]['fingerprint'] = fpr
             status[fullpath]['lastcheck'] = todayiso
             status[fullpath]['s_elapsed'] = round(endt - startt, 2)
 
@@ -259,7 +311,13 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
             nextdate = today + datetime.timedelta(days=delay)
             status[fullpath]['nextcheck'] = nextdate.strftime('%F')
-            workdone = True
+
+            # Write status file after each check, so if the process dies, we won't
+            # have to recheck all the repos we've already checked
+            logger.debug('Updating status file in %s' % config['statusfile'])
+            stfh = open(config['statusfile'], 'w')
+            json.dump(status, stfh, indent=2)
+            stfh.close()
 
     # Do quickie checks
     if 'quick_checks_max_min' in config.keys():
@@ -307,20 +365,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
             run_git_fsck(repo_to_check, config)
             endt = time.time()
 
-            # We don't adjust nextcheck, since it kinda becomes meaningless
-            status[repo_to_check]['lastcheck'] = todayiso
-            status[repo_to_check]['s_elapsed'] = round(endt - startt, 2)
-
-            total_elapsed_time += status[repo_to_check]['s_elapsed']
+            total_elapsed_time += round(endt - startt, 2)
             quickies_checked += 1
-            workdone = True
-
-    # Write out the new status
-    if workdone:
-        logger.info('Writing new status file in %s' % config['statusfile'])
-        stfh = open(config['statusfile'], 'w')
-        json.dump(status, stfh, indent=2)
-        stfh.close()
 
     lockf(flockh, LOCK_UN)
     flockh.close()

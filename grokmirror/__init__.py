@@ -29,7 +29,7 @@ from StringIO import StringIO
 
 from git import Repo
 
-VERSION = '0.4.0-pre'
+VERSION = '0.4.1'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 

@@ -5,7 +5,7 @@
 %endif
 
 Name:           python-grokmirror
-Version:        0.4.0
+Version:        0.4.1
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -53,6 +53,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Feb 18 2016 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 0.4.1-1
+- Release 0.4.1 with improvements for grok-fsck
+
 * Sat Apr 11 2015 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 0.4.0-1
 - Relase final 0.4.0
 
