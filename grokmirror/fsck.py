@@ -320,6 +320,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
             stfh.close()
 
     # Do quickie checks
+    quickies_checked = 0
     if 'quick_checks_max_min' in config.keys():
         # Convert to seconds for ease of tracking
         max_time = int(config['quick_checks_max_min']) * 60
@@ -332,7 +333,6 @@ def fsck_mirror(name, config, verbose=False, force=False):
         # and run a check on it until we either run out of time
         # or repos to check.
         total_elapsed_time = 0
-        quickies_checked = 0
         while True:
             # use this var to track which repo is smallest on s_elapsed
             least_elapsed = None
@@ -365,8 +365,19 @@ def fsck_mirror(name, config, verbose=False, force=False):
             run_git_fsck(repo_to_check, config)
             endt = time.time()
 
-            total_elapsed_time += round(endt - startt, 2)
+            # We don't adjust nextcheck, since it kinda becomes meaningless
+            status[repo_to_check]['lastcheck'] = todayiso
+            status[repo_to_check]['s_elapsed'] = round(endt - startt, 2)
+
+            total_elapsed_time += status[repo_to_check]['s_elapsed']
             quickies_checked += 1
+
+    if quickies_checked > 0:
+        # Write it out once after all quickies are done
+        logger.debug('Final update of the status file in %s' % config['statusfile'])
+        stfh = open(config['statusfile'], 'w')
+        json.dump(status, stfh, indent=2)
+        stfh.close()
 
     lockf(flockh, LOCK_UN)
     flockh.close()
