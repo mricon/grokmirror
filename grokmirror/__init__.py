@@ -173,6 +173,25 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
     return fingerprint
 
 
+def find_all_alt_repos(refrepo, manifest):
+    """
+    :param toplevel: toplevel of the repository location
+    :param refrepo: path of the repository
+    :param manifest: full manifest of repositories we track
+    :return: List of repositories using gitdir in its alternates
+    """
+    logger.debug('Finding all repositories using %s as its alternates' % refrepo)
+    refrepo = refrepo.lstrip('/')
+    repolist = []
+    for gitdir in manifest.keys():
+        if gitdir.lstrip('/') == refrepo:
+            continue
+        if 'reference' in manifest[gitdir].keys() and manifest[gitdir]['reference'] is not None:
+            if manifest[gitdir]['reference'].lstrip('/') == refrepo:
+                repolist.append(gitdir)
+    return repolist
+
+
 def find_all_gitdirs(toplevel, ignore=None):
     if ignore is None:
         ignore = []
