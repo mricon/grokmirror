@@ -86,6 +86,8 @@ def run_git_prune(fullpath, config, manifest):
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
+    grokmirror.unlock_repo(fullpath)
+
 
 def run_git_repack(fullpath, config):
     if 'repack' not in config.keys() or config['repack'] != 'yes':
