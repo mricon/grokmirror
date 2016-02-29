@@ -38,19 +38,19 @@ def run_git_prune(fullpath, config, manifest):
     if 'prune' not in config.keys() or config['prune'] != 'yes':
         return
 
-    try:
-        grokmirror.lock_repo(fullpath, nonblocking=True)
-    except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % fullpath)
-        logger.info('Will prune next time')
-        return
-
     # Are any other repos using us in their objects/info/alternates?
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     repolist = grokmirror.find_all_alt_repos(gitdir, manifest)
 
     if len(repolist):
         logger.debug('Not pruning %s as other repos use it as alternates' % gitdir)
+        return
+
+    try:
+        grokmirror.lock_repo(fullpath, nonblocking=True)
+    except IOError:
+        logger.info('Could not obtain exclusive lock on %s' % fullpath)
+        logger.info('Will prune next time')
         return
 
     env = {'GIT_DIR': fullpath}
@@ -89,7 +89,7 @@ def run_git_prune(fullpath, config, manifest):
     grokmirror.unlock_repo(fullpath)
 
 
-def run_git_repack(fullpath, config):
+def run_git_repack(fullpath, config, full_repack=False):
     if 'repack' not in config.keys() or config['repack'] != 'yes':
         return
 
@@ -100,10 +100,16 @@ def run_git_repack(fullpath, config):
         logger.info('Will repack next time')
         return
 
-    if 'repack_flags' not in config.keys():
-        config['repack_flags'] = '-A -d -l -q'
+    repack_flags = '-A -d -l -q'
 
-    flags = config['repack_flags'].split()
+    if full_repack and 'full_repack_flags' in config.keys():
+        repack_flags = config['full_repack_flags']
+        logger.info('Time to do a full repack of %s' % fullpath)
+
+    elif 'repack_flags' in config.keys():
+        repack_flags = config['repack_flags']
+
+    flags = repack_flags.split()
 
     env = {'GIT_DIR': fullpath}
     args = ['/usr/bin/git', 'repack'] + flags
@@ -280,6 +286,10 @@ def fsck_mirror(name, config, verbose=False, force=False):
             #    '/full/path/to/repository': {
             #      'lastcheck': 'YYYY-MM-DD' or 'never',
             #      'nextcheck': 'YYYY-MM-DD',
+            #      'lastrepack': 'YYYY-MM-DD',
+            #      'fingerprint': 'sha-1',
+            #      's_elapsed': seconds,
+            #      'quick_repack_count': times,
             #    },
             #    ...
             #  }
@@ -351,9 +361,39 @@ def fsck_mirror(name, config, verbose=False, force=False):
             fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir)
 
             if fpr != oldfpr or force:
-                run_git_repack(fullpath, config)
+                full_repack = False
+                if not 'quick_repack_count' in status[fullpath].keys():
+                    status[fullpath]['quick_repack_count'] = 0
+
+                quick_repack_count = status[fullpath]['quick_repack_count']
+                if 'full_repack_every' in config.keys():
+                    # but did you set 'full_repack_flags' as well?
+                    if 'full_repack_flags' not in config.keys():
+                        logger.critical('full_repack_every is set, but not full_repack_flags')
+                    else:
+                        full_repack_every = int(config['full_repack_every'])
+                        # is it anything insane?
+                        if full_repack_every < 2:
+                            full_repack_every = 2
+                            logger.warning('full_repack_every is too low, forced to 2')
+
+                        # is it time to trigger full repack?
+                        # We -1 because if we want a repack every 10th time, then we need to trigger
+                        # when current repack count is 9.
+                        if quick_repack_count >= full_repack_every-1:
+                            logger.debug('Time to do full repack on %s' % fullpath)
+                            full_repack = True
+                            quick_repack_count = 0
+                            status[fullpath]['lastfullrepack'] = todayiso
+                        else:
+                            logger.debug('Repack count for %s not yet reached full repack trigger' % fullpath)
+                            quick_repack_count += 1
+
+                run_git_repack(fullpath, config, full_repack)
                 run_git_prune(fullpath, config, manifest)
                 status[fullpath]['lastrepack'] = todayiso
+                status[fullpath]['quick_repack_count'] = quick_repack_count
+
             else:
                 logger.debug('No changes to %s since last run, not repacking' % gitdir)
 
