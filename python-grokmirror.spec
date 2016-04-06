@@ -5,8 +5,8 @@
 %endif
 
 Name:           python-grokmirror
-Version:        0.4.3
-Release:        0.pre.1%{?dist}
+Version:        1.0.0
+Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
 License:        GPLv3+
@@ -53,6 +53,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Apr 06 2016 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 1.0.0-1
+- Version 1.0.0 with minor bugfixes
+
 * Mon Feb 29 2016 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 0.4.3-1
 - Version 0.4.3 with support for occasional full repacks
 

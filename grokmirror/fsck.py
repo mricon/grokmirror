@@ -358,7 +358,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
             if 'fingerprint' in status[fullpath].keys():
                 oldfpr = status[fullpath]['fingerprint']
 
-            fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir)
+            fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir, force=True)
 
             if fpr != oldfpr or force:
                 full_repack = False
