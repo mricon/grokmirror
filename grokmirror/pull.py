@@ -78,28 +78,29 @@ class PullerThread(threading.Thread):
                 my_fingerprint = grokmirror.get_repo_fingerprint(
                     self.toplevel, gitdir, force=False)
 
-                ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
-                if ts >= modified:
-                    logger.debug('[Thread-%s] TS same or newer, not pulling %s'
-                                 % (self.myname, gitdir))
-                    todo = False
+                # We never rely on timestamps if fingerprints are in play
+                if fingerprint is None:
+                    ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
+                    if ts >= modified:
+                        logger.debug('[Thread-%s] TS same or newer, not pulling %s'
+                                     % (self.myname, gitdir))
+                        todo = False
                 else:
-                    if fingerprint is not None:
-                        # Timestamp is older than what we have. To be sure, get
-                        # the latest true fingerprint, by re-fingerprinting repo
-                        logger.debug('[Thread-%s] Checking fingerprint in %s' %
-                                     (self.myname, gitdir))
-                        my_fingerprint = grokmirror.get_repo_fingerprint(
-                            self.toplevel, gitdir, force=True)
+                    # Recheck the real fingerprint to make sure there is no
+                    # divergence between grokmirror.fingerprint and real repo
+                    logger.debug('[Thread-%s] Rechecking fingerprint in %s' %
+                                 (self.myname, gitdir))
+                    my_fingerprint = grokmirror.get_repo_fingerprint(
+                        self.toplevel, gitdir, force=True)
 
-                        # Update the fingerprint stored in-repo
-                        grokmirror.set_repo_fingerprint(
-                            self.toplevel, gitdir, fingerprint=my_fingerprint)
+                    # Update the fingerprint stored in-repo
+                    grokmirror.set_repo_fingerprint(
+                        self.toplevel, gitdir, fingerprint=my_fingerprint)
 
-                        if fingerprint == my_fingerprint:
-                            logger.debug('[Thread-%s] FP match, not pulling %s'
-                                         % (self.myname, gitdir))
-                            todo = False
+                    if fingerprint == my_fingerprint:
+                        logger.debug('[Thread-%s] FP match, not pulling %s'
+                                     % (self.myname, gitdir))
+                        todo = False
 
                 if not todo:
                     logger.debug('[Thread-%s] %s already latest, skipping'
