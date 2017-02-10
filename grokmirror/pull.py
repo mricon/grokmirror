@@ -181,7 +181,7 @@ def fix_remotes(gitdir, toplevel, site):
 
 
 def set_repo_params(toplevel, gitdir, owner, description, reference):
-    if owner is None and description is None:
+    if owner is None and description is None and reference is None:
         # Let the default git values be there, then
         return
 
@@ -216,7 +216,7 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
 
         objects = os.path.join(toplevel, reference.lstrip('/'), 'objects')
         altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
-        logger.debug('Setting %s alternates to: %s' % (gitdir, objects))
+        logger.info('Setting %s alternates to: %s' % (gitdir, objects))
         altfh = open(altfile, 'w')
         altfh.write('%s\n' % objects)
         altfh.close()
@@ -672,16 +672,25 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 if config['ignore_repo_references'] != 'yes':
                     ref = culled[gitdir].get('reference')
 
-                mydesc = mymanifest[gitdir].get('description')
-                myowner = mymanifest[gitdir].get('owner')
+                # dirty hack to force on-disk owner/description checks
+                # when we're called with -n, in case our manifest
+                # differs from what is on disk for owner/description/alternates
                 myref = None
-                if config['ignore_repo_references'] != 'yes':
-                    myref = mymanifest[gitdir].get('reference')
+                if nomtime:
+                    mydesc = None
+                    myowner = None
+                else:
+                    mydesc = mymanifest[gitdir].get('description')
+                    myowner = mymanifest[gitdir].get('owner')
+
+                    if config['ignore_repo_references'] != 'yes':
+                        myref = mymanifest[gitdir].get('reference')
+
+                    if myowner is None:
+                        myowner = config['default_owner']
 
                 if owner is None:
                     owner = config['default_owner']
-                if myowner is None:
-                    myowner = config['default_owner']
 
                 if desc != mydesc or owner != myowner or ref != myref:
                     # we can do this right away without waiting

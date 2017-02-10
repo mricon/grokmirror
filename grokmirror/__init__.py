@@ -143,10 +143,13 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
             logger.debug('No heads in %s, nothing to fingerprint.' % fullpath)
             return None
 
-        # We add the final "\n" to be compatible with cmdline output
-        # of git-show-ref
         try:
-            fingerprint = hashlib.sha1(repo.git.show_ref()+"\n").hexdigest()
+            # encode into utf-8 because people will occasionally tag
+            # with non-ascii characters
+            refs = repo.git.show_ref().encode('utf-8')
+            # We add the final "\n" to be compatible with cmdline output
+            # of git-show-ref
+            fingerprint = hashlib.sha1(refs + "\n").hexdigest()
         except:
             logger.critical('Could not fingerprint %s. Bad repo?' % gitdir)
             return None
