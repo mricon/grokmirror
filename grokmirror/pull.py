@@ -36,7 +36,10 @@ import shutil
 import calendar
 
 import threading
-import Queue
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
 
 from StringIO import StringIO
 
@@ -798,8 +801,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         logger.info('Updating %s repos from %s'
                     % (len(to_pull), config['site']))
-        in_queue = Queue.Queue()
-        out_queue = Queue.Queue()
+        in_queue = Queue()
+        out_queue = Queue()
 
         for gitdir in to_pull:
             in_queue.put((gitdir, culled[gitdir]['fingerprint'],
