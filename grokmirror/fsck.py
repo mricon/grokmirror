@@ -276,7 +276,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
     if os.path.exists(config['statusfile']):
         logger.info('Reading status from %s' % config['statusfile'])
-        stfh = open(config['statusfile'], 'r')
+        stfh = open(config['statusfile'], 'rb')
         try:
             # Format of the status file:
             #  {
@@ -291,7 +291,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
             #    ...
             #  }
 
-            status = json.load(stfh)
+            status = json.loads(stfh.read().decode('utf-8'))
         except:
             # Huai le!
             logger.critical('Failed to parse %s' % config['statusfile'])
@@ -414,9 +414,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
             # Write status file after each check, so if the process dies, we won't
             # have to recheck all the repos we've already checked
             logger.debug('Updating status file in %s' % config['statusfile'])
-            stfh = open(config['statusfile'], 'w')
-            json.dump(status, stfh, indent=2)
-            stfh.close()
+            with open(config['statusfile'], 'wb') as stfh:
+                stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     if not total_checked:
         logger.info('No new repos to check.')

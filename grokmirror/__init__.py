@@ -262,12 +262,12 @@ def read_manifest(manifile, wait=False):
 
     if manifile.find('.gz') > 0:
         import gzip
-        fh = gzip.open(manifile, 'rt')
+        fh = gzip.open(manifile, 'rb')
     else:
-        fh = open(manifile, 'rt')
+        fh = open(manifile, 'rb')
 
     logger.info('Reading %s' % manifile)
-    jdata = fh.read()
+    jdata = fh.read().decode('utf-8')
     fh.close()
 
     try:
@@ -291,27 +291,26 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
 
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
+    fh = os.fdopen(fd, 'wb', 0)
     logger.debug('Created a temporary file in %s' % tmpfile)
     logger.debug('Writing to %s' % tmpfile)
     try:
-        if manifile.find('.gz') > 0:
-            fh = os.fdopen(fd, 'wb', 0)
-            gfh = gzip.GzipFile(fileobj=fh, mode='wt')
-            if pretty:
-                import json
-                json.dump(manifest, gfh, indent=2, sort_keys=True)
-            else:
-                jdata = anyjson.serialize(manifest)
-                gfh.write(jdata)
+        if pretty:
+            from io import StringIO
+            import json
+            sio = StringIO()
+            json.dump(manifest, sio, indent=2, sort_keys=True)
+            jdata = sio.getvalue()
+        else:
+            jdata = anyjson.serialize(manifest)
+
+        jdata = jdata.encode('utf-8')
+        if manifile.endswith('.gz'):
+            gfh = gzip.GzipFile(fileobj=fh, mode='wb')
+            gfh.write(jdata)
             gfh.close()
         else:
-            fh = os.fdopen(fd, 'wt', 0)
-            if pretty:
-                import json
-                json.dump(manifest, fh, indent=2, sort_keys=True)
-            else:
-                jdata = anyjson.serialize(manifest)
-                fh.write(jdata)
+            fh.write(jdata)
 
         os.fsync(fd)
         fh.close()

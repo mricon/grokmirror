@@ -577,7 +577,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             else:
                 fh = ufh
 
-            jdata = fh.read().decode()
+            jdata = fh.read().decode('utf-8')
             fh.close()
 
             manifest = anyjson.deserialize(jdata)
