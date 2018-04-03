@@ -544,7 +544,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         try:
             ufh = opener.open(request, timeout=30)
-        except urllib2.HTTPError, ex:
+        except urllib2.HTTPError as ex:
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. '
                             'Quitting.')
@@ -552,7 +552,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Server returned: %s' % ex)
             return 1
-        except urllib2.URLError, ex:
+        except urllib2.URLError as ex:
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
@@ -575,7 +575,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
             manifest = anyjson.deserialize(jdata)
 
-        except Exception, ex:
+        except Exception as ex:
             logger.warning('Failed to parse %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
