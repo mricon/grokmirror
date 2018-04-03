@@ -60,7 +60,7 @@ def run_git_prune(fullpath, config, manifest):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize as fairly benign into debug
@@ -118,7 +118,7 @@ def run_git_repack(fullpath, config, full_repack=False):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     # With newer versions of git, repack may return warnings that are safe to ignore
     # so use the same strategy to weed out things we aren't interested in seeing
@@ -152,6 +152,8 @@ def run_git_repack(fullpath, config, full_repack=False):
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
+
+    error = error.decode().strip()
 
     # pack-refs shouldn't return anything, but use the same ignore_errors block
     # to weed out any future potential benign warnings
@@ -201,7 +203,7 @@ def run_git_fsck(fullpath, config):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize as fairly benign into debug

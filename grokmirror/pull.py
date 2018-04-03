@@ -257,7 +257,8 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     args = [hookscript, fullpath]
     logger.debug('[Thread-%s] Running: %s' % (threadid, ' '.join(args)))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE).communicate()
+                                       stderr=subprocess.PIPE,
+                                       universal_newlines=True).communicate()
 
     error = error.strip()
     output = output.strip()
@@ -277,7 +278,8 @@ def pull_repo(toplevel, gitdir, threadid='X'):
                  % (threadid, env['GIT_DIR'], ' '.join(args)))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=env)
+                             stderr=subprocess.PIPE, env=env,
+                             universal_newlines=True)
     (output, error) = child.communicate()
 
     error = error.strip()
@@ -334,7 +336,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     if child.returncode == 0:
         success = True
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize into debug
