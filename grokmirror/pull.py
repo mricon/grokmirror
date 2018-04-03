@@ -1083,7 +1083,7 @@ def parse_args():
 def grok_pull(config, verbose=False, force=False, nomtime=False,
               verify=False, verify_subpath='*', noreuse=False,
               purge=False, pretty=False, forcepurge=False):
-    from ConfigParser import ConfigParser
+    from configparser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)

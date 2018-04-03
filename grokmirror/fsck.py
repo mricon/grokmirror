@@ -454,7 +454,10 @@ def parse_args():
 
 
 def grok_fsck(config, verbose=False, force=False):
-    from ConfigParser import ConfigParser
+    try:
+        from configparser import ConfigParser
+    except ImportError:
+        from ConfigParser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)
