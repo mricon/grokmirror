@@ -19,8 +19,14 @@ import sys
 
 import grokmirror
 import logging
-import urllib2
-import urlparse
+try:
+    import urllib.request as urllib_request
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import urlparse
+except ImportError:
+    import urllib2 as urllib_request
+    from urllib2 import HTTPError, URLError
+    from urlparse import urlparse
 import time
 import gzip
 import anyjson
@@ -509,7 +515,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.info('Fetching remote manifest from %s' % config['manifest'])
 
         # Do we have username:password@ in the URL?
-        chunks = urlparse.urlparse(config['manifest'])
+        chunks = urlparse(config['manifest'])
         if chunks.netloc.find('@') > 0:
             logger.debug('Taking username/password from the URL for basic auth')
             (upass, netloc) = chunks.netloc.split('@')
@@ -521,16 +527,16 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
             manifesturl = config['manifest'].replace(chunks.netloc, netloc)
             logger.debug('manifesturl=%s' % manifesturl)
-            request = urllib2.Request(manifesturl)
+            request = urllib_request.Request(manifesturl)
 
-            password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+            password_mgr = urllib_request.HTTPPasswordMgrWithDefaultRealm()
             password_mgr.add_password(None, manifesturl, username, password)
-            auth_handler = urllib2.HTTPBasicAuthHandler(password_mgr)
-            opener = urllib2.build_opener(auth_handler)
+            auth_handler = urllib_request.HTTPBasicAuthHandler(password_mgr)
+            opener = urllib_request.build_opener(auth_handler)
 
         else:
-            request = urllib2.Request(config['manifest'])
-            opener = urllib2.build_opener()
+            request = urllib_request.Request(config['manifest'])
+            opener = urllib_request.build_opener()
 
         # Find out if we need to run at all first
         if not (force or nomtime) and os.path.exists(mymanifest):
@@ -544,7 +550,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         try:
             ufh = opener.open(request, timeout=30)
-        except urllib2.HTTPError as ex:
+        except HTTPError as ex:
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. '
                             'Quitting.')
@@ -552,7 +558,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Server returned: %s' % ex)
             return 1
-        except urllib2.URLError as ex:
+        except URLError as ex:
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
