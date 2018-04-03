@@ -91,9 +91,8 @@ def get_repo_timestamp(toplevel, gitdir):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     tsfile = os.path.join(fullpath, 'grokmirror.timestamp')
     if os.path.exists(tsfile):
-        tsfh = open(tsfile, 'r')
-        contents = tsfh.read()
-        tsfh.close()
+        with open(tsfile, 'rb') as tsfh:
+            contents = tsfh.read()
         try:
             ts = int(contents)
             logger.debug('Timestamp for %s: %s' % (gitdir, ts))
@@ -109,9 +108,8 @@ def set_repo_timestamp(toplevel, gitdir, ts):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     tsfile = os.path.join(fullpath, 'grokmirror.timestamp')
 
-    tsfh = open(tsfile, 'w')
-    tsfh.write('%d' % ts)
-    tsfh.close()
+    with open(tsfile, 'wt') as tsfh:
+        tsfh.write('%d' % ts)
 
     logger.debug('Recorded timestamp for %s: %s' % (gitdir, ts))
 
@@ -124,9 +122,8 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
 
     fpfile = os.path.join(fullpath, 'grokmirror.fingerprint')
     if not force and os.path.exists(fpfile):
-        fpfh = open(fpfile, 'r')
-        fingerprint = fpfh.read()
-        fpfh.close()
+        with open(fpfile, 'rt') as fpfh:
+            fingerprint = fpfh.read()
         logger.debug('Fingerprint for %s: %s' % (gitdir, fingerprint))
     else:
         logger.debug('Generating fingerprint for %s' % gitdir)
@@ -147,7 +144,7 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
             refs = repo.git.show_ref().encode('utf-8')
             # We add the final "\n" to be compatible with cmdline output
             # of git-show-ref
-            fingerprint = hashlib.sha1(refs + "\n").hexdigest()
+            fingerprint = hashlib.sha1(refs + b"\n").hexdigest()
         except:
             logger.critical('Could not fingerprint %s. Bad repo?' % gitdir)
             return None
@@ -166,9 +163,8 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
     if fingerprint is None:
         fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
 
-    fpfh = open(fpfile, 'w')
-    fpfh.write('%s' % fingerprint)
-    fpfh.close()
+    with open(fpfile, 'wt') as fpfh:
+        fpfh.write('%s' % fingerprint)
 
     logger.debug('Recorded fingerprint for %s: %s' % (gitdir, fingerprint))
     return fingerprint
@@ -266,9 +262,9 @@ def read_manifest(manifile, wait=False):
 
     if manifile.find('.gz') > 0:
         import gzip
-        fh = gzip.open(manifile, 'rb')
+        fh = gzip.open(manifile, 'rt')
     else:
-        fh = open(manifile, 'r')
+        fh = open(manifile, 'rt')
 
     logger.info('Reading %s' % manifile)
     jdata = fh.read()
@@ -295,12 +291,12 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
 
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
-    fh = os.fdopen(fd, 'w', 0)
     logger.debug('Created a temporary file in %s' % tmpfile)
     logger.debug('Writing to %s' % tmpfile)
     try:
         if manifile.find('.gz') > 0:
-            gfh = gzip.GzipFile(fileobj=fh, mode='wb')
+            fh = os.fdopen(fd, 'wb', 0)
+            gfh = gzip.GzipFile(fileobj=fh, mode='wt')
             if pretty:
                 import json
                 json.dump(manifest, gfh, indent=2, sort_keys=True)
@@ -309,6 +305,7 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
                 gfh.write(jdata)
             gfh.close()
         else:
+            fh = os.fdopen(fd, 'wt', 0)
             if pretty:
                 import json
                 json.dump(manifest, fh, indent=2, sort_keys=True)

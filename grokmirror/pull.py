@@ -41,7 +41,7 @@ try:
 except ImportError:
     from Queue import Queue
 
-from StringIO import StringIO
+from io import BytesIO
 
 from git import Repo
 
@@ -226,9 +226,8 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
         objects = os.path.join(toplevel, reference.lstrip('/'), 'objects')
         altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
         logger.info('Setting %s alternates to: %s' % (gitdir, objects))
-        altfh = open(altfile, 'w')
-        altfh.write('%s\n' % objects)
-        altfh.close()
+        with open(altfile, 'wt') as altfh:
+            altfh.write('%s\n' % objects)
 
 
 def set_agefile(toplevel, gitdir, last_modified):
@@ -241,9 +240,8 @@ def set_agefile(toplevel, gitdir, last_modified):
                            'info/web/last-modified')
     if not os.path.exists(os.path.dirname(agefile)):
         os.makedirs(os.path.dirname(agefile))
-    fh = open(agefile, 'w')
-    fh.write('%s\n' % cgit_fmt)
-    fh.close()
+    with open(agefile, 'wt') as fh:
+        fh.write('%s\n' % cgit_fmt)
     logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
 
 
@@ -409,26 +407,26 @@ def write_projects_list(manifest, config):
     logger.info('Writing new %s' % plpath)
 
     try:
-        fh = open(tmpfile, 'w')
-        for gitdir in manifest.keys():
-            if trimtop and gitdir.find(trimtop) == 0:
-                pgitdir = gitdir[len(trimtop):]
-            else:
-                pgitdir = gitdir
+        with open(tmpfile, 'wt') as fh:
+            for gitdir in manifest:
+                if trimtop and gitdir.startswith(trimtop):
+                    pgitdir = gitdir[len(trimtop):]
+                else:
+                    pgitdir = gitdir
 
-            # Always remove leading slash, otherwise cgit breaks
-            pgitdir = pgitdir.lstrip('/')
-            fh.write('%s\n' % pgitdir)
+                # Always remove leading slash, otherwise cgit breaks
+                pgitdir = pgitdir.lstrip('/')
+                fh.write('%s\n' % pgitdir)
 
-            if add_symlinks and 'symlinks' in manifest[gitdir].keys():
-                # Do the same for symlinks
-                # XXX: Should make this configurable, perhaps
-                for symlink in manifest[gitdir]['symlinks']:
-                    if trimtop and symlink.find(trimtop) == 0:
-                        symlink = symlink[len(trimtop):]
+                if add_symlinks and 'symlinks' in manifest[gitdir]:
+                    # Do the same for symlinks
+                    # XXX: Should make this configurable, perhaps
+                    for symlink in manifest[gitdir]['symlinks']:
+                        if trimtop and symlink.startswith(trimtop):
+                            symlink = symlink[len(trimtop):]
 
-                    symlink = symlink.lstrip('/')
-                    fh.write('%s\n' % symlink)
+                        symlink = symlink.lstrip('/')
+                        fh.write('%s\n' % symlink)
 
         fh.close()
         # set mode to current umask
@@ -575,11 +573,11 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         # with .gz. XXX: some http servers will auto-deflate such files.
         try:
             if config['manifest'].find('.gz') > 0:
-                fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
+                fh = gzip.GzipFile(fileobj=BytesIO(ufh.read()))
             else:
                 fh = ufh
 
-            jdata = fh.read()
+            jdata = fh.read().decode()
             fh.close()
 
             manifest = anyjson.deserialize(jdata)
