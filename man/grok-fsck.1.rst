@@ -5,10 +5,10 @@ Check mirrored repositories for corruption
 ------------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2013-08-22
+:Date:      2018-04-18
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.4
+:Version:   1.0.2
 :Manual section: 1
 
 SYNOPSIS
@@ -33,6 +33,10 @@ OPTIONS
   -f, --force           Force immediate run on all repositories.
   -c CONFIG, --config=CONFIG
                         Location of fsck.conf
+  --connectivity        (Assumes --force): Run git fsck on all repos,
+                        but only check connectivity
+  --repack-all-quick    (Assumes --force): Do a quick repack of all repos
+  --repack-all-full     (Assumes --force): Do a full repack of all repos
 
 EXAMPLES
 --------
@@ -49,16 +53,25 @@ root::
 
 You can force a full run using the ``-f`` flag, but unless you only have
 a few smallish git repositories, it's not recommended, as it may take
-several hours to complete.
+several hours to complete, as it will do a full repack, prune and fsck
+of all repositories. To make this process faster, you can use:
+
+* ``--connectivity``: when doing fsck, only check object connectivity
+* ``--repack-all-quick``: do a quick repack of all repositories
+* ``--repack-all-full``: if you have ``full_repack_flags`` defined in
+  the configuration file, trigger a full repack of every repository.
+  This can be handy if you need to bring up a newly cloned mirror and
+  want to make sure it's repacked and all bitmaps are built before
+  serving content.
 
 SEE ALSO
 --------
-  * grok-manifest(1)
-  * grok-pull(1)
-  * git(1)
+* grok-manifest(1)
+* grok-pull(1)
+* git(1)
 
 SUPPORT
 -------
-Please send support requests to the mailing list::
+Please open an issue on Github::
 
-    http://lists.kernel.org/mailman/listinfo/grokmirror
+    https://github.com/mricon/grokmirror/issues

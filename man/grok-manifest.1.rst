@@ -5,10 +5,10 @@ Create manifest for use with grokmirror
 ---------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2013-08-22
+:Date:      2018-04-18
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.4
+:Version:   1.0.2
 :Manual section: 1
 
 SYNOPSIS
@@ -71,7 +71,7 @@ cron::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -p
 
-You can also add it to the gitolite's "rm" ADC using the ``-x`` flag::
+You can also add it to the gitolite's D command using the ``-x`` flag::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -x $repo.git
 
@@ -84,11 +84,11 @@ git or gitolite, for example) is able to write to that location::
 
 SEE ALSO
 --------
-  * grok-pull(1)
-  * git(1)
+* grok-pull(1)
+* git(1)
 
 SUPPORT
 -------
-Please send support requests to the mailing list::
+Please open an issue on Github:
 
-    http://lists.kernel.org/mailman/listinfo/grokmirror
+    https://github.com/mricon/grokmirror/issues

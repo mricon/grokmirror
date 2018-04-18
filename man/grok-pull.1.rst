@@ -5,10 +5,10 @@ Clone or update local git repositories
 --------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2013-08-22
+:Date:      2018-04-18
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   0.4
+:Version:   1.0.2
 :Manual section: 1
 
 SYNOPSIS
@@ -65,12 +65,12 @@ write to the toplevel, log and lock locations specified in repos.conf.
 
 SEE ALSO
 --------
-  * grok-manifest(1)
-  * grok-fsck(1)
-  * git(1)
+* grok-manifest(1)
+* grok-fsck(1)
+* git(1)
 
 SUPPORT
 -------
-Please send support requests to the mailing list::
+Please open an issue on Github:
 
-    http://lists.kernel.org/mailman/listinfo/grokmirror
+    https://github.com/mricon/grokmirror/issues

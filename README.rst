@@ -5,10 +5,10 @@ Framework to smartly mirror git repositories
 --------------------------------------------
 
 :Author:    konstantin@linuxfoundation.org
-:Date:      2017-02-10
+:Date:      2018-04-18
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.0.1
+:Version:   1.0.2
 
 DESCRIPTION
 -----------
@@ -118,7 +118,7 @@ you can either run the ``--purge`` command from cron::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -p
 
-Or add it to your gitolite's ``rm`` ADC using the ``--remove`` flag::
+Or add it to your gitolite's ``D`` command using the ``--remove`` flag::
 
     /usr/bin/grok-manifest -m /repos/manifest.js.gz -t /repos -x $repo.git
 

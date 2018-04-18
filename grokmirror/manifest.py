@@ -97,6 +97,8 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     # git show-ref output is deterministic and should accurately list all refs
     # and their relation to heads/tags/etc.
     fingerprint = grokmirror.get_repo_fingerprint(toplevel, path, force=True)
+    # Record it in the repo for other use
+    grokmirror.set_repo_fingerprint(toplevel, path, fingerprint)
 
     manifest[path]['owner'] = owner
     manifest[path]['description'] = description
@@ -135,9 +137,9 @@ def set_symlinks(manifest, toplevel, symlinks):
 
 
 def purge_manifest(manifest, toplevel, gitdirs):
-    for oldrepo in manifest.keys():
+    for oldrepo in list(manifest):
         if os.path.join(toplevel, oldrepo.lstrip('/')) not in gitdirs:
-            logger.info('Purged deleted %s\n' % oldrepo)
+            logger.info('Purged deleted %s' % oldrepo)
             del manifest[oldrepo]
 
 
@@ -277,7 +279,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
                 os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
             # is it curently in the manifest?
             repo = gitdir.replace(toplevel, '', 1)
-            if repo in manifest.keys():
+            if repo in list(manifest):
                 logger.info('Repository %s is no longer exported, '
                             'removing from manifest' % repo)
                 del manifest[repo]

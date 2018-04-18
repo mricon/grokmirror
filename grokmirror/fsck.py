@@ -32,27 +32,21 @@ logger = logging.getLogger(__name__)
 
 
 def run_git_prune(fullpath, config, manifest):
+    prune_ok = True
     if 'prune' not in config.keys() or config['prune'] != 'yes':
-        return
+        return prune_ok
 
     # Are any other repos using us in their objects/info/alternates?
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     repolist = grokmirror.find_all_alt_repos(gitdir, manifest)
 
     if len(repolist):
-        logger.debug('Not pruning %s as other repos use it as alternates' % gitdir)
-        return
-
-    try:
-        grokmirror.lock_repo(fullpath, nonblocking=True)
-    except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % fullpath)
-        logger.info('Will prune next time')
-        return
+        logger.info('  prune : skipped, is alternate to other repos')
+        return prune_ok
 
     env = {'GIT_DIR': fullpath}
     args = ['/usr/bin/git', 'prune']
-    logger.info('Pruning %s' % fullpath)
+    logger.info('  prune : pruning')
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -80,28 +74,24 @@ def run_git_prune(fullpath, config, manifest):
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.critical('Pruning %s returned critical errors:' % fullpath)
+            prune_ok = False
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
-    grokmirror.unlock_repo(fullpath)
+    return prune_ok
 
 
 def run_git_repack(fullpath, config, full_repack=False):
+    # Returns false if we hit any errors on the way
+    repack_ok = True
     if 'repack' not in config.keys() or config['repack'] != 'yes':
-        return
-
-    try:
-        grokmirror.lock_repo(fullpath, nonblocking=True)
-    except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % fullpath)
-        logger.info('Will repack next time')
-        return
+        return repack_ok
 
     repack_flags = '-A -d -l -q'
 
     if full_repack and 'full_repack_flags' in config.keys():
         repack_flags = config['full_repack_flags']
-        logger.info('Time to do a full repack of %s' % fullpath)
+        logger.debug('Time to do a full repack of %s' % fullpath)
 
     elif 'repack_flags' in config.keys():
         repack_flags = config['repack_flags']
@@ -110,7 +100,7 @@ def run_git_repack(fullpath, config, full_repack=False):
 
     env = {'GIT_DIR': fullpath}
     args = ['/usr/bin/git', 'repack'] + flags
-    logger.info('Repacking %s' % fullpath)
+    logger.info(' repack : repacking with %s' % repack_flags)
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -140,12 +130,17 @@ def run_git_repack(fullpath, config, full_repack=False):
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.critical('Repacking %s returned critical errors:' % fullpath)
+            repack_ok = False
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
+    if not repack_ok:
+        # No need to repack refs if repo is broken
+        return False
+
     # repacking refs requires a separate command, so run it now
     args = ['/usr/bin/git', 'pack-refs', '--all']
-    logger.debug('Repacking refs in %s' % fullpath)
+    logger.info(' repack : repacking refs')
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -175,27 +170,20 @@ def run_git_repack(fullpath, config, full_repack=False):
             logger.debug('Stderr: %s' % '\n'.join(debug))
         if warn:
             logger.critical('Repacking refs %s returned critical errors:' % fullpath)
+            repack_ok = False
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
-    grokmirror.unlock_repo(fullpath)
+    return repack_ok
 
-
-def run_git_fsck(fullpath, config):
-    # Lock the git repository so no other grokmirror process attempts to
-    # modify it while we're running git ops. If we miss this window, we
-    # may not check the repo again for a long time, so block until the lock
-    # is available.
-    try:
-        grokmirror.lock_repo(fullpath, nonblocking=True)
-    except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % fullpath)
-        logger.info('Will fsck next time')
-        return
-
+def run_git_fsck(fullpath, config, conn_only=False):
     env = {'GIT_DIR': fullpath}
-    args = ['/usr/bin/git', 'fsck', '--full']
-    logger.info('Checking %s' % fullpath)
+    args = ['/usr/bin/git', 'fsck', '--no-dangling']
+    if conn_only:
+        args.append('--connectivity-only')
+        logger.info('   fsck : running with --connectivity-only')
+    else:
+        logger.info('   fsck : running full checks')
 
     logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
 
@@ -226,10 +214,8 @@ def run_git_fsck(fullpath, config):
             for entry in warn:
                 logger.critical("\t%s" % entry)
 
-    grokmirror.unlock_repo(fullpath)
 
-
-def fsck_mirror(name, config, verbose=False, force=False):
+def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repack_all_quick=False, repack_all_full=False):
     global logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
@@ -261,6 +247,9 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
     # push it into grokmirror to override the default logger
     grokmirror.logger = logger
+
+    if conn_only or repack_all_quick or repack_all_full:
+        force = True
 
     logger.info('Running grok-fsck for [%s]' % name)
 
@@ -320,8 +309,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
                 'lastcheck': 'never',
                 'nextcheck': nextcheck,
             }
-            logger.info('Added new repository %s with next check on %s' % (
-                gitdir, nextcheck))
+            logger.info('%s:' % fullpath)
+            logger.info('  added : next check on %s' % nextcheck)
 
     total_checked = 0
     total_elapsed = 0
@@ -329,14 +318,15 @@ def fsck_mirror(name, config, verbose=False, force=False):
     # Go through status and queue checks for all the dirs that are due today
     # (unless --force, which is EVERYTHING)
     todayiso = today.strftime('%F')
-    for fullpath in status.keys():
+    for fullpath in list(status):
+        logger.info('%s:' % fullpath)
         # Check to make sure it's still in the manifest
         gitdir = fullpath.replace(config['toplevel'], '', 1)
         gitdir = '/' + gitdir.lstrip('/')
 
         if gitdir not in manifest.keys():
             del status[fullpath]
-            logger.info('Removed %s which is no longer in manifest' % gitdir)
+            logger.info('   gone : no longer in manifest')
             continue
 
         # If nextcheck is before today, set it to today
@@ -349,8 +339,6 @@ def fsck_mirror(name, config, verbose=False, force=False):
             logger.debug('Preparing to check %s' % fullpath)
             # Calculate elapsed seconds
             startt = time.time()
-            run_git_fsck(fullpath, config)
-            total_checked += 1
 
             # Did the fingerprint change since last time we repacked?
             oldfpr = None
@@ -359,8 +347,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
             fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir, force=True)
 
-            if fpr != oldfpr or force:
-                full_repack = False
+            if fpr != oldfpr or repack_all_full:
+                full_repack = repack_all_full
                 if not 'quick_repack_count' in status[fullpath].keys():
                     status[fullpath]['quick_repack_count'] = 0
 
@@ -388,13 +376,36 @@ def fsck_mirror(name, config, verbose=False, force=False):
                             logger.debug('Repack count for %s not yet reached full repack trigger' % fullpath)
                             quick_repack_count += 1
 
-                run_git_repack(fullpath, config, full_repack)
-                run_git_prune(fullpath, config, manifest)
+                # Don't run repack if we're running --connectivity without --repack-all-*
+                if conn_only and not (repack_all_quick or repack_all_full):
+                    repack_ok = True
+                    logger.debug('No repacking requested with --connectivity')
+                else:
+                    repack_ok = run_git_repack(fullpath, config, full_repack)
+                    if repack_ok:
+                        prune_ok = run_git_prune(fullpath, config, manifest)
+
                 status[fullpath]['lastrepack'] = todayiso
                 status[fullpath]['quick_repack_count'] = quick_repack_count
 
             else:
-                logger.debug('No changes to %s since last run, not repacking' % gitdir)
+                repack_ok = True
+                logger.info(' repack : skipped, unchanged since last run')
+
+            # We fsck last, after repacking and
+            if repack_ok:
+                # If you set --repack-all-* and --connectivity, then we run fsck,
+                # but if only --repack-all-*, then we don't do fsck
+                if (repack_all_quick or repack_all_full) and conn_only:
+                    run_git_fsck(fullpath, config, conn_only)
+                elif not (repack_all_quick or repack_all_full):
+                    run_git_fsck(fullpath, config, conn_only)
+                else:
+                    logger.debug('Skipping fsck as requested.')
+            else:
+                logger.warning('Repacking %s was unsuccessful, please run fsck manually!' % gitdir)
+
+            total_checked += 1
 
             endt = time.time()
 
@@ -424,6 +435,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
     else:
         logger.info('Repos checked: %s' % total_checked)
         logger.info('Total running time: %s s' % int(total_elapsed))
+        with open(config['statusfile'], 'wb') as stfh:
+            stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     lockf(flockh, LOCK_UN)
     flockh.close()
@@ -445,8 +458,20 @@ def parse_args():
                   help='Force immediate run on all repositories.')
     op.add_option('-c', '--config', dest='config',
                   help='Location of fsck.conf')
+    op.add_option('--connectivity', dest='conn_only',
+                  action='store_true', default=False,
+                  help='(Assumes --force): Run git fsck on all repos, but only check connectivity')
+    op.add_option('--repack-all-quick', dest='repack_all_quick',
+                  action='store_true', default=False,
+                  help='(Assumes --force): Do a quick repack of all repos')
+    op.add_option('--repack-all-full', dest='repack_all_full',
+                  action='store_true', default=False,
+                  help='(Assumes --force): Do a full repack of all repos')
 
     opts, args = op.parse_args()
+
+    if opts.repack_all_quick and opts.repack_all_full:
+        op.error('Pick either --repack-all-full or --repack-all-quick')
 
     if not opts.config:
         op.error('You must provide the path to the config file')
@@ -454,7 +479,7 @@ def parse_args():
     return opts, args
 
 
-def grok_fsck(config, verbose=False, force=False):
+def grok_fsck(config, verbose=False, force=False, conn_only=False, repack_all_quick=False, repack_all_full=False):
     try:
         from configparser import ConfigParser
     except ImportError:
@@ -470,25 +495,27 @@ def grok_fsck(config, verbose=False, force=False):
 
         if 'ignore_errors' not in config:
             config['ignore_errors'] = [
-                'dangling commit',
-                'dangling blob',
                 'notice: HEAD points to an unborn branch',
                 'notice: No default references',
                 'contains zero-padded file modes',
+                'warning: disabling bitmap writing, as some objects are not being packed',
+                'ignoring extra bitmap file'
             ]
         else:
             ignore_errors = []
             for estring in config['ignore_errors'].split('\n'):
-                ignore_errors.append(estring.strip())
+                estring = estring.strip()
+                if len(estring):
+                    ignore_errors.append(estring)
             config['ignore_errors'] = ignore_errors
 
-        fsck_mirror(section, config, verbose, force)
+        fsck_mirror(section, config, verbose, force, conn_only, repack_all_quick, repack_all_full)
 
 
 def command():
     opts, args = parse_args()
 
-    return grok_fsck(opts.config, opts.verbose, opts.force)
+    return grok_fsck(opts.config, opts.verbose, opts.force, opts.conn_only, opts.repack_all_quick, opts.repack_all_full)
 
 if __name__ == '__main__':
     command()

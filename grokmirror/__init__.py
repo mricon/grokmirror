@@ -27,7 +27,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 
@@ -296,11 +296,8 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
     logger.debug('Writing to %s' % tmpfile)
     try:
         if pretty:
-            from io import StringIO
             import json
-            sio = StringIO()
-            json.dump(manifest, sio, indent=2, sort_keys=True)
-            jdata = sio.getvalue()
+            jdata = json.dumps(manifest, indent=2, sort_keys=True)
         else:
             jdata = anyjson.serialize(manifest)
 

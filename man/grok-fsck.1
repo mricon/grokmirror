@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-FSCK 1 "2013-08-22" "0.4" ""
+.TH GROK-FSCK 1 "2018-04-18" "1.0.2" ""
 .SH NAME
 GROK-FSCK \- Check mirrored repositories for corruption
 .
@@ -64,6 +64,16 @@ Force immediate run on all repositories.
 .TP
 .BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
 Location of fsck.conf
+.TP
+.B \-\-connectivity
+(Assumes \-\-force): Run git fsck on all repos,
+but only check connectivity
+.TP
+.B \-\-repack\-all\-quick
+(Assumes \-\-force): Do a quick repack of all repos
+.TP
+.B \-\-repack\-all\-full
+(Assumes \-\-force): Do a full repack of all repos
 .UNINDENT
 .UNINDENT
 .UNINDENT
@@ -90,10 +100,21 @@ MAILTO=root
 .sp
 You can force a full run using the \fB\-f\fP flag, but unless you only have
 a few smallish git repositories, it\(aqs not recommended, as it may take
-several hours to complete.
-.SH SEE ALSO
+several hours to complete, as it will do a full repack, prune and fsck
+of all repositories. To make this process faster, you can use:
 .INDENT 0.0
-.INDENT 3.5
+.IP \(bu 2
+\fB\-\-connectivity\fP: when doing fsck, only check object connectivity
+.IP \(bu 2
+\fB\-\-repack\-all\-quick\fP: do a quick repack of all repositories
+.IP \(bu 2
+\fB\-\-repack\-all\-full\fP: if you have \fBfull_repack_flags\fP defined in
+the configuration file, trigger a full repack of every repository.
+This can be handy if you need to bring up a newly cloned mirror and
+want to make sure it\(aqs repacked and all bitmaps are built before
+serving content.
+.UNINDENT
+.SH SEE ALSO
 .INDENT 0.0
 .IP \(bu 2
 grok\-manifest(1)
@@ -101,8 +122,6 @@ grok\-manifest(1)
 grok\-pull(1)
 .IP \(bu 2
 git(1)
-.UNINDENT
-.UNINDENT
 .UNINDENT
 .SH SUPPORT
 .sp

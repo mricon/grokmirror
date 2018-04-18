@@ -345,6 +345,8 @@ def clone_repo(toplevel, gitdir, site, reference=None):
         for line in error.split('\n'):
             if line.find('cloned an empty repository') > 0:
                 debug.append(line)
+            if line.find('into bare repository') > 0:
+                debug.append(line)
             else:
                 warn.append(line)
         if debug:
@@ -998,13 +1000,19 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                         logger.info('Removing unreferenced symlink %s' % gitdir)
                         os.unlink(founddir)
                     else:
-                        try:
-                            logger.info('Purging %s' % founddir)
-                            grokmirror.lock_repo(founddir, nonblocking=True)
-                            shutil.rmtree(founddir)
-                        except IOError:
-                            lock_fails.append(gitdir)
-                            logger.info('%s is locked, not purging' % gitdir)
+                        # is anything using us for alternates?
+                        gitdir = '/' + os.path.relpath(founddir, toplevel).lstrip('/')
+                        repolist = grokmirror.find_all_alt_repos(gitdir, culled)
+                        if repolist:
+                            logger.info('Not purging %s because it is used by other repos via alternates' % founddir)
+                        else:
+                            try:
+                                logger.info('Purging %s' % founddir)
+                                grokmirror.lock_repo(founddir, nonblocking=True)
+                                shutil.rmtree(founddir)
+                            except IOError:
+                                lock_fails.append(gitdir)
+                                logger.info('%s is locked, not purging' % gitdir)
 
     # Go through all repos in culled and get the latest local timestamps.
     for gitdir in culled:
@@ -1086,7 +1094,10 @@ def parse_args():
 def grok_pull(config, verbose=False, force=False, nomtime=False,
               verify=False, verify_subpath='*', noreuse=False,
               purge=False, pretty=False, forcepurge=False):
-    from configparser import ConfigParser
+    try:
+        from configparser import ConfigParser
+    except ImportError:
+        from ConfigParser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)
