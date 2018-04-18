@@ -19,13 +19,8 @@ import sys
 
 import grokmirror
 import logging
-import time
 import fnmatch
 import subprocess
-import shutil
-import calendar
-
-from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 

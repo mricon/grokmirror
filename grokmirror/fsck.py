@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import sys
 
 import grokmirror
 import logging
@@ -24,8 +23,6 @@ import time
 import json
 import subprocess
 import random
-
-import time
 import datetime
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
