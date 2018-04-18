@@ -60,7 +60,7 @@ def run_git_prune(fullpath, config, manifest):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize as fairly benign into debug
@@ -118,7 +118,7 @@ def run_git_repack(fullpath, config, full_repack=False):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     # With newer versions of git, repack may return warnings that are safe to ignore
     # so use the same strategy to weed out things we aren't interested in seeing
@@ -152,6 +152,8 @@ def run_git_repack(fullpath, config, full_repack=False):
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
+
+    error = error.decode().strip()
 
     # pack-refs shouldn't return anything, but use the same ignore_errors block
     # to weed out any future potential benign warnings
@@ -201,7 +203,7 @@ def run_git_fsck(fullpath, config):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize as fairly benign into debug
@@ -276,7 +278,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
 
     if os.path.exists(config['statusfile']):
         logger.info('Reading status from %s' % config['statusfile'])
-        stfh = open(config['statusfile'], 'r')
+        stfh = open(config['statusfile'], 'rb')
         try:
             # Format of the status file:
             #  {
@@ -291,7 +293,7 @@ def fsck_mirror(name, config, verbose=False, force=False):
             #    ...
             #  }
 
-            status = json.load(stfh)
+            status = json.loads(stfh.read().decode('utf-8'))
         except:
             # Huai le!
             logger.critical('Failed to parse %s' % config['statusfile'])
@@ -414,9 +416,8 @@ def fsck_mirror(name, config, verbose=False, force=False):
             # Write status file after each check, so if the process dies, we won't
             # have to recheck all the repos we've already checked
             logger.debug('Updating status file in %s' % config['statusfile'])
-            stfh = open(config['statusfile'], 'w')
-            json.dump(status, stfh, indent=2)
-            stfh.close()
+            with open(config['statusfile'], 'wb') as stfh:
+                stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     if not total_checked:
         logger.info('No new repos to check.')
@@ -454,7 +455,10 @@ def parse_args():
 
 
 def grok_fsck(config, verbose=False, force=False):
-    from ConfigParser import ConfigParser
+    try:
+        from configparser import ConfigParser
+    except ImportError:
+        from ConfigParser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)

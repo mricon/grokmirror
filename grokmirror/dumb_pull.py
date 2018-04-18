@@ -33,9 +33,9 @@ def git_rev_parse_all(gitdir):
     env = {'GIT_DIR': gitdir}
     args = ['git', 'rev-parse', '--all']
 
-    (output, error) = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=env).communicate()
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, env=env,
+                                       universal_newlines=True).communicate()
 
     error = error.strip()
 
@@ -60,7 +60,7 @@ def git_remote_update(args, env):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize into debug
@@ -158,8 +158,9 @@ def run_post_update_hook(hookscript, gitdir):
 
     args = [hookscript, gitdir]
     logger.debug('Running: %s' % ' '.join(args))
-    (output, error) = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE,
+                                       universal_newlines=True).communicate()
 
     error = error.strip()
     output = output.strip()

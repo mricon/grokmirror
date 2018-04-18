@@ -19,8 +19,14 @@ import sys
 
 import grokmirror
 import logging
-import urllib2
-import urlparse
+try:
+    import urllib.request as urllib_request
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import urlparse
+except ImportError:
+    import urllib2 as urllib_request
+    from urllib2 import HTTPError, URLError
+    from urlparse import urlparse
 import time
 import gzip
 import anyjson
@@ -30,9 +36,12 @@ import shutil
 import calendar
 
 import threading
-import Queue
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
 
-from StringIO import StringIO
+from io import BytesIO
 
 from git import Repo
 
@@ -217,9 +226,8 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
         objects = os.path.join(toplevel, reference.lstrip('/'), 'objects')
         altfile = os.path.join(fullpath, 'objects', 'info', 'alternates')
         logger.info('Setting %s alternates to: %s' % (gitdir, objects))
-        altfh = open(altfile, 'w')
-        altfh.write('%s\n' % objects)
-        altfh.close()
+        with open(altfile, 'wt') as altfh:
+            altfh.write('%s\n' % objects)
 
 
 def set_agefile(toplevel, gitdir, last_modified):
@@ -232,9 +240,8 @@ def set_agefile(toplevel, gitdir, last_modified):
                            'info/web/last-modified')
     if not os.path.exists(os.path.dirname(agefile)):
         os.makedirs(os.path.dirname(agefile))
-    fh = open(agefile, 'w')
-    fh.write('%s\n' % cgit_fmt)
-    fh.close()
+    with open(agefile, 'wt') as fh:
+        fh.write('%s\n' % cgit_fmt)
     logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
 
 
@@ -250,7 +257,8 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     args = [hookscript, fullpath]
     logger.debug('[Thread-%s] Running: %s' % (threadid, ' '.join(args)))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE).communicate()
+                                       stderr=subprocess.PIPE,
+                                       universal_newlines=True).communicate()
 
     error = error.strip()
     output = output.strip()
@@ -270,7 +278,8 @@ def pull_repo(toplevel, gitdir, threadid='X'):
                  % (threadid, env['GIT_DIR'], ' '.join(args)))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=env)
+                             stderr=subprocess.PIPE, env=env,
+                             universal_newlines=True)
     (output, error) = child.communicate()
 
     error = error.strip()
@@ -327,7 +336,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     if child.returncode == 0:
         success = True
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize into debug
@@ -400,26 +409,26 @@ def write_projects_list(manifest, config):
     logger.info('Writing new %s' % plpath)
 
     try:
-        fh = open(tmpfile, 'w')
-        for gitdir in manifest.keys():
-            if trimtop and gitdir.find(trimtop) == 0:
-                pgitdir = gitdir[len(trimtop):]
-            else:
-                pgitdir = gitdir
+        with open(tmpfile, 'wt') as fh:
+            for gitdir in manifest:
+                if trimtop and gitdir.startswith(trimtop):
+                    pgitdir = gitdir[len(trimtop):]
+                else:
+                    pgitdir = gitdir
 
-            # Always remove leading slash, otherwise cgit breaks
-            pgitdir = pgitdir.lstrip('/')
-            fh.write('%s\n' % pgitdir)
+                # Always remove leading slash, otherwise cgit breaks
+                pgitdir = pgitdir.lstrip('/')
+                fh.write('%s\n' % pgitdir)
 
-            if add_symlinks and 'symlinks' in manifest[gitdir].keys():
-                # Do the same for symlinks
-                # XXX: Should make this configurable, perhaps
-                for symlink in manifest[gitdir]['symlinks']:
-                    if trimtop and symlink.find(trimtop) == 0:
-                        symlink = symlink[len(trimtop):]
+                if add_symlinks and 'symlinks' in manifest[gitdir]:
+                    # Do the same for symlinks
+                    # XXX: Should make this configurable, perhaps
+                    for symlink in manifest[gitdir]['symlinks']:
+                        if trimtop and symlink.startswith(trimtop):
+                            symlink = symlink[len(trimtop):]
 
-                    symlink = symlink.lstrip('/')
-                    fh.write('%s\n' % symlink)
+                        symlink = symlink.lstrip('/')
+                        fh.write('%s\n' % symlink)
 
         fh.close()
         # set mode to current umask
@@ -509,7 +518,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.info('Fetching remote manifest from %s' % config['manifest'])
 
         # Do we have username:password@ in the URL?
-        chunks = urlparse.urlparse(config['manifest'])
+        chunks = urlparse(config['manifest'])
         if chunks.netloc.find('@') > 0:
             logger.debug('Taking username/password from the URL for basic auth')
             (upass, netloc) = chunks.netloc.split('@')
@@ -521,16 +530,16 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
             manifesturl = config['manifest'].replace(chunks.netloc, netloc)
             logger.debug('manifesturl=%s' % manifesturl)
-            request = urllib2.Request(manifesturl)
+            request = urllib_request.Request(manifesturl)
 
-            password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+            password_mgr = urllib_request.HTTPPasswordMgrWithDefaultRealm()
             password_mgr.add_password(None, manifesturl, username, password)
-            auth_handler = urllib2.HTTPBasicAuthHandler(password_mgr)
-            opener = urllib2.build_opener(auth_handler)
+            auth_handler = urllib_request.HTTPBasicAuthHandler(password_mgr)
+            opener = urllib_request.build_opener(auth_handler)
 
         else:
-            request = urllib2.Request(config['manifest'])
-            opener = urllib2.build_opener()
+            request = urllib_request.Request(config['manifest'])
+            opener = urllib_request.build_opener()
 
         # Find out if we need to run at all first
         if not (force or nomtime) and os.path.exists(mymanifest):
@@ -544,7 +553,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         try:
             ufh = opener.open(request, timeout=30)
-        except urllib2.HTTPError, ex:
+        except HTTPError as ex:
             if ex.code == 304:
                 logger.info('Server says we have the latest manifest. '
                             'Quitting.')
@@ -552,7 +561,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Server returned: %s' % ex)
             return 1
-        except urllib2.URLError, ex:
+        except URLError as ex:
             logger.warning('Could not fetch %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
@@ -566,16 +575,16 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         # with .gz. XXX: some http servers will auto-deflate such files.
         try:
             if config['manifest'].find('.gz') > 0:
-                fh = gzip.GzipFile(fileobj=StringIO(ufh.read()))
+                fh = gzip.GzipFile(fileobj=BytesIO(ufh.read()))
             else:
                 fh = ufh
 
-            jdata = fh.read()
+            jdata = fh.read().decode('utf-8')
             fh.close()
 
             manifest = anyjson.deserialize(jdata)
 
-        except Exception, ex:
+        except Exception as ex:
             logger.warning('Failed to parse %s' % config['manifest'])
             logger.warning('Error was: %s' % ex)
             return 1
@@ -792,8 +801,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         logger.info('Updating %s repos from %s'
                     % (len(to_pull), config['site']))
-        in_queue = Queue.Queue()
-        out_queue = Queue.Queue()
+        in_queue = Queue()
+        out_queue = Queue()
 
         for gitdir in to_pull:
             in_queue.put((gitdir, culled[gitdir]['fingerprint'],
@@ -1077,7 +1086,7 @@ def parse_args():
 def grok_pull(config, verbose=False, force=False, nomtime=False,
               verify=False, verify_subpath='*', noreuse=False,
               purge=False, pretty=False, forcepurge=False):
-    from ConfigParser import ConfigParser
+    from configparser import ConfigParser
 
     ini = ConfigParser()
     ini.read(config)
