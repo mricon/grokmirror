@@ -34,6 +34,7 @@ REPO_LOCKH = {}
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 
+_alt_repo_cache = None
 
 def _lockname(fullpath):
     lockpath = os.path.dirname(fullpath)
@@ -171,30 +172,30 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
 
 
 def is_alt_repo(toplevel, refrepo):
-    # We recurse through toplevel and return true if we find at least
-    # one repo that lists us in its objects/info/alternates.
+    global _alt_repo_cache
+    if _alt_repo_cache is None:
+        # Populate a simple byte string with contents of all
+        # objects/info/alternates we find, and then do a simple match
+        _alt_repo_cache = b''
+        for root, dirs, files in os.walk(toplevel, topdown=True):
+            if not len(dirs):
+                continue
+            torm = []
+            for name in dirs:
+                # Is there an objects/info/alternates in this dir?
+                altfile = os.path.join(root, name, 'objects', 'info', 'alternates')
+                if os.path.exists(altfile):
+                    with open(altfile, 'rb') as altfh:
+                        _alt_repo_cache += altfh.read()
+                    torm.append(name)
+
+            for name in torm:
+                # don't recurse into the found *.git dirs
+                dirs.remove(name)
+
     looking_for = os.path.join(toplevel, refrepo.strip('/'), 'objects').encode('utf-8')
-    import mmap
-    for root, dirs, files in os.walk(toplevel, topdown=True):
-        if not len(dirs):
-            continue
-
-        torm = []
-        for name in dirs:
-            # Is there an objects/info/alternates in this dir?
-            altfile = os.path.join(root, name, 'objects', 'info', 'alternates')
-            if os.path.exists(altfile):
-                with open(altfile, 'rb') as altfh:
-                    if looking_for in altfh.read():
-                        logger.debug('Found refrepo %s in  %s', refrepo,
-                                     altfile)
-                        return True
-                torm.append(name)
-
-        for name in torm:
-            # don't recurse into the found *.git dirs
-            dirs.remove(name)
-
+    if looking_for in _alt_repo_cache:
+        return True
     return False
 
 
