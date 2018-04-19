@@ -331,8 +331,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
         if gitdir not in manifest.keys():
             del status[fullpath]
-            logger.info('%s:', fullpath)
-            logger.info('   gone : no longer in manifest')
+            logger.debug('%s is gone, no longer in manifest', gitdir)
             continue
 
         # If nextcheck is before today, set it to today
@@ -340,108 +339,109 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         #      may cause pain for them, so perhaps use randomization here?
         nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'],
                                                '%Y-%m-%d')
+        if nextcheck > today and not force:
+            logger.debug('%s not yet due to be checked (nextcheck: %s)', fullpath,
+                         status[fullpath]['nextcheck'])
+            continue
 
-        if force or nextcheck <= today:
-            logger.info('%s:', fullpath)
-            # Calculate elapsed seconds
-            startt = time.time()
+        logger.info('%s:', fullpath)
+        # Calculate elapsed seconds
+        startt = time.time()
 
+        # Do we need to repack/prune it?
+        do_repack = True
+        fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir, force=True)
+
+        if conn_only and not (repack_all_quick or repack_all_full):
+            do_repack = False
+        else:
             # Did the fingerprint change since last time we repacked?
             oldfpr = None
             if 'fingerprint' in status[fullpath].keys():
                 oldfpr = status[fullpath]['fingerprint']
 
-            fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir, force=True)
-
-            if fpr != oldfpr or repack_all_full:
-                full_repack = repack_all_full
-                if not 'quick_repack_count' in status[fullpath].keys():
-                    status[fullpath]['quick_repack_count'] = 0
-
-                quick_repack_count = status[fullpath]['quick_repack_count']
-                if 'full_repack_every' in config.keys():
-                    # but did you set 'full_repack_flags' as well?
-                    if 'full_repack_flags' not in config.keys():
-                        logger.critical('full_repack_every is set, but not full_repack_flags')
-                    else:
-                        full_repack_every = int(config['full_repack_every'])
-                        # is it anything insane?
-                        if full_repack_every < 2:
-                            full_repack_every = 2
-                            logger.warning('full_repack_every is too low, forced to 2')
-
-                        # is it time to trigger full repack?
-                        # We -1 because if we want a repack every 10th time, then we need to trigger
-                        # when current repack count is 9.
-                        if quick_repack_count >= full_repack_every-1:
-                            logger.debug('Time to do full repack on %s',
-                                         fullpath)
-                            full_repack = True
-                            quick_repack_count = 0
-                            status[fullpath]['lastfullrepack'] = todayiso
-                        else:
-                            logger.debug('Repack count for %s not yet reached '
-                                         'full repack trigger', fullpath)
-                            quick_repack_count += 1
-
-                # Don't run repack if we're running --connectivity without --repack-all-*
-                if conn_only and not (repack_all_quick or repack_all_full):
-                    repack_ok = True
-                    logger.debug('No repacking requested with --connectivity')
-                else:
-                    repack_ok = run_git_repack(fullpath, config, full_repack)
-                    if repack_ok:
-                        prune_ok = run_git_prune(fullpath, config, manifest)
-
-                status[fullpath]['lastrepack'] = todayiso
-                status[fullpath]['quick_repack_count'] = quick_repack_count
-
-            else:
-                repack_ok = True
+            if fpr == oldfpr and not repack_all_full:
+                do_repack = False
                 logger.info(' repack : skipped, unchanged since last run')
 
-            # We fsck last, after repacking and
-            if repack_ok:
-                # If you set --repack-all-* and --connectivity, then we run fsck,
-                # but if only --repack-all-*, then we don't do fsck
-                if (repack_all_quick or repack_all_full) and conn_only:
-                    run_git_fsck(fullpath, config, conn_only)
-                elif not (repack_all_quick or repack_all_full):
-                    run_git_fsck(fullpath, config, conn_only)
+        # do we need to fsck it?
+        do_fsck = True
+        if (repack_all_quick or repack_all_full) and not conn_only:
+            do_fsck = False
+
+        if do_repack:
+            full_repack = repack_all_full
+            if not 'quick_repack_count' in status[fullpath].keys():
+                status[fullpath]['quick_repack_count'] = 0
+
+            quick_repack_count = status[fullpath]['quick_repack_count']
+            if 'full_repack_every' in config.keys():
+                # but did you set 'full_repack_flags' as well?
+                if 'full_repack_flags' not in config.keys():
+                    logger.critical('full_repack_every is set, but not full_repack_flags')
                 else:
-                    logger.debug('Skipping fsck as requested.')
+                    full_repack_every = int(config['full_repack_every'])
+                    # is it anything insane?
+                    if full_repack_every < 2:
+                        full_repack_every = 2
+                        logger.warning('full_repack_every is too low, forced to 2')
+
+                    # is it time to trigger full repack?
+                    # We -1 because if we want a repack every 10th time, then we need to trigger
+                    # when current repack count is 9.
+                    if quick_repack_count >= full_repack_every-1:
+                        logger.debug('Time to do full repack on %s',
+                                     fullpath)
+                        full_repack = True
+                        quick_repack_count = 0
+                        status[fullpath]['lastfullrepack'] = todayiso
+                    else:
+                        logger.debug('Repack count for %s not yet reached '
+                                     'full repack trigger', fullpath)
+                        quick_repack_count += 1
+
+            repack_ok = run_git_repack(fullpath, config, full_repack)
+            if repack_ok:
+                prune_ok = run_git_prune(fullpath, config, manifest)
+
+            if repack_ok and prune_ok:
+                status[fullpath]['lastrepack'] = todayiso
+                status[fullpath]['quick_repack_count'] = quick_repack_count
             else:
                 logger.warning('Repacking %s was unsuccessful, '
-                               'please run fsck manually!',
-                               gitdir)
+                               'please run fsck manually!', gitdir)
 
-            total_checked += 1
+        # We fsck last, after repacking and pruning
+        if do_fsck:
+            run_git_fsck(fullpath, config, conn_only)
 
-            endt = time.time()
+        total_checked += 1
 
-            total_elapsed += endt-startt
+        endt = time.time()
 
-            status[fullpath]['fingerprint'] = fpr
-            status[fullpath]['lastcheck'] = todayiso
-            status[fullpath]['s_elapsed'] = int(endt - startt)
+        total_elapsed += endt-startt
 
-            if force:
-                # Use randomization for next check, again
-                delay = random.randint(1, frequency)
-            else:
-                delay = frequency
+        status[fullpath]['fingerprint'] = fpr
+        status[fullpath]['lastcheck'] = todayiso
+        status[fullpath]['s_elapsed'] = int(endt - startt)
 
-            nextdate = today + datetime.timedelta(days=delay)
-            status[fullpath]['nextcheck'] = nextdate.strftime('%F')
-            logger.info('   done : %s s, next check on %s',
-                        status[fullpath]['s_elapsed'],
-                        status[fullpath]['nextcheck'])
+        if force:
+            # Use randomization for next check, again
+            delay = random.randint(1, frequency)
+        else:
+            delay = frequency
 
-            # Write status file after each check, so if the process dies, we won't
-            # have to recheck all the repos we've already checked
-            logger.debug('Updating status file in %s', config['statusfile'])
-            with open(config['statusfile'], 'wb') as stfh:
-                stfh.write(json.dumps(status, indent=2).encode('utf-8'))
+        nextdate = today + datetime.timedelta(days=delay)
+        status[fullpath]['nextcheck'] = nextdate.strftime('%F')
+        logger.info('   done : %ss, next check on %s',
+                    status[fullpath]['s_elapsed'],
+                    status[fullpath]['nextcheck'])
+
+        # Write status file after each check, so if the process dies, we won't
+        # have to recheck all the repos we've already checked
+        logger.debug('Updating status file in %s', config['statusfile'])
+        with open(config['statusfile'], 'wb') as stfh:
+            stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     if not total_checked:
         logger.info('No new repos to check.')

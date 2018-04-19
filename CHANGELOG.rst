@@ -10,6 +10,8 @@ v1.0.2 (2018-04-18)
     using the defined full_repack_flags from fsck.conf
   - always run fsck with --no-dangling, because mirror admins are not
     responsible for cleaning those up anyway
+  - no longer locking repos when running repack/prune/fsck, because
+    these operations are safe as long as they are done by git itself
 
 - fix grok-pull so it no longer purges repos known to be providing
   alternates to others
