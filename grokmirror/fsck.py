@@ -405,7 +405,9 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                 else:
                     logger.debug('Skipping fsck as requested.')
             else:
-                logger.warning('Repacking %s was unsuccessful, please run fsck manually!' % gitdir)
+                logger.warning('Repacking %s was unsuccessful, '
+                               'please run fsck manually!',
+                               gitdir)
 
             total_checked += 1
 

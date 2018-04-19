@@ -48,7 +48,7 @@ def git_rev_parse_all(gitdir):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('Stderr: %s', '\n'.join(warn))
 
     return output
 
@@ -76,7 +76,7 @@ def git_remote_update(args, env):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('Stderr: %s', '\n'.join(warn))
 
 
 def dumb_pull_repo(gitdir, remotes, svn=False):
@@ -152,7 +152,7 @@ def run_post_update_hook(hookscript, gitdir):
     if hookscript == '':
         return
     if not os.access(hookscript, os.X_OK):
-        logger.warning('post_update_hook %s is not executable' % hookscript)
+        logger.warning('post_update_hook %s is not executable', hookscript)
         return
 
     args = [hookscript, gitdir]
@@ -165,7 +165,7 @@ def run_post_update_hook(hookscript, gitdir):
     output = output.strip()
     if error:
         # Put hook stderror into warning
-        logger.warning('Hook Stderr: %s' % error)
+        logger.warning('Hook Stderr: %s', error)
     if output:
         # Put hook stdout into info
         logger.info('Hook Stdout: %s', output)

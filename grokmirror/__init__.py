@@ -97,7 +97,7 @@ def get_repo_timestamp(toplevel, gitdir):
             ts = int(contents)
             logger.debug('Timestamp for %s: %s', gitdir, ts)
         except ValueError:
-            logger.warning('Was not able to parse timestamp in %s' % tsfile)
+            logger.warning('Was not able to parse timestamp in %s', tsfile)
     else:
         logger.debug('No existing timestamp for %s', gitdir)
 

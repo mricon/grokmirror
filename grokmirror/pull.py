@@ -130,8 +130,8 @@ class PullerThread(threading.Thread):
                     run_post_update_hook(self.hookscript, self.toplevel, gitdir,
                                          threadid=self.myname)
                 else:
-                    logger.warning('[Thread-%s] pulling %s unsuccessful'
-                                   % (self.myname, gitdir))
+                    logger.warning('[Thread-%s] pulling %s unsuccessful',
+                                   self.myname, gitdir)
                     git_fails.append(gitdir)
 
                 # Record our current fingerprint and return it
@@ -249,8 +249,8 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     if hookscript == '':
         return
     if not os.access(hookscript, os.X_OK):
-        logger.warning('[Thread-%s] post_update_hook %s is not executable'
-                       % (threadid, hookscript))
+        logger.warning('[Thread-%s] post_update_hook %s is not executable',
+                       threadid, hookscript)
         return
 
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -264,7 +264,7 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     output = output.strip()
     if error:
         # Put hook stderror into warning
-        logger.warning('[Thread-%s] Hook Stderr: %s' % (threadid, error))
+        logger.warning('[Thread-%s] Hook Stderr: %s', threadid, error)
     if output:
         # Put hook stdout into info
         logger.info('[Thread-%s] Hook Stdout: %s', threadid, output)
@@ -302,8 +302,7 @@ def pull_repo(toplevel, gitdir, threadid='X'):
         if debug:
             logger.debug('[Thread-%s] Stderr: %s', threadid, '\n'.join(debug))
         if warn:
-            logger.warning('[Thread-%s] Stderr: %s'
-                           % (threadid, '\n'.join(warn)))
+            logger.warning('[Thread-%s] Stderr: %s', threadid, '\n'.join(warn))
 
     return success
 
@@ -351,7 +350,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('Stderr: %s', '\n'.join(warn))
 
     return success
 
@@ -559,12 +558,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 logger.info('Server says we have the latest manifest. '
                             'Quitting.')
                 return 0
-            logger.warning('Could not fetch %s' % config['manifest'])
-            logger.warning('Server returned: %s' % ex)
+            logger.warning('Could not fetch %s', config['manifest'])
+            logger.warning('Server returned: %s', ex)
             return 1
         except URLError as ex:
-            logger.warning('Could not fetch %s' % config['manifest'])
-            logger.warning('Error was: %s' % ex)
+            logger.warning('Could not fetch %s', config['manifest'])
+            logger.warning('Error was: %s', ex)
             return 1
 
         last_modified = ufh.headers.get('Last-Modified')
@@ -586,8 +585,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             manifest = anyjson.deserialize(jdata)
 
         except Exception as ex:
-            logger.warning('Failed to parse %s' % config['manifest'])
-            logger.warning('Error was: %s' % ex)
+            logger.warning('Failed to parse %s', config['manifest'])
+            logger.warning('Error was: %s', ex)
             return 1
 
     mymanifest = grokmirror.read_manifest(mymanifest)
