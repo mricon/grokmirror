@@ -30,23 +30,23 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     path = gitdir.replace(toplevel, '', 1)
 
     # Try to open git dir
-    logger.debug('Examining %s' % gitdir)
+    logger.debug('Examining %s', gitdir)
     try:
         repo = Repo(gitdir)
         assert repo.bare is True
     except:
-        logger.critical('Error opening %s.' % gitdir)
+        logger.critical('Error opening %s.', gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
     # Ignore it if it's an empty git repository
     try:
         if len(repo.heads) == 0:
-            logger.info('%s has no heads, ignoring' % gitdir)
+            logger.info('%s has no heads, ignoring', gitdir)
             return
     except:
         # Errors when listing heads usually means repository is no good
-        logger.info('Error listing heads in %s, ignoring' % gitdir)
+        logger.info('Error listing heads in %s, ignoring', gitdir)
         return
 
     try:
@@ -86,10 +86,10 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
             reference = alternate.replace(toplevel, '').replace('/objects', '')
 
     if path not in manifest.keys():
-        logger.info('Adding %s to manifest' % path)
+        logger.info('Adding %s to manifest', path)
         manifest[path] = {}
     else:
-        logger.info('Updating %s in the manifest' % path)
+        logger.info('Updating %s in the manifest', path)
 
     # we need a way to quickly compare whether mirrored repositories match
     # what is in the master manifest. To this end, we calculate a so-called
@@ -111,35 +111,35 @@ def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:
         target = os.path.realpath(symlink)
         if target.find(toplevel) < 0:
-            logger.info('Symlink %s points outside toplevel, ignored' % symlink)
+            logger.info('Symlink %s points outside toplevel, ignored', symlink)
             continue
         tgtgitdir = target.replace(toplevel, '')
         if tgtgitdir not in manifest.keys():
-            logger.info('Symlink %s points to %s, which we do not recognize'
-                        % (symlink, target))
+            logger.info('Symlink %s points to %s, which we do not recognize',
+                        symlink, target)
             continue
         relative = symlink.replace(toplevel, '')
         if 'symlinks' in manifest[tgtgitdir].keys():
             if relative not in manifest[tgtgitdir]['symlinks']:
-                logger.info('Recording symlink %s->%s' % (relative, tgtgitdir))
+                logger.info('Recording symlink %s->%s', relative, tgtgitdir)
                 manifest[tgtgitdir]['symlinks'].append(relative)
         else:
             manifest[tgtgitdir]['symlinks'] = [relative]
-            logger.info('Recording symlink %s to %s' % (relative, tgtgitdir))
+            logger.info('Recording symlink %s to %s', relative, tgtgitdir)
 
         # Now go through all repos and fix any references pointing to the
         # symlinked location.
         for gitdir in manifest.keys():
             if manifest[gitdir]['reference'] == relative:
-                logger.info('Adjusted symlinked reference for %s: %s->%s'
-                            % (gitdir, relative, tgtgitdir))
+                logger.info('Adjusted symlinked reference for %s: %s->%s',
+                            gitdir, relative, tgtgitdir)
                 manifest[gitdir]['reference'] = tgtgitdir
 
 
 def purge_manifest(manifest, toplevel, gitdirs):
     for oldrepo in list(manifest):
         if os.path.join(toplevel, oldrepo.lstrip('/')) not in gitdirs:
-            logger.info('Purged deleted %s' % oldrepo)
+            logger.info('Purged deleted %s', oldrepo)
             del manifest[oldrepo]
 
 
@@ -247,9 +247,9 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             repo = fullpath.replace(toplevel, '', 1)
             if repo in manifest.keys():
                 del manifest[repo]
-                logger.info('Repository %s removed from manifest' % repo)
+                logger.info('Repository %s removed from manifest', repo)
             else:
-                logger.info('Repository %s not in manifest' % repo)
+                logger.info('Repository %s not in manifest', repo)
 
         # XXX: need to add logic to make sure we don't break the world
         #      by removing a repository used as a reference for others
@@ -281,7 +281,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             repo = gitdir.replace(toplevel, '', 1)
             if repo in list(manifest):
                 logger.info('Repository %s is no longer exported, '
-                            'removing from manifest' % repo)
+                            'removing from manifest', repo)
                 del manifest[repo]
 
             # XXX: need to add logic to make sure we don't break the world

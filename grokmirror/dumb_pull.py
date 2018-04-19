@@ -46,15 +46,15 @@ def git_rev_parse_all(gitdir):
         for line in error.split('\n'):
                 warn.append(line)
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('Stderr: %s', '\n'.join(warn))
 
     return output
 
 
 def git_remote_update(args, env):
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -74,26 +74,26 @@ def git_remote_update(args, env):
             else:
                 warn.append(line)
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.warning('Stderr: %s' % '\n'.join(warn))
+            logger.warning('Stderr: %s', '\n'.join(warn))
 
 
 def dumb_pull_repo(gitdir, remotes, svn=False):
     # verify it's a git repo and fetch all remotes
-    logger.debug('Will pull %s with following remotes: %s' % (gitdir, remotes))
+    logger.debug('Will pull %s with following remotes: %s', gitdir, remotes)
     try:
         repo = Repo(gitdir)
         assert repo.bare is True
     except:
-        logger.critical('Error opening %s.' % gitdir)
+        logger.critical('Error opening %s.', gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
     try:
         grokmirror.lock_repo(gitdir, nonblocking=True)
     except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % gitdir)
+        logger.info('Could not obtain exclusive lock on %s', gitdir)
         logger.info('\tAssuming another process is running.')
         return False
 
@@ -102,14 +102,14 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     old_revs = git_rev_parse_all(gitdir)
 
     if svn:
-        logger.debug('Using git-svn for %s' % gitdir)
+        logger.debug('Using git-svn for %s', gitdir)
 
         for remote in remotes:
             # arghie-argh-argh
             if remote == '*':
                 remote = '--all'
 
-            logger.info('Running git-svn fetch %s in %s' % (remote, gitdir))
+            logger.info('Running git-svn fetch %s in %s', remote, gitdir)
             args = ['/usr/bin/git', 'svn', 'fetch', remote]
             git_remote_update(args, env)
 
@@ -117,26 +117,25 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
         # Not an svn remote
         hasremotes = repo.git.remote()
         if not len(hasremotes.strip()):
-            logger.info('Repository %s has no defined remotes!' % gitdir)
+            logger.info('Repository %s has no defined remotes!', gitdir)
             return False
 
-        logger.debug('existing remotes: %s' % hasremotes)
+        logger.debug('existing remotes: %s', hasremotes)
         for remote in remotes:
             remotefound = False
             for hasremote in hasremotes.split('\n'):
                 if fnmatch.fnmatch(hasremote, remote):
                     remotefound = True
-                    logger.debug('existing remote %s matches %s' % (
-                        hasremote, remote))
+                    logger.debug('existing remote %s matches %s',
+                                 hasremote, remote)
                     args = ['/usr/bin/git', 'remote', 'update', hasremote]
-                    logger.info('Updating remote %s in %s' %
-                                (hasremote, gitdir))
+                    logger.info('Updating remote %s in %s', hasremote, gitdir)
 
                     git_remote_update(args, env)
 
             if not remotefound:
-                logger.info('Could not find any remotes matching %s in %s' % (
-                    remote, gitdir))
+                logger.info('Could not find any remotes matching %s in %s',
+                            remote, gitdir)
 
     new_revs = git_rev_parse_all(gitdir)
     grokmirror.unlock_repo(gitdir)
@@ -153,11 +152,11 @@ def run_post_update_hook(hookscript, gitdir):
     if hookscript == '':
         return
     if not os.access(hookscript, os.X_OK):
-        logger.warning('post_update_hook %s is not executable' % hookscript)
+        logger.warning('post_update_hook %s is not executable', hookscript)
         return
 
     args = [hookscript, gitdir]
-    logger.debug('Running: %s' % ' '.join(args))
+    logger.debug('Running: %s', ' '.join(args))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        universal_newlines=True).communicate()
@@ -166,10 +165,10 @@ def run_post_update_hook(hookscript, gitdir):
     output = output.strip()
     if error:
         # Put hook stderror into warning
-        logger.warning('Hook Stderr: %s' % error)
+        logger.warning('Hook Stderr: %s', error)
     if output:
         # Put hook stdout into info
-        logger.info('Hook Stdout: %s' % output)
+        logger.info('Hook Stdout: %s', output)
 
 
 def parse_args():
@@ -241,16 +240,16 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
     for entry in args:
         if entry[-4:] == '.git':
             if not os.path.exists(entry):
-                logger.critical('%s does not exist' % entry)
+                logger.critical('%s does not exist', entry)
                 continue
 
-            logger.debug('Found %s' % entry)
+            logger.debug('Found %s', entry)
             didwork = dumb_pull_repo(entry, remotes, svn=svn)
             if didwork:
                 run_post_update_hook(posthook, entry)
 
         else:
-            logger.debug('Finding all git repos in %s' % entry)
+            logger.debug('Finding all git repos in %s', entry)
             for founddir in grokmirror.find_all_gitdirs(entry):
                 didwork = dumb_pull_repo(founddir, remotes, svn=svn)
                 if didwork:
