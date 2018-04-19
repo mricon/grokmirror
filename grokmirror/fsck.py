@@ -192,7 +192,8 @@ def run_git_fsck(fullpath, config, conn_only=False):
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env).communicate()
 
-    error = error.decode().strip()
+    error = error.decode() + output.decode()
+    error = error.strip()
 
     if error:
         # Put things we recognize as fairly benign into debug
@@ -296,16 +297,21 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     frequency = int(config['frequency'])
 
     today = datetime.datetime.today()
+    todayiso = today.strftime('%F')
 
     # Go through the manifest and compare with status
     for gitdir in manifest.keys():
         fullpath = os.path.join(config['toplevel'], gitdir.lstrip('/'))
         if fullpath not in status.keys():
             # Newly added repository
-            # Randomize next check between now and frequency
-            delay = random.randint(0, frequency)
-            nextdate = today + datetime.timedelta(days=delay)
-            nextcheck = nextdate.strftime('%F')
+            if not force:
+                # Randomize next check between now and frequency
+                delay = random.randint(0, frequency)
+                nextdate = today + datetime.timedelta(days=delay)
+                nextcheck = nextdate.strftime('%F')
+            else:
+                nextcheck = todayiso
+
             status[fullpath] = {
                 'lastcheck': 'never',
                 'nextcheck': nextcheck,
@@ -318,15 +324,14 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
     # Go through status and queue checks for all the dirs that are due today
     # (unless --force, which is EVERYTHING)
-    todayiso = today.strftime('%F')
     for fullpath in list(status):
-        logger.info('%s:', fullpath)
         # Check to make sure it's still in the manifest
         gitdir = fullpath.replace(config['toplevel'], '', 1)
         gitdir = '/' + gitdir.lstrip('/')
 
         if gitdir not in manifest.keys():
             del status[fullpath]
+            logger.info('%s:', fullpath)
             logger.info('   gone : no longer in manifest')
             continue
 
@@ -337,7 +342,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                                                '%Y-%m-%d')
 
         if force or nextcheck <= today:
-            logger.debug('Preparing to check %s', fullpath)
+            logger.info('%s:', fullpath)
             # Calculate elapsed seconds
             startt = time.time()
 
@@ -428,6 +433,9 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
             nextdate = today + datetime.timedelta(days=delay)
             status[fullpath]['nextcheck'] = nextdate.strftime('%F')
+            logger.info('   done : %s s, next check on %s',
+                        status[fullpath]['s_elapsed'],
+                        status[fullpath]['nextcheck'])
 
             # Write status file after each check, so if the process dies, we won't
             # have to recheck all the repos we've already checked
