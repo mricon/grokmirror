@@ -93,7 +93,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     try:
         grokmirror.lock_repo(gitdir, nonblocking=True)
     except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % gitdir)
+        logger.info('Could not obtain exclusive lock on %s', gitdir)
         logger.info('\tAssuming another process is running.')
         return False
 
@@ -109,7 +109,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
             if remote == '*':
                 remote = '--all'
 
-            logger.info('Running git-svn fetch %s in %s' % (remote, gitdir))
+            logger.info('Running git-svn fetch %s in %s', remote, gitdir)
             args = ['/usr/bin/git', 'svn', 'fetch', remote]
             git_remote_update(args, env)
 
@@ -117,7 +117,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
         # Not an svn remote
         hasremotes = repo.git.remote()
         if not len(hasremotes.strip()):
-            logger.info('Repository %s has no defined remotes!' % gitdir)
+            logger.info('Repository %s has no defined remotes!', gitdir)
             return False
 
         logger.debug('existing remotes: %s', hasremotes)
@@ -129,14 +129,13 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                     logger.debug('existing remote %s matches %s',
                                  hasremote, remote)
                     args = ['/usr/bin/git', 'remote', 'update', hasremote]
-                    logger.info('Updating remote %s in %s' %
-                                (hasremote, gitdir))
+                    logger.info('Updating remote %s in %s', hasremote, gitdir)
 
                     git_remote_update(args, env)
 
             if not remotefound:
-                logger.info('Could not find any remotes matching %s in %s' % (
-                    remote, gitdir))
+                logger.info('Could not find any remotes matching %s in %s',
+                            remote, gitdir)
 
     new_revs = git_rev_parse_all(gitdir)
     grokmirror.unlock_repo(gitdir)
@@ -169,7 +168,7 @@ def run_post_update_hook(hookscript, gitdir):
         logger.warning('Hook Stderr: %s' % error)
     if output:
         # Put hook stdout into info
-        logger.info('Hook Stdout: %s' % output)
+        logger.info('Hook Stdout: %s', output)
 
 
 def parse_args():

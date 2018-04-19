@@ -194,7 +194,7 @@ def find_all_gitdirs(toplevel, ignore=None):
     if ignore is None:
         ignore = []
 
-    logger.info('Finding bare git repos in %s' % toplevel)
+    logger.info('Finding bare git repos in %s', toplevel)
     logger.debug('Ignore list: %s', ' '.join(ignore))
     gitdirs = []
     for root, dirs, files in os.walk(toplevel, topdown=True):
@@ -258,7 +258,7 @@ def read_manifest(manifile, wait=False):
             manifest_lock(manifile)
 
     if not os.path.exists(manifile):
-        logger.info('%s not found, assuming initial run' % manifile)
+        logger.info('%s not found, assuming initial run', manifile)
         return {}
 
     if manifile.find('.gz') > 0:
@@ -267,7 +267,7 @@ def read_manifest(manifile, wait=False):
     else:
         fh = open(manifile, 'rb')
 
-    logger.info('Reading %s' % manifile)
+    logger.info('Reading %s', manifile)
     jdata = fh.read().decode('utf-8')
     fh.close()
 
@@ -288,7 +288,7 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
     import shutil
     import gzip
 
-    logger.info('Writing new %s' % manifile)
+    logger.info('Writing new %s', manifile)
 
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)

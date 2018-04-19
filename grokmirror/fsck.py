@@ -100,7 +100,7 @@ def run_git_repack(fullpath, config, full_repack=False):
 
     env = {'GIT_DIR': fullpath}
     args = ['/usr/bin/git', 'repack'] + flags
-    logger.info(' repack : repacking with %s' % repack_flags)
+    logger.info(' repack : repacking with %s', repack_flags)
 
     logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
@@ -251,7 +251,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     if conn_only or repack_all_quick or repack_all_full:
         force = True
 
-    logger.info('Running grok-fsck for [%s]' % name)
+    logger.info('Running grok-fsck for [%s]', name)
 
     # Lock the tree to make sure we only run one instance
     logger.debug('Attempting to obtain lock on %s', config['lock'])
@@ -259,14 +259,14 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     try:
         lockf(flockh, LOCK_EX | LOCK_NB)
     except IOError:
-        logger.info('Could not obtain exclusive lock on %s' % config['lock'])
+        logger.info('Could not obtain exclusive lock on %s', config['lock'])
         logger.info('Assuming another process is running.')
         return 0
 
     manifest = grokmirror.read_manifest(config['manifest'])
 
     if os.path.exists(config['statusfile']):
-        logger.info('Reading status from %s' % config['statusfile'])
+        logger.info('Reading status from %s', config['statusfile'])
         stfh = open(config['statusfile'], 'rb')
         try:
             # Format of the status file:
@@ -309,8 +309,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                 'lastcheck': 'never',
                 'nextcheck': nextcheck,
             }
-            logger.info('%s:' % fullpath)
-            logger.info('  added : next check on %s' % nextcheck)
+            logger.info('%s:', fullpath)
+            logger.info('  added : next check on %s', nextcheck)
 
     total_checked = 0
     total_elapsed = 0
@@ -319,7 +319,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     # (unless --force, which is EVERYTHING)
     todayiso = today.strftime('%F')
     for fullpath in list(status):
-        logger.info('%s:' % fullpath)
+        logger.info('%s:', fullpath)
         # Check to make sure it's still in the manifest
         gitdir = fullpath.replace(config['toplevel'], '', 1)
         gitdir = '/' + gitdir.lstrip('/')
@@ -435,8 +435,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     if not total_checked:
         logger.info('No new repos to check.')
     else:
-        logger.info('Repos checked: %s' % total_checked)
-        logger.info('Total running time: %s s' % int(total_elapsed))
+        logger.info('Repos checked: %s', total_checked)
+        logger.info('Total running time: %s s', int(total_elapsed))
         with open(config['statusfile'], 'wb') as stfh:
             stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
