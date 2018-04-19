@@ -30,7 +30,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     path = gitdir.replace(toplevel, '', 1)
 
     # Try to open git dir
-    logger.debug('Examining %s' % gitdir)
+    logger.debug('Examining %s', gitdir)
     try:
         repo = Repo(gitdir)
         assert repo.bare is True

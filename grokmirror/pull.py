@@ -76,8 +76,8 @@ class PullerThread(threading.Thread):
             # already done this for us?
             todo = True
             success = False
-            logger.debug('[Thread-%s] gitdir=%s, figerprint=%s, modified=%s'
-                         % (self.myname, gitdir, fingerprint, modified))
+            logger.debug('[Thread-%s] gitdir=%s, figerprint=%s, modified=%s',
+                         self.myname, gitdir, fingerprint, modified)
 
             fullpath = os.path.join(self.toplevel, gitdir.lstrip('/'))
 
@@ -91,14 +91,14 @@ class PullerThread(threading.Thread):
                 if fingerprint is None:
                     ts = grokmirror.get_repo_timestamp(self.toplevel, gitdir)
                     if ts >= modified:
-                        logger.debug('[Thread-%s] TS same or newer, not pulling %s'
-                                     % (self.myname, gitdir))
+                        logger.debug('[Thread-%s] TS same or newer, '
+                                     'not pulling %s', self.myname, gitdir)
                         todo = False
                 else:
                     # Recheck the real fingerprint to make sure there is no
                     # divergence between grokmirror.fingerprint and real repo
-                    logger.debug('[Thread-%s] Rechecking fingerprint in %s' %
-                                 (self.myname, gitdir))
+                    logger.debug('[Thread-%s] Rechecking fingerprint in %s',
+                                 self.myname, gitdir)
                     my_fingerprint = grokmirror.get_repo_fingerprint(
                         self.toplevel, gitdir, force=True)
 
@@ -107,13 +107,13 @@ class PullerThread(threading.Thread):
                         self.toplevel, gitdir, fingerprint=my_fingerprint)
 
                     if fingerprint == my_fingerprint:
-                        logger.debug('[Thread-%s] FP match, not pulling %s'
-                                     % (self.myname, gitdir))
+                        logger.debug('[Thread-%s] FP match, not pulling %s',
+                                     self.myname, gitdir)
                         todo = False
 
                 if not todo:
-                    logger.debug('[Thread-%s] %s already latest, skipping'
-                                 % (self.myname, gitdir))
+                    logger.debug('[Thread-%s] %s already latest, skipping',
+                                 self.myname, gitdir)
                     set_agefile(self.toplevel, gitdir, modified)
                     grokmirror.unlock_repo(fullpath)
                     self.out_queue.put((gitdir, my_fingerprint, True))
@@ -122,8 +122,8 @@ class PullerThread(threading.Thread):
 
                 logger.info('[Thread-%s] updating %s' % (self.myname, gitdir))
                 success = pull_repo(self.toplevel, gitdir, threadid=self.myname)
-                logger.debug('[Thread-%s] done pulling %s' %
-                             (self.myname, gitdir))
+                logger.debug('[Thread-%s] done pulling %s',
+                             self.myname, gitdir)
 
                 if success:
                     set_agefile(self.toplevel, gitdir, modified)
@@ -178,15 +178,15 @@ def fix_remotes(gitdir, toplevel, site):
     repo = Repo(os.path.join(toplevel, gitdir.lstrip('/')))
     remotes = repo.git.remote()
     if len(remotes.strip()):
-        logger.debug('existing remotes: %s' % remotes)
+        logger.debug('existing remotes: %s', remotes)
         for name in remotes.split('\n'):
-            logger.debug('\tremoving remote: %s' % name)
+            logger.debug('\tremoving remote: %s', name)
             repo.git.remote('rm', name)
 
     # set my origin
     origin = os.path.join(site, gitdir.lstrip('/'))
     repo.git.remote('add', '--mirror', 'origin', origin)
-    logger.debug('\tset new origin as %s' % origin)
+    logger.debug('\tset new origin as %s', origin)
 
 
 def set_repo_params(toplevel, gitdir, owner, description, reference):
@@ -200,18 +200,18 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
     if description is not None:
         try:
             if repo.description != description:
-                logger.debug('Setting %s description to: %s' %
-                             (gitdir, description))
+                logger.debug('Setting %s description to: %s',
+                             gitdir, description)
                 repo.description = description
         except IOError:
             # Bug in git-python will throw an exception if description
             # file is not found
-            logger.debug('%s description file missing, setting to: %s' %
-                         (gitdir, description))
+            logger.debug('%s description file missing, setting to: %s',
+                         gitdir, description)
             repo.description = description
 
     if owner is not None:
-        logger.debug('Setting %s owner to: %s' % (gitdir, owner))
+        logger.debug('Setting %s owner to: %s', gitdir, owner)
         repo.git.config('gitweb.owner', owner)
 
     if reference is not None:
@@ -242,7 +242,7 @@ def set_agefile(toplevel, gitdir, last_modified):
         os.makedirs(os.path.dirname(agefile))
     with open(agefile, 'wt') as fh:
         fh.write('%s\n' % cgit_fmt)
-    logger.debug('Wrote "%s" into %s' % (cgit_fmt, agefile))
+    logger.debug('Wrote "%s" into %s', cgit_fmt, agefile)
 
 
 def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
@@ -255,7 +255,7 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
 
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     args = [hookscript, fullpath]
-    logger.debug('[Thread-%s] Running: %s' % (threadid, ' '.join(args)))
+    logger.debug('[Thread-%s] Running: %s', threadid, ' '.join(args))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        universal_newlines=True).communicate()
@@ -274,8 +274,8 @@ def pull_repo(toplevel, gitdir, threadid='X'):
     env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
     args = ['/usr/bin/git', 'remote', 'update', '--prune']
 
-    logger.debug('[Thread-%s] Running: GIT_DIR=%s %s'
-                 % (threadid, env['GIT_DIR'], ' '.join(args)))
+    logger.debug('[Thread-%s] Running: GIT_DIR=%s %s',
+                 threadid, env['GIT_DIR'], ' '.join(args))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, env=env,
@@ -300,8 +300,7 @@ def pull_repo(toplevel, gitdir, threadid='X'):
             else:
                 warn.append(line)
         if debug:
-            logger.debug('[Thread-%s] Stderr: %s'
-                         % (threadid, '\n'.join(debug)))
+            logger.debug('[Thread-%s] Stderr: %s', threadid, '\n'.join(debug))
         if warn:
             logger.warning('[Thread-%s] Stderr: %s'
                            % (threadid, '\n'.join(warn)))
@@ -326,7 +325,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     if reference is not None:
         logger.info('With reference to %s' % reference)
 
-    logger.debug('Running: %s' % ' '.join(args))
+    logger.debug('Running: %s', ' '.join(args))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
@@ -350,7 +349,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
             else:
                 warn.append(line)
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
             logger.warning('Stderr: %s' % '\n'.join(warn))
 
@@ -364,20 +363,20 @@ def clone_order(to_clone, manifest, to_clone_sorted, existing):
     logger.debug('Another clone_order loop')
     for gitdir in to_clone:
         reference = manifest[gitdir]['reference']
-        logger.debug('reference: %s' % reference)
+        logger.debug('reference: %s', reference)
         if (reference in existing
             or reference in to_clone_sorted
                 or reference is None):
-            logger.debug('%s: reference found in existing' % gitdir)
+            logger.debug('%s: reference found in existing', gitdir)
             to_clone_sorted.append(gitdir)
         else:
-            logger.debug('%s: reference not found' % gitdir)
+            logger.debug('%s: reference not found', gitdir)
             new_to_clone.append(gitdir)
     if len(new_to_clone) == 0 or len(new_to_clone) == num_received:
         # we can resolve no more dependencies, break out
         logger.debug('Finished resolving dependencies, quitting')
         if len(new_to_clone):
-            logger.debug('Unresolved: %s' % new_to_clone)
+            logger.debug('Unresolved: %s', new_to_clone)
             to_clone_sorted.extend(new_to_clone)
         return
 
@@ -498,12 +497,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         fstat = os.stat(manifile)
         last_modified = fstat[8]
-        logger.debug('mtime on %s is: %s' % (manifile, fstat[8]))
+        logger.debug('mtime on %s is: %s', manifile, fstat[8])
 
         if os.path.exists(config['mymanifest']):
             fstat = os.stat(config['mymanifest'])
             my_last_modified = fstat[8]
-            logger.debug('Our last-modified is: %s' % my_last_modified)
+            logger.debug('Our last-modified is: %s', my_last_modified)
             if not (force or nomtime) and last_modified <= my_last_modified:
                 logger.info('Manifest file unchanged. Quitting.')
                 return 0
@@ -531,7 +530,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 password = ''
 
             manifesturl = config['manifest'].replace(chunks.netloc, netloc)
-            logger.debug('manifesturl=%s' % manifesturl)
+            logger.debug('manifesturl=%s', manifesturl)
             request = urllib_request.Request(manifesturl)
 
             password_mgr = urllib_request.HTTPPasswordMgrWithDefaultRealm()
@@ -547,10 +546,10 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         if not (force or nomtime) and os.path.exists(mymanifest):
             fstat = os.stat(mymanifest)
             mtime = fstat[8]
-            logger.debug('mtime on %s is: %s' % (mymanifest, mtime))
+            logger.debug('mtime on %s is: %s', mymanifest, mtime)
             my_last_modified = time.strftime('%a, %d %b %Y %H:%M:%S GMT',
                                              time.gmtime(mtime))
-            logger.debug('Our last-modified is: %s' % my_last_modified)
+            logger.debug('Our last-modified is: %s', my_last_modified)
             request.add_header('If-Modified-Since', my_last_modified)
 
         try:
@@ -645,7 +644,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         if verify:
             if culled[gitdir]['fingerprint'] is None:
-                logger.debug('No fingerprint for %s, not verifying' % gitdir)
+                logger.debug('No fingerprint for %s, not verifying', gitdir)
                 grokmirror.unlock_repo(fullpath)
                 continue
 
@@ -653,7 +652,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 grokmirror.unlock_repo(fullpath)
                 continue
 
-            logger.debug('Verifying %s' % gitdir)
+            logger.debug('Verifying %s', gitdir)
             if not os.path.exists(fullpath):
                 verify_fails.append(gitdir)
                 logger.info('Verify: %s ABSENT' % gitdir)
@@ -726,20 +725,20 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             # in the remote manifest, fall back on using timestamps
             changed = False
             if culled[gitdir]['fingerprint'] is not None:
-                logger.debug('Will use fingerprints to compare %s' % gitdir)
+                logger.debug('Will use fingerprints to compare %s', gitdir)
                 my_fingerprint = grokmirror.get_repo_fingerprint(toplevel,
                                                                  gitdir,
                                                                  force=force)
 
                 if my_fingerprint != culled[gitdir]['fingerprint']:
-                    logger.debug('No fingerprint match, will pull %s' % gitdir)
+                    logger.debug('No fingerprint match, will pull %s', gitdir)
                     changed = True
                 else:
-                    logger.debug('Fingerprints match, skipping %s' % gitdir)
+                    logger.debug('Fingerprints match, skipping %s', gitdir)
             else:
-                logger.debug('Will use timestamps to compare %s' % gitdir)
+                logger.debug('Will use timestamps to compare %s', gitdir)
                 if force:
-                    logger.debug('Will force-pull %s' % gitdir)
+                    logger.debug('Will force-pull %s', gitdir)
                     changed = True
                     # set timestamp to 0 as well
                     grokmirror.set_repo_timestamp(toplevel, gitdir, 0)
@@ -753,7 +752,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 grokmirror.unlock_repo(fullpath)
                 continue
             else:
-                logger.debug('Repo %s unchanged' % gitdir)
+                logger.debug('Repo %s unchanged', gitdir)
                 # if we don't have a fingerprint for it, add it now
                 if culled[gitdir]['fingerprint'] is None:
                     fpr = grokmirror.get_repo_fingerprint(toplevel, gitdir)
@@ -811,7 +810,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                           culled[gitdir]['modified']))
 
         for i in range(pull_threads):
-            logger.debug('Spun up thread %s' % i)
+            logger.debug('Spun up thread %s', i)
             t = PullerThread(in_queue, out_queue, config, i)
             t.setDaemon(True)
             t.start()
@@ -828,7 +827,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             if not status:
                 # To make sure we check this again during next run,
                 # fudge the manifest accordingly.
-                logger.debug('Will recheck %s during next run' % gitdir)
+                logger.debug('Will recheck %s during next run', gitdir)
                 culled[gitdir] = mymanifest[gitdir]
                 # this is rather hackish, but effective
                 last_modified -= 1
@@ -855,7 +854,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
 
             if ts > 0:
-                logger.debug('Looks like %s already cloned, skipping' % gitdir)
+                logger.debug('Looks like %s already cloned, skipping', gitdir)
                 continue
 
             fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -892,8 +891,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
             # check dir to make sure cloning succeeded and then add to existing
             if os.path.exists(fullpath) and success:
-                logger.debug('Cloning of %s succeeded, adding to existing'
-                             % gitdir)
+                logger.debug('Cloning of %s succeeded, adding to existing',
+                             gitdir)
                 existing.append(gitdir)
 
                 desc = culled[gitdir].get('description')
@@ -933,8 +932,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                         # are you pointing to where we need you?
                         if os.path.realpath(target) != source:
                             # Remove symlink and recreate below
-                            logger.debug('Removed existing wrong symlink %s'
-                                         % target)
+                            logger.debug('Removed existing wrong symlink %s',
+                                         target)
                             os.unlink(target)
                     elif os.path.exists(target):
                         logger.warn('Deleted repo %s, because it is now'
@@ -984,8 +983,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 purge_limit = 5
 
             purge_pc = len(to_purge) * 100 / found_repos
-            logger.debug('purgeprotect=%s' % purge_limit)
-            logger.debug('purge prercentage=%s' % purge_pc)
+            logger.debug('purgeprotect=%s', purge_limit)
+            logger.debug('purge prercentage=%s', purge_pc)
 
             if not forcepurge and purge_pc >= purge_limit:
                 logger.critical('Refusing to purge %s repos (%s%%)'

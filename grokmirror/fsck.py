@@ -48,7 +48,7 @@ def run_git_prune(fullpath, config, manifest):
     args = ['/usr/bin/git', 'prune']
     logger.info('  prune : pruning')
 
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -71,7 +71,7 @@ def run_git_prune(fullpath, config, manifest):
                 warn.append(line)
 
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
             logger.critical('Pruning %s returned critical errors:' % fullpath)
             prune_ok = False
@@ -91,7 +91,7 @@ def run_git_repack(fullpath, config, full_repack=False):
 
     if full_repack and 'full_repack_flags' in config.keys():
         repack_flags = config['full_repack_flags']
-        logger.debug('Time to do a full repack of %s' % fullpath)
+        logger.debug('Time to do a full repack of %s', fullpath)
 
     elif 'repack_flags' in config.keys():
         repack_flags = config['repack_flags']
@@ -102,7 +102,7 @@ def run_git_repack(fullpath, config, full_repack=False):
     args = ['/usr/bin/git', 'repack'] + flags
     logger.info(' repack : repacking with %s' % repack_flags)
 
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -127,7 +127,7 @@ def run_git_repack(fullpath, config, full_repack=False):
                 warn.append(line)
 
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
             logger.critical('Repacking %s returned critical errors:' % fullpath)
             repack_ok = False
@@ -142,7 +142,7 @@ def run_git_repack(fullpath, config, full_repack=False):
     args = ['/usr/bin/git', 'pack-refs', '--all']
     logger.info(' repack : repacking refs')
 
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -167,7 +167,7 @@ def run_git_repack(fullpath, config, full_repack=False):
                 warn.append(line)
 
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
             logger.critical('Repacking refs %s returned critical errors:' % fullpath)
             repack_ok = False
@@ -185,7 +185,7 @@ def run_git_fsck(fullpath, config, conn_only=False):
     else:
         logger.info('   fsck : running full checks')
 
-    logger.debug('Running: GIT_DIR=%s %s' % (env['GIT_DIR'], ' '.join(args)))
+    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
     (output, error) = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -208,7 +208,7 @@ def run_git_fsck(fullpath, config, conn_only=False):
                 warn.append(line)
 
         if debug:
-            logger.debug('Stderr: %s' % '\n'.join(debug))
+            logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
             logger.critical('%s has critical errors:' % fullpath)
             for entry in warn:
@@ -254,7 +254,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     logger.info('Running grok-fsck for [%s]' % name)
 
     # Lock the tree to make sure we only run one instance
-    logger.debug('Attempting to obtain lock on %s' % config['lock'])
+    logger.debug('Attempting to obtain lock on %s', config['lock'])
     flockh = open(config['lock'], 'w')
     try:
         lockf(flockh, LOCK_EX | LOCK_NB)
@@ -336,7 +336,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                                                '%Y-%m-%d')
 
         if force or nextcheck <= today:
-            logger.debug('Preparing to check %s' % fullpath)
+            logger.debug('Preparing to check %s', fullpath)
             # Calculate elapsed seconds
             startt = time.time()
 
@@ -368,12 +368,14 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                         # We -1 because if we want a repack every 10th time, then we need to trigger
                         # when current repack count is 9.
                         if quick_repack_count >= full_repack_every-1:
-                            logger.debug('Time to do full repack on %s' % fullpath)
+                            logger.debug('Time to do full repack on %s',
+                                         fullpath)
                             full_repack = True
                             quick_repack_count = 0
                             status[fullpath]['lastfullrepack'] = todayiso
                         else:
-                            logger.debug('Repack count for %s not yet reached full repack trigger' % fullpath)
+                            logger.debug('Repack count for %s not yet reached '
+                                         'full repack trigger', fullpath)
                             quick_repack_count += 1
 
                 # Don't run repack if we're running --connectivity without --repack-all-*
@@ -426,7 +428,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
             # Write status file after each check, so if the process dies, we won't
             # have to recheck all the repos we've already checked
-            logger.debug('Updating status file in %s' % config['statusfile'])
+            logger.debug('Updating status file in %s', config['statusfile'])
             with open(config['statusfile'], 'wb') as stfh:
                 stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
