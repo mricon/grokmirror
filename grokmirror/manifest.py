@@ -35,7 +35,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
         repo = Repo(gitdir)
         assert repo.bare is True
     except:
-        logger.critical('Error opening %s.' % gitdir)
+        logger.critical('Error opening %s.', gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 

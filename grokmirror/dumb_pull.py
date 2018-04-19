@@ -86,7 +86,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
         repo = Repo(gitdir)
         assert repo.bare is True
     except:
-        logger.critical('Error opening %s.' % gitdir)
+        logger.critical('Error opening %s.', gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
 
@@ -240,7 +240,7 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
     for entry in args:
         if entry[-4:] == '.git':
             if not os.path.exists(entry):
-                logger.critical('%s does not exist' % entry)
+                logger.critical('%s does not exist', entry)
                 continue
 
             logger.debug('Found %s', entry)

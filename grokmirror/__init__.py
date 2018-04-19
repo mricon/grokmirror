@@ -131,7 +131,7 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
         try:
             repo = Repo(fullpath)
         except:
-            logger.critical('Could not open %s. Bad repo?' % gitdir)
+            logger.critical('Could not open %s. Bad repo?', gitdir)
             return None
 
         if not len(repo.heads):
@@ -146,7 +146,7 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
             # of git-show-ref
             fingerprint = hashlib.sha1(refs + b"\n").hexdigest()
         except:
-            logger.critical('Could not fingerprint %s. Bad repo?' % gitdir)
+            logger.critical('Could not fingerprint %s. Bad repo?', gitdir)
             return None
 
         # Save it for future use
@@ -275,7 +275,7 @@ def read_manifest(manifile, wait=False):
         manifest = anyjson.deserialize(jdata)
     except:
         # We'll regenerate the file entirely on failure to parse
-        logger.critical('Unable to parse %s, will regenerate' % manifile)
+        logger.critical('Unable to parse %s, will regenerate', manifile)
         manifest = {}
 
     logger.debug('Manifest contains %s entries', len(manifest.keys()))

@@ -73,10 +73,10 @@ def run_git_prune(fullpath, config, manifest):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Pruning %s returned critical errors:' % fullpath)
+            logger.critical('Pruning %s returned critical errors:', fullpath)
             prune_ok = False
             for entry in warn:
-                logger.critical("\t%s" % entry)
+                logger.critical("\t%s", entry)
 
     return prune_ok
 
@@ -129,10 +129,10 @@ def run_git_repack(fullpath, config, full_repack=False):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Repacking %s returned critical errors:' % fullpath)
+            logger.critical('Repacking %s returned critical errors:', fullpath)
             repack_ok = False
             for entry in warn:
-                logger.critical("\t%s" % entry)
+                logger.critical("\t%s", entry)
 
     if not repack_ok:
         # No need to repack refs if repo is broken
@@ -169,10 +169,11 @@ def run_git_repack(fullpath, config, full_repack=False):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Repacking refs %s returned critical errors:' % fullpath)
+            logger.critical('Repacking refs %s returned critical errors:',
+                            fullpath)
             repack_ok = False
             for entry in warn:
-                logger.critical("\t%s" % entry)
+                logger.critical("\t%s", entry)
 
     return repack_ok
 
@@ -210,9 +211,9 @@ def run_git_fsck(fullpath, config, conn_only=False):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('%s has critical errors:' % fullpath)
+            logger.critical('%s has critical errors:', fullpath)
             for entry in warn:
-                logger.critical("\t%s" % entry)
+                logger.critical("\t%s", entry)
 
 
 def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repack_all_quick=False, repack_all_full=False):
@@ -285,7 +286,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
             status = json.loads(stfh.read().decode('utf-8'))
         except:
             # Huai le!
-            logger.critical('Failed to parse %s' % config['statusfile'])
+            logger.critical('Failed to parse %s', config['statusfile'])
             lockf(flockh, LOCK_UN)
             flockh.close()
             return 1

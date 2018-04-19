@@ -490,8 +490,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
     if config['manifest'].find('file:///') == 0:
         manifile = config['manifest'].replace('file://', '')
         if not os.path.exists(manifile):
-            logger.critical('Remote manifest not found in %s! Quitting!'
-                            % config['manifest'])
+            logger.critical('Remote manifest not found in %s! Quitting!',
+                            config['manifest'])
             return 1
 
         fstat = os.stat(manifile)
@@ -599,8 +599,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
     toplevel = config['toplevel']
     if not os.access(toplevel, os.W_OK):
-        logger.critical('Toplevel %s does not exist or is not writable'
-                        % toplevel)
+        logger.critical('Toplevel %s does not exist or is not writable',
+                        toplevel)
         sys.exit(1)
 
     if 'pull_threads' in config.keys():
@@ -664,7 +664,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             if my_fingerprint == culled[gitdir]['fingerprint']:
                 logger.info('Verify: %s OK', gitdir)
             else:
-                logger.critical('Verify: %s FAILED' % gitdir)
+                logger.critical('Verify: %s FAILED', gitdir)
                 verify_fails.append(gitdir)
 
             grokmirror.unlock_repo(fullpath)
@@ -708,9 +708,9 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             else:
                 # It exists on disk, but not in my manifest?
                 if noreuse:
-                    logger.critical('Found existing git repo in %s' % fullpath)
+                    logger.critical('Found existing git repo in %s', fullpath)
                     logger.critical('But you asked NOT to reuse repos')
-                    logger.critical('Skipping %s' % gitdir)
+                    logger.critical('Skipping %s', gitdir)
                     grokmirror.unlock_repo(fullpath)
                     continue
 
@@ -768,12 +768,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         # If we got here, something is odd.
         # noinspection PyUnreachableCode
-        logger.critical('Could not figure out what to do with %s' % gitdir)
+        logger.critical('Could not figure out what to do with %s', gitdir)
         grokmirror.unlock_repo(fullpath)
 
     if verify:
         if len(verify_fails):
-            logger.critical('%s repos failed to verify' % len(verify_fails))
+            logger.critical('%s repos failed to verify', len(verify_fails))
             return 1
         else:
             logger.info('Verification successful')
@@ -905,7 +905,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 culled[gitdir]['fingerprint'] = my_fingerprint
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
-                logger.critical('Was not able to clone %s' % gitdir)
+                logger.critical('Was not able to clone %s', gitdir)
                 # Remove it from our manifest so we can try re-cloning
                 # next time grok-pull runs
                 del culled[gitdir]
@@ -973,8 +973,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 purge_limit = int(config['purgeprotect'])
                 assert 1 <= purge_limit <= 99
             except (ValueError, AssertionError):
-                logger.critical('Warning: "%s" is not valid for purgeprotect.'
-                                % config['purgeprotect'])
+                logger.critical('Warning: "%s" is not valid for purgeprotect.',
+                                config['purgeprotect'])
                 logger.critical('Please set to a number between 1 and 99.')
                 logger.critical('Defaulting to purgeprotect=5.')
                 purge_limit = 5
@@ -984,8 +984,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             logger.debug('purge prercentage=%s', purge_pc)
 
             if not forcepurge and purge_pc >= purge_limit:
-                logger.critical('Refusing to purge %s repos (%s%%)'
-                                % (len(to_purge), purge_pc))
+                logger.critical('Refusing to purge %s repos (%s%%)',
+                                len(to_purge), purge_pc)
                 logger.critical('Set purgeprotect to a higher percentage, or'
                                 ' override with --force-purge.')
                 logger.info('Not saving local manifest')
