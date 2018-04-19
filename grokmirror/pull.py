@@ -998,8 +998,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                     else:
                         # is anything using us for alternates?
                         gitdir = '/' + os.path.relpath(founddir, toplevel).lstrip('/')
-                        repolist = grokmirror.find_all_alt_repos(gitdir, culled)
-                        if repolist:
+                        if grokmirror.is_alt_repo(toplevel, gitdir):
                             logger.info('Not purging %s because it is used by '
                                         'other repos via alternates', founddir)
                         else:

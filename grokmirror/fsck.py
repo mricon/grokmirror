@@ -38,9 +38,7 @@ def run_git_prune(fullpath, config, manifest):
 
     # Are any other repos using us in their objects/info/alternates?
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
-    repolist = grokmirror.find_all_alt_repos(gitdir, manifest)
-
-    if len(repolist):
+    if grokmirror.is_alt_repo(config['toplevel'], gitdir):
         logger.info('  prune : skipped, is alternate to other repos')
         return prune_ok
 

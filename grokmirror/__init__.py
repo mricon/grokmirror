@@ -170,24 +170,32 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
     return fingerprint
 
 
-def find_all_alt_repos(refrepo, manifest):
-    """
-    :param toplevel: toplevel of the repository location
-    :param refrepo: path of the repository
-    :param manifest: full manifest of repositories we track
-    :return: List of repositories using gitdir in its alternates
-    """
-    logger.debug('Finding all repositories using %s as its alternates',
-                 refrepo)
-    refrepo = refrepo.lstrip('/')
-    repolist = []
-    for gitdir in manifest.keys():
-        if gitdir.lstrip('/') == refrepo:
+def is_alt_repo(toplevel, refrepo):
+    # We recurse through toplevel and return true if we find at least
+    # one repo that lists us in its objects/info/alternates.
+    looking_for = os.path.join(toplevel, refrepo.strip('/'), 'objects').encode('utf-8')
+    import mmap
+    for root, dirs, files in os.walk(toplevel, topdown=True):
+        if not len(dirs):
             continue
-        if 'reference' in manifest[gitdir].keys() and manifest[gitdir]['reference'] is not None:
-            if manifest[gitdir]['reference'].lstrip('/') == refrepo:
-                repolist.append(gitdir)
-    return repolist
+
+        torm = []
+        for name in dirs:
+            # Is there an objects/info/alternates in this dir?
+            altfile = os.path.join(root, name, 'objects', 'info', 'alternates')
+            if os.path.exists(altfile):
+                with open(altfile, 'rb') as altfh:
+                    if looking_for in altfh.read():
+                        logger.debug('Found refrepo %s in  %s', refrepo,
+                                     altfile)
+                        return True
+                torm.append(name)
+
+        for name in torm:
+            # don't recurse into the found *.git dirs
+            dirs.remove(name)
+
+    return False
 
 
 def find_all_gitdirs(toplevel, ignore=None):

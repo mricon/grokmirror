@@ -13,5 +13,7 @@ v1.0.2 (2018-04-18)
   - no longer locking repos when running repack/prune/fsck, because
     these operations are safe as long as they are done by git itself
 
-- fix grok-pull so it no longer purges repos known to be providing
+- fix grok-pull so it no longer purges repos that are providing
   alternates to others
+- fix grok-fsck so it's more paranoid when pruning repos providing
+  alternates to others (checks all repos on disk, not just manifest)
