@@ -387,7 +387,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                     # is it time to trigger full repack?
                     # We -1 because if we want a repack every 10th time, then we need to trigger
                     # when current repack count is 9.
-                    if quick_repack_count >= full_repack_every-1:
+                    # however, don't do a full repack if we're doing a --repack-all-quick
+                    if not repack_all_quick and quick_repack_count >= full_repack_every-1:
                         logger.debug('Time to do full repack on %s',
                                      fullpath)
                         full_repack = True
