@@ -18,6 +18,7 @@ import os
 import sys
 import logging
 import time
+import enlighten
 
 import grokmirror
 
@@ -210,6 +211,8 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         ignore = []
 
     logger.setLevel(logging.DEBUG)
+    # noinspection PyTypeChecker
+    em = enlighten.get_manager(series=' -=#')
 
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(message)s')
@@ -219,6 +222,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
+        em.enabled = False
 
     logger.addHandler(ch)
 
@@ -266,14 +270,19 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         gitdirs = grokmirror.find_all_gitdirs(toplevel, ignore=ignore)
         purge_manifest(manifest, toplevel, gitdirs)
 
-    if len(manifest.keys()) and len(args):
+    if len(manifest) and len(args):
         # limit ourselves to passed dirs only when there is something
         # in the manifest. This precaution makes sure we regenerate the
         # whole file when there is nothing in it or it can't be parsed.
         gitdirs = args
+        # Don't draw a progress bar for a single repo
+        em.enabled = False
 
     symlinks = []
+    # noinspection PyTypeChecker
+    run = em.counter(total=len(gitdirs), desc='Processing:', unit='repos')
     for gitdir in gitdirs:
+        run.update()
         # check to make sure this gitdir is ok to export
         if (check_export_ok and not
                 os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok'))):
@@ -293,6 +302,8 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             symlinks.append(gitdir)
         else:
             update_manifest(manifest, toplevel, gitdir, usenow)
+
+    run.close()
 
     if len(symlinks):
         set_symlinks(manifest, toplevel, symlinks)

@@ -1,2 +1,3 @@
 anyjson
-git
+GitPython
+enlighten

@@ -27,6 +27,8 @@ except ImportError:
     import urllib2 as urllib_request
     from urllib2 import HTTPError, URLError
     from urlparse import urlparse
+
+import ssl
 import time
 import gzip
 import anyjson
@@ -45,6 +47,8 @@ from io import BytesIO
 
 from git import Repo
 
+import enlighten
+
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
 
@@ -57,13 +61,14 @@ verify_fails = []
 
 
 class PullerThread(threading.Thread):
-    def __init__(self, in_queue, out_queue, config, thread_name):
+    def __init__(self, in_queue, out_queue, config, thread_name, e_bar):
         threading.Thread.__init__(self)
         self.in_queue = in_queue
         self.out_queue = out_queue
         self.toplevel = config['toplevel']
         self.hookscript = config['post_update_hook']
         self.myname = thread_name
+        self.e_bar = e_bar
 
     def run(self):
         # XXX: This is not thread-safe, but okay for now,
@@ -72,6 +77,7 @@ class PullerThread(threading.Thread):
         global git_fails
         while True:
             (gitdir, fingerprint, modified) = self.in_queue.get()
+            self.e_bar.refresh()
             # Do we still need to update it, or has another process
             # already done this for us?
             todo = True
@@ -146,6 +152,7 @@ class PullerThread(threading.Thread):
                 lock_fails.append(gitdir)
 
             self.out_queue.put((gitdir, my_fingerprint, success))
+            self.e_bar.update()
             self.in_queue.task_done()
 
 
@@ -447,6 +454,9 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
     global logger
     global lock_fails
 
+    # noinspection PyTypeChecker
+    em = enlighten.get_manager(series=' -=#')
+
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
@@ -472,6 +482,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
+        em.enabled = False
 
     logger.addHandler(ch)
 
@@ -559,7 +570,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             logger.warning('Could not fetch %s', config['manifest'])
             logger.warning('Server returned: %s', ex)
             return 1
-        except URLError as ex:
+        except (URLError, ssl.SSLError, ssl.CertificateError) as ex:
             logger.warning('Could not fetch %s', config['manifest'])
             logger.warning('Error was: %s', ex)
             return 1
@@ -612,9 +623,12 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         pull_threads = 5
 
     logger.info('Comparing repository info')
+    # noinspection PyTypeChecker
+    e_cmp = em.counter(total=len(culled), desc='Comparing:', unit='repos')
 
-    for gitdir in culled.keys():
+    for gitdir in list(culled):
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+        e_cmp.update()
 
         # fingerprints were added in later versions, so deal if the upstream
         # manifest doesn't have a fingerprint
@@ -769,6 +783,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.critical('Could not figure out what to do with %s', gitdir)
         grokmirror.unlock_repo(fullpath)
 
+    e_cmp.close()
+
     if verify:
         if len(verify_fails):
             logger.critical('%s repos failed to verify', len(verify_fails))
@@ -779,9 +795,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
     hookscript = config['post_update_hook']
 
-    # XXX: 0.4.0 final: fix so we can ctrl-c out of threads
-
     if len(to_pull):
+
         if len(lock_fails) > 0:
             pull_threads -= len(lock_fails)
 
@@ -797,6 +812,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         logger.info('Will use %d threads to pull repos', pull_threads)
 
+        # noinspection PyTypeChecker
+        e_pull = em.counter(total=len(to_pull), desc='Updating :', unit='repos')
         logger.info('Updating %s repos from %s', len(to_pull), config['site'])
         in_queue = Queue()
         out_queue = Queue()
@@ -807,7 +824,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         for i in range(pull_threads):
             logger.debug('Spun up thread %s', i)
-            t = PullerThread(in_queue, out_queue, config, i)
+            t = PullerThread(in_queue, out_queue, config, i, e_pull)
             t.setDaemon(True)
             t.start()
 
@@ -828,6 +845,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 # this is rather hackish, but effective
                 last_modified -= 1
 
+        e_pull.close()
+
     # how many lockfiles have we seen?
     # If there are more lock_fails than there are
     # pull_threads configured, we skip cloning out of caution
@@ -836,6 +855,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         to_clone = []
 
     if len(to_clone):
+        # noinspection PyTypeChecker
+        e_clone = em.counter(total=len(to_clone), desc='Cloning  :', unit='repos')
         logger.info('Cloning %s repos from %s', len(to_clone), config['site'])
         # we use "existing" to track which repos can be used as references
         existing.extend(to_pull)
@@ -844,6 +865,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         clone_order(to_clone, manifest, to_clone_sorted, existing)
 
         for gitdir in to_clone_sorted:
+            e_clone.refresh()
             # Do we still need to clone it, or has another process
             # already done this for us?
             ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
@@ -859,6 +881,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             except IOError:
                 logger.info('Could not lock %s, skipping', gitdir)
                 lock_fails.append(gitdir)
+                e_clone.update()
                 continue
 
             reference = None
@@ -880,6 +903,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                         lock_fails.append(reference)
 
                     grokmirror.unlock_repo(fullpath)
+                    e_clone.update()
                     continue
             else:
                 success = clone_repo(toplevel, gitdir, config['site'])
@@ -910,6 +934,9 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 git_fails.append(gitdir)
 
             grokmirror.unlock_repo(fullpath)
+            e_clone.update()
+
+        e_clone.close()
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -989,7 +1016,10 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 logger.info('Not saving local manifest')
                 return 1
             else:
+                # noinspection PyTypeChecker
+                e_purge = em.counter(total=len(to_purge), desc='Purging  :', unit='repos')
                 for founddir in to_purge:
+                    e_purge.refresh()
                     if os.path.islink(founddir):
                         logger.info('Removing unreferenced symlink %s', gitdir)
                         os.unlink(founddir)
@@ -1008,6 +1038,9 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                                 lock_fails.append(gitdir)
                                 logger.info('%s is locked, not purging',
                                             gitdir)
+                    e_purge.update()
+
+                e_purge.close()
 
     # Go through all repos in culled and get the latest local timestamps.
     for gitdir in culled:

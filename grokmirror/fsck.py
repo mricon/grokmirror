@@ -25,6 +25,8 @@ import subprocess
 import random
 import datetime
 
+import enlighten
+
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 # default basic logger. We override it later.
@@ -221,6 +223,9 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
+    # noinspection PyTypeChecker
+    em = enlighten.get_manager(series=' -=#')
+
     if 'log' in config.keys():
         ch = logging.FileHandler(config['log'])
         formatter = logging.Formatter(
@@ -243,6 +248,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
+        em.enabled = False
 
     logger.addHandler(ch)
 
@@ -299,7 +305,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     todayiso = today.strftime('%F')
 
     # Go through the manifest and compare with status
-    for gitdir in manifest.keys():
+    for gitdir in list(manifest):
         fullpath = os.path.join(config['toplevel'], gitdir.lstrip('/'))
         if fullpath not in status.keys():
             # Newly added repository
@@ -323,6 +329,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
     # Go through status and queue checks for all the dirs that are due today
     # (unless --force, which is EVERYTHING)
+    eligible = []
+    eta = 0
     for fullpath in list(status):
         # Check to make sure it's still in the manifest
         gitdir = fullpath.replace(config['toplevel'], '', 1)
@@ -343,8 +351,27 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                          status[fullpath]['nextcheck'])
             continue
 
+        if 's_elapsed' in status[fullpath]:
+            eta += status[fullpath]['s_elapsed']
+
+        eligible.append(fullpath)
+
+    if not len(eligible):
+        logger.info('No new repos to check.')
+        return
+
+    if eta:
+        logger.info('Checking %s repositories, will take at least %s s',
+                    len(eligible), eta)
+    else:
+        logger.info('Checking %s repositories', eta)
+
+    # noinspection PyTypeChecker
+    run = em.counter(total=len(eligible), desc='Checking:', unit='repos')
+    for fullpath in eligible:
         logger.info('%s:', fullpath)
         # Calculate elapsed seconds
+        run.refresh()
         startt = time.time()
 
         # Wait till the repo is available and lock it for the duration of checks,
@@ -417,6 +444,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         if do_fsck:
             run_git_fsck(fullpath, config, conn_only)
 
+        run.update()
+
         # We're done with the repo now
         grokmirror.unlock_repo(fullpath)
 
@@ -448,16 +477,14 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         with open(config['statusfile'], 'wb') as stfh:
             stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
-    if not total_checked:
-        logger.info('No new repos to check.')
-    else:
-        logger.info('Repos checked: %s', total_checked)
-        logger.info('Total running time: %s s', int(total_elapsed))
-        with open(config['statusfile'], 'wb') as stfh:
-            stfh.write(json.dumps(status, indent=2).encode('utf-8'))
+    logger.info('Repos checked: %s', total_checked)
+    logger.info('Total running time: %s s', int(total_elapsed))
+    with open(config['statusfile'], 'wb') as stfh:
+        stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     lockf(flockh, LOCK_UN)
     flockh.close()
+    run.close()
 
 
 def parse_args():
