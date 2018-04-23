@@ -257,11 +257,10 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
     args = [hookscript, fullpath]
     logger.debug('[Thread-%s] Running: %s', threadid, ' '.join(args))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       universal_newlines=True).communicate()
+                                       stderr=subprocess.PIPE).communicate()
 
-    error = error.strip()
-    output = output.strip()
+    error = error.decode().strip()
+    output = output.decode().strip()
     if error:
         # Put hook stderror into warning
         logger.warning('[Thread-%s] Hook Stderr: %s', threadid, error)
@@ -278,8 +277,7 @@ def pull_repo(toplevel, gitdir, threadid='X'):
                  threadid, env['GIT_DIR'], ' '.join(args))
 
     child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=env,
-                             universal_newlines=True)
+                             stderr=subprocess.PIPE, env=env)
     (output, error) = child.communicate()
 
     error = error.decode().strip()

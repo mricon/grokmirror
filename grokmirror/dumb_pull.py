@@ -34,8 +34,8 @@ def git_rev_parse_all(gitdir):
     args = ['git', 'rev-parse', '--all']
 
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, env=env,
-                                       universal_newlines=True).communicate()
+                                       stderr=subprocess.PIPE,
+                                       env=env).communicate()
 
     error = error.decode().strip()
 
@@ -158,11 +158,10 @@ def run_post_update_hook(hookscript, gitdir):
     args = [hookscript, gitdir]
     logger.debug('Running: %s', ' '.join(args))
     (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       universal_newlines=True).communicate()
+                                       stderr=subprocess.PIPE).communicate()
 
-    error = error.strip()
-    output = output.strip()
+    error = error.decode().strip()
+    output = output.decode().strip()
     if error:
         # Put hook stderror into warning
         logger.warning('Hook Stderr: %s', error)
