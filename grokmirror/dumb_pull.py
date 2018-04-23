@@ -1,5 +1,5 @@
-#-*- coding: utf-8 -*-
-# Copyright (C) 2013 by The Linux Foundation and contributors
+# -*- coding: utf-8 -*-
+# Copyright (C) 2013-2018 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ def git_rev_parse_all(gitdir):
                                        stderr=subprocess.PIPE, env=env,
                                        universal_newlines=True).communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     if error:
         # Put things we recognize into debug

@@ -1,4 +1,5 @@
-# Copyright (C) 2013 by The Linux Foundation and contributors
+# -*- coding: utf-8 -*-
+# Copyright (C) 2013-2018 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -35,6 +36,7 @@ REPO_LOCKH = {}
 logger = logging.getLogger(__name__)
 
 _alt_repo_cache = None
+
 
 def _lockname(fullpath):
     lockpath = os.path.dirname(fullpath)

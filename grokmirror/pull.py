@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2013 by The Linux Foundation and contributors
+# Copyright (C) 2013-2018 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -282,7 +282,7 @@ def pull_repo(toplevel, gitdir, threadid='X'):
                              universal_newlines=True)
     (output, error) = child.communicate()
 
-    error = error.strip()
+    error = error.decode().strip()
 
     success = False
     if child.returncode == 0:
@@ -933,8 +933,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                                          target)
                             os.unlink(target)
                     elif os.path.exists(target):
-                        logger.warn('Deleted repo %s, because it is now'
-                                    ' a symlink to %s' % (target, source))
+                        logger.warning('Deleted repo %s, because it is now'
+                                       ' a symlink to %s' % (target, source))
                         shutil.rmtree(target)
 
                     # Here we re-check if we still need to do anything

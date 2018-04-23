@@ -1,5 +1,5 @@
-#-*- coding: utf-8 -*-
-# Copyright (C) 2013 by The Linux Foundation and contributors
+# -*- coding: utf-8 -*-
+# Copyright (C) 2013-2018 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 logger = logging.getLogger(__name__)
 
 
-def run_git_prune(fullpath, config, manifest):
+def run_git_prune(fullpath, config):
     prune_ok = True
     if 'prune' not in config.keys() or config['prune'] != 'yes':
         return prune_ok
@@ -174,6 +174,7 @@ def run_git_repack(fullpath, config, full_repack=False):
                 logger.critical("\t%s", entry)
 
     return repack_ok
+
 
 def run_git_fsck(fullpath, config, conn_only=False):
     env = {'GIT_DIR': fullpath}
@@ -346,6 +347,11 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         # Calculate elapsed seconds
         startt = time.time()
 
+        # Wait till the repo is available and lock it for the duration of checks,
+        # otherwise there may be false-positives if a mirrored repo is updated
+        # in the middle of fsck or repack.
+        grokmirror.lock_repo(fullpath, nonblocking=False)
+
         # Do we need to repack/prune it?
         do_repack = True
         fpr = grokmirror.get_repo_fingerprint(config['toplevel'], gitdir, force=True)
@@ -399,11 +405,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
                                      'full repack trigger', fullpath)
                         quick_repack_count += 1
 
-            repack_ok = run_git_repack(fullpath, config, full_repack)
-            if repack_ok:
-                prune_ok = run_git_prune(fullpath, config, manifest)
-
-            if repack_ok and prune_ok:
+            if run_git_repack(fullpath, config, full_repack):
+                run_git_prune(fullpath, config)
                 status[fullpath]['lastrepack'] = todayiso
                 status[fullpath]['quick_repack_count'] = quick_repack_count
             else:
@@ -413,6 +416,9 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         # We fsck last, after repacking and pruning
         if do_fsck:
             run_git_fsck(fullpath, config, conn_only)
+
+        # We're done with the repo now
+        grokmirror.unlock_repo(fullpath)
 
         total_checked += 1
 
