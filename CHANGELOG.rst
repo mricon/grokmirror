@@ -1,4 +1,4 @@
-v1.0.2 (2018-04-18)
+v1.0.2 (2018-04-23)
 -------------------
 - Make Python3 compatible (thanks to QuLogic for most of the work)
 - Rework grok-fsck to improve functionality:
@@ -17,3 +17,5 @@ v1.0.2 (2018-04-18)
   alternates to others
 - fix grok-fsck so it's more paranoid when pruning repos providing
   alternates to others (checks all repos on disk, not just manifest)
+- in verbose mode, most commands will draw progress bars (handy with
+  very large connections of repositories)
