@@ -305,7 +305,10 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     todayiso = today.strftime('%F')
 
     # Go through the manifest and compare with status
+    # noinspection PyTypeChecker
+    e_find = em.counter(total=len(manifest), desc='Discovering:', unit='repos', leave=False)
     for gitdir in list(manifest):
+        e_find.update()
         fullpath = os.path.join(config['toplevel'], gitdir.lstrip('/'))
         if fullpath not in status.keys():
             # Newly added repository
@@ -324,6 +327,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
             logger.info('%s:', fullpath)
             logger.info('  added : next check on %s', nextcheck)
 
+    e_find.close()
     total_checked = 0
     total_elapsed = 0
 
@@ -331,7 +335,10 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     # (unless --force, which is EVERYTHING)
     eligible = []
     eta = 0
+    # noinspection PyTypeChecker
+    e_cmp = em.counter(total=len(status), desc='Analyzing:', unit='repos', leave=False)
     for fullpath in list(status):
+        e_cmp.update()
         # Check to make sure it's still in the manifest
         gitdir = fullpath.replace(config['toplevel'], '', 1)
         gitdir = '/' + gitdir.lstrip('/')
@@ -356,6 +363,8 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
 
         eligible.append(fullpath)
 
+    e_cmp.close()
+
     if not len(eligible):
         logger.info('No new repos to check.')
         return
@@ -364,7 +373,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         logger.info('Checking %s repositories, will take at least %s s',
                     len(eligible), eta)
     else:
-        logger.info('Checking %s repositories', eta)
+        logger.info('Checking %s repositories', len(eligible))
 
     # noinspection PyTypeChecker
     run = em.counter(total=len(eligible), desc='Checking:', unit='repos', leave=False)

@@ -64,6 +64,7 @@ def update_manifest(manifest, toplevel, gitdir, usenow):
     modified = 0
 
     if not usenow:
+        # noinspection PyTypeChecker
         for branch in repo.branches:
             try:
                 if branch.commit.committed_date > modified:
