@@ -1,4 +1,4 @@
-v1.0.2 (2018-04-23)
+v1.1.0 (2018-04-24)
 -------------------
 - Make Python3 compatible (thanks to QuLogic for most of the work)
 - Rework grok-fsck to improve functionality:
