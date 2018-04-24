@@ -367,7 +367,7 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         logger.info('Checking %s repositories', eta)
 
     # noinspection PyTypeChecker
-    run = em.counter(total=len(eligible), desc='Checking:', unit='repos')
+    run = em.counter(total=len(eligible), desc='Checking:', unit='repos', leave=False)
     for fullpath in eligible:
         logger.info('%s:', fullpath)
         # Calculate elapsed seconds
@@ -477,14 +477,16 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
         with open(config['statusfile'], 'wb') as stfh:
             stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
-    logger.info('Repos checked: %s', total_checked)
-    logger.info('Total running time: %s s', int(total_elapsed))
+    run.close()
+    em.stop()
+    logger.info('Checked %s repos in %0.2fs', total_checked, total_elapsed)
+
     with open(config['statusfile'], 'wb') as stfh:
         stfh.write(json.dumps(status, indent=2).encode('utf-8'))
 
     lockf(flockh, LOCK_UN)
     flockh.close()
-    run.close()
+
 
 
 def parse_args():

@@ -622,9 +622,8 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.info('pull_threads is not set, consider setting it')
         pull_threads = 5
 
-    logger.info('Comparing repository info')
     # noinspection PyTypeChecker
-    e_cmp = em.counter(total=len(culled), desc='Comparing:', unit='repos')
+    e_cmp = em.counter(total=len(culled), desc='Comparing:', unit='repos', leave=False)
 
     for gitdir in list(culled):
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -783,6 +782,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.critical('Could not figure out what to do with %s', gitdir)
         grokmirror.unlock_repo(fullpath)
 
+    logger.info('Compared new manifest against %s repositories in %0.2fs', len(culled), e_cmp.elapsed)
     e_cmp.close()
 
     if verify:
@@ -813,7 +813,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         logger.info('Will use %d threads to pull repos', pull_threads)
 
         # noinspection PyTypeChecker
-        e_pull = em.counter(total=len(to_pull), desc='Updating :', unit='repos')
+        e_pull = em.counter(total=len(to_pull), desc='Updating :', unit='repos', leave=False)
         logger.info('Updating %s repos from %s', len(to_pull), config['site'])
         in_queue = Queue()
         out_queue = Queue()
@@ -845,7 +845,10 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 # this is rather hackish, but effective
                 last_modified -= 1
 
+        logger.info('Updates completed in %0.2fs', e_pull.elapsed)
         e_pull.close()
+    else:
+        logger.info('No repositories need updating')
 
     # how many lockfiles have we seen?
     # If there are more lock_fails than there are
@@ -856,7 +859,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
     if len(to_clone):
         # noinspection PyTypeChecker
-        e_clone = em.counter(total=len(to_clone), desc='Cloning  :', unit='repos')
+        e_clone = em.counter(total=len(to_clone), desc='Cloning  :', unit='repos', leave=False)
         logger.info('Cloning %s repos from %s', len(to_clone), config['site'])
         # we use "existing" to track which repos can be used as references
         existing.extend(to_pull)
@@ -936,7 +939,11 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             grokmirror.unlock_repo(fullpath)
             e_clone.update()
 
+        logger.info('Clones completed in %0.2fs' % e_clone.elapsed)
         e_clone.close()
+
+    else:
+        logger.info('No repositories need cloning')
 
     # loop through all entries and find any symlinks we need to set
     # We also collect all symlinks to do purging correctly
@@ -1017,7 +1024,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 return 1
             else:
                 # noinspection PyTypeChecker
-                e_purge = em.counter(total=len(to_purge), desc='Purging  :', unit='repos')
+                e_purge = em.counter(total=len(to_purge), desc='Purging  :', unit='repos', leave=False)
                 for founddir in to_purge:
                     e_purge.refresh()
                     if os.path.islink(founddir):
@@ -1040,7 +1047,14 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                                             gitdir)
                     e_purge.update()
 
+                logger.info('Purging completed in %0.2fs', e_purge.elapsed)
                 e_purge.close()
+
+        else:
+            logger.info('No repositories need purging')
+
+    # Done with progress bars
+    em.stop()
 
     # Go through all repos in culled and get the latest local timestamps.
     for gitdir in culled:

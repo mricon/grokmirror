@@ -280,7 +280,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     symlinks = []
     # noinspection PyTypeChecker
-    run = em.counter(total=len(gitdirs), desc='Processing:', unit='repos')
+    run = em.counter(total=len(gitdirs), desc='Processing:', unit='repos', leave=False)
     for gitdir in gitdirs:
         run.update()
         # check to make sure this gitdir is ok to export
@@ -303,7 +303,10 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         else:
             update_manifest(manifest, toplevel, gitdir, usenow)
 
+    logger.info('Updated %s records in %0.2fs', len(gitdirs), run.elapsed)
     run.close()
+    em.stop()
+
 
     if len(symlinks):
         set_symlinks(manifest, toplevel, symlinks)
