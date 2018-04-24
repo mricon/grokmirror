@@ -16,10 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import setuptools
+from setuptools import setup
 
-VERSION = '1.1.0'
 NAME = 'grokmirror'
+VERSION = '1.1.0'
+
 
 # Utility function to read the README file.
 # Used for the long_description.  It's nice, because now 1) we have a top level
@@ -29,16 +30,28 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
-setuptools.setup(
+setup(
     version=VERSION,
-    url='https://www.kernel.org/pub/software/network/grokmirror',
+    url='https://github.com/mricon/grokmirror',
+    download_url='https://www.kernel.org/pub/software/network/grokmirror/%s-%s.tar.xz' % (NAME, VERSION),
     name=NAME,
     description='Smartly mirror git repositories that use grokmirror',
     author='Konstantin Ryabitsev',
-    author_email='mricon@kernel.org',
+    author_email='konstantin@linuxfoundation.org',
     packages=[NAME],
     license='GPLv3+',
     long_description=read('README.rst'),
+    long_description_content_type='text/x-rst',
+    keywords=['git', 'mirroring', 'repositories'],
+    project_urls={
+        'Source': 'https://github.com/mricon/grokmirror/',
+        'Tracker': 'https://github.com/mricon/grokmirror/issues',
+    },
+    install_requires=[
+        'anyjson',
+        'GitPython>=2.1.8',
+        'enlighten',
+    ],
     entry_points={
         'console_scripts': [
             "grok-dumb-pull=grokmirror.dumb_pull:command",

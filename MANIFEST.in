@@ -1,4 +1,3 @@
-include COPYING
+include LICENSE.txt
 include *.rst
 include *.conf
-include *.spec
