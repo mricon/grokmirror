@@ -1,0 +1,10 @@
+-----BEGIN PGP SIGNATURE-----
+Comment: This signature is for the .tar version of the archive
+Comment: git archive --format tar --prefix=grokmirror-1.1.0/ v1.1.0
+Comment: git version 2.17.1
+
+iHUEABYIAB0WIQR2vl2yUnHhSB5njDW2xBzjVmSZbAUCW0419QAKCRC2xBzjVmSZ
+bK8HAP0bb9d7dYENP9pu+YffOulQYiJ+SdMZk0lrlxayp2C8iAD5AYj+nrxn5MFA
+7ZnZdqZmF/BMPdh7pRYBChAbcVDmtgk=
+=djtQ
+-----END PGP SIGNATURE-----
