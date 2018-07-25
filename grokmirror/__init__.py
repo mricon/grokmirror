@@ -28,7 +28,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.1.0'
+VERSION = '1.1.1'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 

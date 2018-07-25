@@ -1,3 +1,9 @@
+v1.1.1 (2018-07-25)
+-------------------
+- Quickfix a bug that was causing repositories to never be repacked
+  due to miscalculated fingerprints.
+
+
 v1.1.0 (2018-04-24)
 -------------------
 - Make Python3 compatible (thanks to QuLogic for most of the work)

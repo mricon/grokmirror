@@ -378,6 +378,9 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     # noinspection PyTypeChecker
     run = em.counter(total=len(eligible), desc='Checking:', unit='repos', leave=False)
     for fullpath in eligible:
+        gitdir = fullpath.replace(config['toplevel'], '', 1)
+        gitdir = '/' + gitdir.lstrip('/')
+
         logger.info('%s:', fullpath)
         # Calculate elapsed seconds
         run.refresh()
