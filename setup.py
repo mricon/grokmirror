@@ -32,7 +32,7 @@ def read(fname):
 
 setup(
     version=VERSION,
-    url='https://github.com/mricon/grokmirror',
+    url='https://git.kernel.org/pub/scm/utils/grokmirror/grokmirror.git',
     download_url='https://www.kernel.org/pub/software/network/grokmirror/%s-%s.tar.xz' % (NAME, VERSION),
     name=NAME,
     description='Smartly mirror git repositories that use grokmirror',
@@ -44,7 +44,7 @@ setup(
     long_description_content_type='text/x-rst',
     keywords=['git', 'mirroring', 'repositories'],
     project_urls={
-        'Source': 'https://github.com/mricon/grokmirror/',
+        'Source': 'https://git.kernel.org/pub/scm/utils/grokmirror/grokmirror.git',
         'Tracker': 'https://github.com/mricon/grokmirror/issues',
     },
     install_requires=[
