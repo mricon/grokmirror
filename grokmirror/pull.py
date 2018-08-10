@@ -204,6 +204,12 @@ def set_repo_params(toplevel, gitdir, owner, description, reference):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     repo = Repo(fullpath)
 
+    # Make sure the repo is set as gc.auto=0, because running auto-gc
+    # on a repo that has alternates to other repos can result in
+    # corruption. We run our own gc inside the grok-fsck process that
+    # is aware of alternates and won't blow things up.
+    repo.git.config('gc.auto', '0')
+
     if description is not None:
         try:
             if repo.description != description:

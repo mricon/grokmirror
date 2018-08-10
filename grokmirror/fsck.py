@@ -45,7 +45,10 @@ def run_git_prune(fullpath, config):
         return prune_ok
 
     env = {'GIT_DIR': fullpath}
-    args = ['/usr/bin/git', 'prune']
+    # We set expire to yesterday in order to avoid race conditions
+    # in repositories that are actively being accessed at the time of
+    # running the prune job.
+    args = ['/usr/bin/git', 'prune', '--expire=yesterday']
     logger.info('  prune : pruning')
 
     logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
@@ -87,20 +90,36 @@ def run_git_repack(fullpath, config, full_repack=False):
     if 'repack' not in config.keys() or config['repack'] != 'yes':
         return repack_ok
 
-    repack_flags = '-A -d -l -q'
+    # Figure out what our repack flags should be. Regular repacks
+    # of repositories that are using alternates get -Adlb.
+    # Repositories that are used by others as alternates (mother
+    # repositories) get -adkb.
 
-    if full_repack and 'full_repack_flags' in config.keys():
-        repack_flags = config['full_repack_flags']
-        logger.debug('Time to do a full repack of %s', fullpath)
+    # Are any other repos using us in their objects/info/alternates?
+    gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
+    if grokmirror.is_alt_repo(config['toplevel'], gitdir):
+        # we are a "mother repo"
+        repack_flags = ['-a', '-d', '-k', '-b']
+    elif os.path.exists(os.path.join(gitpath, 'objects/info/alternates')):
+        # we are a "child repo", so don't set -b
+        repack_flags = ['-A', '-d', '-l']
+    else:
+        # we have no relationships with other repos
+        repack_flags = ['-a', '-d', '-b']
 
-    elif 'repack_flags' in config.keys():
-        repack_flags = config['repack_flags']
+    if full_repack:
+        logger.info(' repack : time to perform a full repack')
+        repack_flags.append('-f')
+        # Be aggressive when doing a full repack
+        repack_flags.append('--depth=50')
+        repack_flags.append('--window=250')
 
-    flags = repack_flags.split()
+    # We always tack on -q
+    repack_flags.append('-q')
 
     env = {'GIT_DIR': fullpath}
-    args = ['/usr/bin/git', 'repack'] + flags
-    logger.info(' repack : repacking with %s', repack_flags)
+    args = ['/usr/bin/git', 'repack'] + repack_flags
+    logger.info(' repack : repacking with "%s"', ' '.join(repack_flags))
 
     logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
 
@@ -299,7 +318,10 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
     else:
         status = {}
 
-    frequency = int(config['frequency'])
+    if 'frequency' in config:
+        frequency = int(config['frequency'])
+    else:
+        frequency = 30
 
     today = datetime.datetime.today()
     todayiso = today.strftime('%F')
@@ -349,8 +371,6 @@ def fsck_mirror(name, config, verbose=False, force=False, conn_only=False, repac
             continue
 
         # If nextcheck is before today, set it to today
-        # XXX: If a system comes up after being in downtime for a while, this
-        #      may cause pain for them, so perhaps use randomization here?
         nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'],
                                                '%Y-%m-%d')
         if nextcheck > today and not force:

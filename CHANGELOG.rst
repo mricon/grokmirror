@@ -1,3 +1,11 @@
+master
+------
+- Make sure to set gc.auto=0 on repositories to avoid pruning repos
+  that are acting as alternates to others. We run our own prune
+  during fsck, so there is no need to auto-gc, ever (unless you
+  didn't set up grok-fsck, in which case you're not doing it right).
+
+
 v1.1.1 (2018-07-25)
 -------------------
 - Quickfix a bug that was causing repositories to never be repacked
