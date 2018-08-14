@@ -283,20 +283,13 @@ def run_post_update_hook(hookscript, toplevel, gitdir, threadid='X'):
 
 
 def pull_repo(toplevel, gitdir, threadid='X'):
-    env = {'GIT_DIR': os.path.join(toplevel, gitdir.lstrip('/'))}
-    args = ['/usr/bin/git', 'remote', 'update', '--prune']
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    args = ['remote', 'update', '--prune']
 
-    logger.debug('[Thread-%s] Running: GIT_DIR=%s %s',
-                 threadid, env['GIT_DIR'], ' '.join(args))
-
-    child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, env=env)
-    (output, error) = child.communicate()
-
-    error = error.decode().strip()
+    retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
     success = False
-    if child.returncode == 0:
+    if retcode == 0:
         success = True
 
     if error:
@@ -322,7 +315,7 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     source = os.path.join(site, gitdir.lstrip('/'))
     dest = os.path.join(toplevel, gitdir.lstrip('/'))
 
-    args = ['/usr/bin/git', 'clone', '--mirror']
+    args = ['clone', '--mirror']
     if reference is not None:
         reference = os.path.join(toplevel, reference.lstrip('/'))
         args.append('--reference')
@@ -335,17 +328,11 @@ def clone_repo(toplevel, gitdir, site, reference=None):
     if reference is not None:
         logger.info('With reference to %s', reference)
 
-    logger.debug('Running: %s', ' '.join(args))
-
-    child = subprocess.Popen(args, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-    (output, error) = child.communicate()
+    retcode, output, error = grokmirror.run_git_command(None, args)
 
     success = False
-    if child.returncode == 0:
+    if retcode == 0:
         success = True
-
-    error = error.decode().strip()
 
     if error:
         # Put things we recognize into debug

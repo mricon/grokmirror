@@ -19,6 +19,7 @@ import os
 import time
 import anyjson
 import fnmatch
+import subprocess
 
 import logging
 
@@ -28,14 +29,43 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.1.1'
+VERSION = '1.2-pre'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
+GITBIN = '/usr/bin/git'
 
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 
 _alt_repo_cache = None
+
+
+def run_git_command(fullpath, args):
+    if 'GITBIN' in os.environ:
+        _git = os.environ['GITBIN']
+    else:
+        _git = GITBIN
+
+    if not os.path.isfile(_git) and os.access(_git, os.X_OK):
+        # we hope for the best by using 'git' without full path
+        _git = 'git'
+
+    if fullpath is not None:
+        cmdargs = [_git, '--git-dir', fullpath] + args
+    else:
+        cmdargs = [_git] + args
+
+    logger.debug('Running: %s', ' '.join(cmdargs))
+
+    child = subprocess.Popen(cmdargs,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+    output, error = child.communicate()
+
+    output = output.decode().strip()
+    error = error.decode().strip()
+
+    return child.returncode, output, error
 
 
 def _lockname(fullpath):

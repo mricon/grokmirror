@@ -28,16 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 def git_rev_parse_all(gitdir):
-    logger.debug('Running: GIT_DIR=%s git rev-parse --all', gitdir)
-
-    env = {'GIT_DIR': gitdir}
-    args = ['git', 'rev-parse', '--all']
-
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       env=env).communicate()
-
-    error = error.decode().strip()
+    args = ['rev-parse', '--all']
+    retcode, output, error = grokmirror.run_git_command(gitdir, args)
 
     if error:
         # Put things we recognize into debug
@@ -53,14 +45,8 @@ def git_rev_parse_all(gitdir):
     return output
 
 
-def git_remote_update(args, env):
-    logger.debug('Running: GIT_DIR=%s %s', env['GIT_DIR'], ' '.join(args))
-
-    (output, error) = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=env).communicate()
-
-    error = error.decode().strip()
+def git_remote_update(args, fullpath):
+    retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
     if error:
         # Put things we recognize into debug
@@ -97,8 +83,6 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
         logger.info('\tAssuming another process is running.')
         return False
 
-    env = {'GIT_DIR': gitdir}
-
     old_revs = git_rev_parse_all(gitdir)
 
     if svn:
@@ -110,8 +94,8 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                 remote = '--all'
 
             logger.info('Running git-svn fetch %s in %s', remote, gitdir)
-            args = ['/usr/bin/git', 'svn', 'fetch', remote]
-            git_remote_update(args, env)
+            args = ['svn', 'fetch', remote]
+            git_remote_update(args, gitdir)
 
     else:
         # Not an svn remote
@@ -128,10 +112,10 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                     remotefound = True
                     logger.debug('existing remote %s matches %s',
                                  hasremote, remote)
-                    args = ['/usr/bin/git', 'remote', 'update', hasremote]
+                    args = ['remote', 'update', hasremote]
                     logger.info('Updating remote %s in %s', hasremote, gitdir)
 
-                    git_remote_update(args, env)
+                    git_remote_update(args, gitdir)
 
             if not remotefound:
                 logger.info('Could not find any remotes matching %s in %s',
@@ -262,6 +246,7 @@ def command():
     return dumb_pull(
         args, verbose=opts.verbose, svn=opts.svn, remotes=opts.remotes,
         posthook=opts.posthook, logfile=opts.logfile)
+
 
 if __name__ == '__main__':
     command()

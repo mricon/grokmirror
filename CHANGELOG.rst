@@ -1,9 +1,24 @@
-master
-------
+v1.2-master
+-----------
 - Make sure to set gc.auto=0 on repositories to avoid pruning repos
   that are acting as alternates to others. We run our own prune
   during fsck, so there is no need to auto-gc, ever (unless you
   didn't set up grok-fsck, in which case you're not doing it right).
+- Rework the repack code to be more clever -- instead of repacking
+  based purely on dates, we now track the number of loose objects
+  and the number of generated packs. Many of the settings are
+  hardcoded for the moment while testing, but will probably end up
+  settable via global and per-repository config settings.
+- The following fsck.conf settings have no further effect:
+
+    - repack_flags (replaced with extra_repack_flags)
+    - full_repack_flags (replaced with extra_repack_flags_full)
+    - full_repack_every (we now figure it out ourselves)
+
+- Move git command invocation routines into a central function to
+  reduce the amount of code duplication. You can also set the path
+  to the git binary using the GITBIN env variable or by simply
+  adding it to your path.
 
 
 v1.1.1 (2018-07-25)
