@@ -401,6 +401,8 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             #       optimal values will depend on the size of the repo as a whole
             max_loose_objects = 1200
             max_packs = 20
+            pc_loose_objects = 10
+            pc_loose_size = 10
 
             # first, compare against max values:
             if packs >= max_packs:
@@ -419,11 +421,13 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
                 total_size = size_loose + size_pack
                 # set some arbitrary "worth bothering" limits so we don't
                 # continuously repack tiny repos.
-                if total_obj > 100 and count_loose/total_obj*100 >= 5:
-                    logger.debug('Triggering repack of %s because loose objects > 10%% of total', fullpath)
+                if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
+                    logger.debug('Triggering repack of %s because loose objects > %s%% of total',
+                                 fullpath, pc_loose_objects)
                     needs_repack = 1
-                elif total_size > 1024 and size_loose/total_size*100 >= 5:
-                    logger.debug('Triggering repack of %s because loose size > 10%% of total', fullpath)
+                elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
+                    logger.debug('Triggering repack of %s because loose size > %s%% of total',
+                                 fullpath, pc_loose_size)
                     needs_repack = 1
 
         # Do we need to fsck it?
