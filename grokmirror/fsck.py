@@ -97,6 +97,12 @@ def run_git_repack(fullpath, config, level=1):
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     if grokmirror.is_alt_repo(config['toplevel'], gitdir):
         # we are a "mother repo"
+        # are we using alternates ourselves? Multiple levels of alternates are
+        # a bad idea in general due high possibility of corruption.
+        if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
+            logger.warning('warning : has alternates and is used by others for alternates')
+            logger.warning('        : this can cause grandchild corruption')
+            repack_flags.append('-l')
         repack_flags.append('-k')
         if level > 1:
             repack_flags.append('-a')
@@ -148,6 +154,10 @@ def run_git_repack(fullpath, config, level=1):
 
     # only repack refs on full repacks
     if level < 2:
+        # do we still have loose objects after repacking?
+        obj_info = get_repo_obj_info(fullpath)
+        if obj_info['count'] != '0':
+            return run_git_prune(fullpath, config)
         return repack_ok
 
     # repacking refs requires a separate command, so run it now
@@ -202,6 +212,8 @@ def run_git_fsck(fullpath, config, conn_only=False):
         debug = []
         warn = []
         for line in output.split('\n') + error.split('\n'):
+            if not len(line.strip()):
+                continue
             ignored = False
             for estring in config['ignore_errors']:
                 if line.find(estring) != -1:
@@ -518,7 +530,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
 
     run.close()
     em.stop()
-    logger.info('Checked %s repos in %0.2fs', total_checked, total_elapsed)
+    logger.info('Processed %s repos in %0.2fs', total_checked, total_elapsed)
 
     with open(config['statusfile'], 'wb') as stfh:
         stfh.write(json.dumps(status, indent=2).encode('utf-8'))
