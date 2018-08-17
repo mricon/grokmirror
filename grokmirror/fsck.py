@@ -392,8 +392,12 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
         needs_repack = needs_prune = needs_fsck = 0
 
         obj_info = get_repo_obj_info(fullpath)
-        packs = int(obj_info['packs'])
-        count_loose = int(obj_info['count'])
+        try:
+            packs = int(obj_info['packs'])
+            count_loose = int(obj_info['count'])
+        except KeyError:
+            logger.warning('Unable to count objects in %s, skipping' % fullpath)
+            continue
 
         if 'repack' not in config.keys() or config['repack'] != 'yes':
             # don't look at me if you turned off repack
