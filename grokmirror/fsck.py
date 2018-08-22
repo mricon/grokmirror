@@ -198,7 +198,7 @@ def run_git_repack(fullpath, config, level=1):
 
 
 def run_git_fsck(fullpath, config, conn_only=False):
-    args = ['fsck', '--no-dangling']
+    args = ['fsck', '--no-dangling', '--no-reflogs']
     if conn_only:
         args.append('--connectivity-only')
         logger.info('   fsck : running with --connectivity-only')
