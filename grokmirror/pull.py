@@ -676,6 +676,18 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         # Is the directory in place?
         if os.path.exists(fullpath):
+            # Did grok-fsck request to reclone it?
+            rfile = os.path.join(fullpath, 'grokmirror.reclone')
+            if os.path.exists(rfile):
+                logger.info('Reclone requested for %s:', gitdir)
+                with open(rfile, 'r') as rfh:
+                    reason = rfh.read()
+                    logger.info('  %s', reason)
+
+                to_clone.append(gitdir)
+                grokmirror.unlock_repo(fullpath)
+                continue
+
             # Fix owner and description, if necessary
             if gitdir in mymanifest.keys():
                 # This code is hurky and needs to be cleaned up
@@ -862,6 +874,16 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
         for gitdir in to_clone_sorted:
             e_clone.refresh()
+
+            fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+
+            # Did grok-fsck request to reclone it?
+            rfile = os.path.join(fullpath, 'grokmirror.reclone')
+            if os.path.exists(rfile):
+                logger.debug('Removing %s for reclone', gitdir)
+                shutil.move(fullpath, '%s.reclone' % fullpath)
+                shutil.rmtree('%s.reclone' % fullpath)
+
             # Do we still need to clone it, or has another process
             # already done this for us?
             ts = grokmirror.get_repo_timestamp(toplevel, gitdir)
@@ -869,8 +891,6 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
             if ts > 0:
                 logger.debug('Looks like %s already cloned, skipping', gitdir)
                 continue
-
-            fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
 
             try:
                 grokmirror.lock_repo(fullpath, nonblocking=True)

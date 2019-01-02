@@ -23,7 +23,6 @@ import time
 import json
 import random
 import datetime
-import re
 
 import enlighten
 
@@ -31,6 +30,29 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
+
+
+def check_reclone_error(fullpath, config, errors):
+    reclone = None
+    for line in errors:
+        for estring in config['reclone_on_errors']:
+            if line.find(estring) != -1:
+                reclone = line
+                logger.debug('Will re-clone due to this error: %s', line)
+                logger.info('  error : re-clone requested')
+                break
+    if reclone is None:
+        return
+
+    gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
+    rfile = os.path.join(gitdir, 'grokmirror.reclone')
+    # Have we already requested a reclone?
+    if os.path.exists(rfile):
+        logger.debug('Already requested repo reclone for %s', fullpath)
+        return
+
+    with open(rfile, 'w') as rfh:
+        rfh.write('Requested by grok-fsck due to error: %s' % reclone)
 
 
 def run_git_prune(fullpath, config):
@@ -102,15 +124,19 @@ def run_git_repack(fullpath, config, level=1):
         if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
             logger.warning('warning : has alternates and is used by others for alternates')
             logger.warning('        : this can cause grandchild corruption')
+            repack_flags.append('-A')
             repack_flags.append('-l')
-        repack_flags.append('-k')
-        if level > 1:
+        else:
+            # We always want -a on mother repos, together with -k
             repack_flags.append('-a')
+            repack_flags.append('-k')
+
     elif os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
         # we are a "child repo"
         repack_flags.append('-l')
         if level > 1:
             repack_flags.append('-A')
+
     else:
         # we have no relationships with other repos
         if level > 1:
@@ -302,6 +328,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     if os.path.exists(config['statusfile']):
         logger.info('Reading status from %s', config['statusfile'])
         stfh = open(config['statusfile'], 'rb')
+        # noinspection PyBroadException
         try:
             # Format of the status file:
             #  {
@@ -448,7 +475,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
 
         # Do we need to fsck it?
         if not (repack_all_quick or repack_all_full or repack_only):
-            nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'],'%Y-%m-%d')
+            nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
             if nextcheck <= today or force:
                 needs_fsck = 1
 
@@ -543,7 +570,6 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     flockh.close()
 
 
-
 def parse_args():
     from optparse import OptionParser
 
@@ -614,6 +640,17 @@ def grok_fsck(config, verbose=False, force=False, repack_only=False, conn_only=F
                 if len(estring):
                     ignore_errors.append(estring)
             config['ignore_errors'] = ignore_errors
+
+        if 'reclone_on_errors' not in config:
+            # We don't do any defaults for this one
+            config['reclone_on_errors'] = []
+        else:
+            reclone_on_errors = []
+            for estring in config['reclone_on_errors'].split('\n'):
+                estring = estring.strip()
+                if len(estring):
+                    reclone_on_errors.append(estring)
+            config['reclone_on_errors'] = reclone_on_errors
 
         fsck_mirror(section, config, verbose, force, repack_only, conn_only,
                     repack_all_quick, repack_all_full)
