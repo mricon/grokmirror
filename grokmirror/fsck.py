@@ -37,15 +37,20 @@ def check_reclone_error(fullpath, config, errors):
     for line in errors:
         for estring in config['reclone_on_errors']:
             if line.find(estring) != -1:
-                reclone = line
-                logger.debug('Will re-clone due to this error: %s', line)
-                logger.info('  error : re-clone requested')
+                # is preciousObjects set for this repo?
+                if check_precious_objects(fullpath):
+                    logger.critical('\tpreciousObjects set, not requesting auto-reclone')
+                    return
+                else:
+                    reclone = line
+                    logger.critical('\trequested auto-reclone')
+                break
+            if reclone is not None:
                 break
     if reclone is None:
         return
 
-    gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
-    rfile = os.path.join(gitdir, 'grokmirror.reclone')
+    rfile = os.path.join(fullpath, 'grokmirror.reclone')
     # Have we already requested a reclone?
     if os.path.exists(rfile):
         logger.debug('Already requested repo reclone for %s', fullpath)
@@ -94,6 +99,7 @@ def run_git_prune(fullpath, config):
             prune_ok = False
             for entry in warn:
                 logger.critical("\t%s", entry)
+            check_reclone_error(fullpath, config, warn)
 
     return prune_ok
 
@@ -119,6 +125,7 @@ def run_git_repack(fullpath, config, level=1):
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     if grokmirror.is_alt_repo(config['toplevel'], gitdir):
         # we are a "mother repo"
+        set_precious_objects(fullpath)
         # are we using alternates ourselves? Multiple levels of alternates are
         # a bad idea in general due high possibility of corruption.
         if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
@@ -173,6 +180,7 @@ def run_git_repack(fullpath, config, level=1):
             repack_ok = False
             for entry in warn:
                 logger.critical("\t%s", entry)
+            check_reclone_error(fullpath, config, warn)
 
     if not repack_ok:
         # No need to repack refs if repo is broken
@@ -216,6 +224,8 @@ def run_git_repack(fullpath, config, level=1):
             for entry in warn:
                 logger.critical("\t%s", entry)
 
+            check_reclone_error(fullpath, config, warn)
+
     if repack_ok and 'prune' in config and config['prune'] == 'yes':
         # run prune now
         return run_git_prune(fullpath, config)
@@ -255,6 +265,7 @@ def run_git_fsck(fullpath, config, conn_only=False):
             logger.critical('%s has critical errors:', fullpath)
             for entry in warn:
                 logger.critical("\t%s", entry)
+            check_reclone_error(fullpath, config, warn)
 
 
 def get_repo_obj_info(fullpath):
@@ -268,6 +279,21 @@ def get_repo_obj_info(fullpath):
             obj_info[key] = value.strip()
 
     return obj_info
+
+
+def set_precious_objects(fullpath):
+    # It's better to just set it blindly without checking first,
+    # as this results in one fewer shell-out.
+    args = ['config', 'extensions.preciousObjects', 'true']
+    grokmirror.run_git_command(fullpath, args)
+
+
+def check_precious_objects(fullpath):
+    args = ['config', '--get', 'extensions.preciousObjects']
+    retcode, output, error = grokmirror.run_git_command(fullpath, args)
+    if output.strip().lower() == 'true':
+        return True
+    return False
 
 
 def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
