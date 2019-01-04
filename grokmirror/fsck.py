@@ -109,17 +109,13 @@ def run_git_repack(fullpath, config, level=1):
     repack_ok = True
 
     # Figure out what our repack flags should be.
-    # we always want -d
-    repack_flags = ['-d']
+    repack_flags = list()
     if 'extra_repack_flags' in config and len(config['extra_repack_flags']):
         repack_flags += config['extra_repack_flags'].split()
 
-    if level > 1:
-        logger.info(' repack : performing a full repack for optimal deltas')
-        # for full repacks, we always want -f, -b, --pack-kept-objects
-        repack_flags += ['-f', '-b', '--pack-kept-objects']
-        if 'extra_repack_flags_full' in config and len(config['extra_repack_flags_full']):
-            repack_flags += config['extra_repack_flags_full'].split()
+    full_repack_flags = ['-f', '-b', '--pack-kept-objects']
+    if 'extra_repack_flags_full' in config and len(config['extra_repack_flags_full']):
+        full_repack_flags += config['extra_repack_flags_full'].split()
 
     # Are any other repos using us in their objects/info/alternates?
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
@@ -134,20 +130,26 @@ def run_git_repack(fullpath, config, level=1):
             repack_flags.append('-A')
             repack_flags.append('-l')
         else:
-            # We always want -a on mother repos, together with -k
             repack_flags.append('-a')
-            repack_flags.append('-k')
+            if level > 1:
+                logger.info(' repack : performing a full repack for optimal deltas')
+                repack_flags += full_repack_flags
 
     elif os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
         # we are a "child repo"
         repack_flags.append('-l')
+        repack_flags.append('-d')
         if level > 1:
             repack_flags.append('-A')
 
     else:
         # we have no relationships with other repos
+        repack_flags.append('-d')
         if level > 1:
+            logger.info(' repack : performing a full repack for optimal deltas')
             repack_flags.append('-a')
+            repack_flags.append('-k')
+            repack_flags += full_repack_flags
 
     args = ['repack'] + repack_flags
     logger.info(' repack : repacking with "%s"', ' '.join(repack_flags))
@@ -445,6 +447,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
         needs_repack = needs_prune = needs_fsck = 0
 
         obj_info = get_repo_obj_info(fullpath)
+        has_precious_objects = check_precious_objects(fullpath)
         try:
             packs = int(obj_info['packs'])
             count_loose = int(obj_info['count'])
@@ -477,27 +480,29 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             if packs >= max_packs:
                 logger.debug('Triggering full repack of %s because packs > 20', fullpath)
                 needs_repack = 2
-            elif count_loose >= max_loose_objects:
-                logger.debug('Triggering quick repack of %s because loose objects > 1200', fullpath)
-                needs_repack = 1
-            else:
-                # is the number of loose objects or their size more than 10% of
-                # the overall total?
-                in_pack = int(obj_info['in-pack'])
-                size_loose = int(obj_info['size'])
-                size_pack = int(obj_info['size-pack'])
-                total_obj = count_loose + in_pack
-                total_size = size_loose + size_pack
-                # set some arbitrary "worth bothering" limits so we don't
-                # continuously repack tiny repos.
-                if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
-                    logger.debug('Triggering repack of %s because loose objects > %s%% of total',
-                                 fullpath, pc_loose_objects)
+            # If we have precious objects, we don't consider loose objects for anything
+            elif not has_precious_objects:
+                if count_loose >= max_loose_objects:
+                    logger.debug('Triggering quick repack of %s because loose objects > 1200', fullpath)
                     needs_repack = 1
-                elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
-                    logger.debug('Triggering repack of %s because loose size > %s%% of total',
-                                 fullpath, pc_loose_size)
-                    needs_repack = 1
+                else:
+                    # is the number of loose objects or their size more than 10% of
+                    # the overall total?
+                    in_pack = int(obj_info['in-pack'])
+                    size_loose = int(obj_info['size'])
+                    size_pack = int(obj_info['size-pack'])
+                    total_obj = count_loose + in_pack
+                    total_size = size_loose + size_pack
+                    # set some arbitrary "worth bothering" limits so we don't
+                    # continuously repack tiny repos.
+                    if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
+                        logger.debug('Triggering repack of %s because loose objects > %s%% of total',
+                                     fullpath, pc_loose_objects)
+                        needs_repack = 1
+                    elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
+                        logger.debug('Triggering repack of %s because loose size > %s%% of total',
+                                     fullpath, pc_loose_size)
+                        needs_repack = 1
 
         # Do we need to fsck it?
         if not (repack_all_quick or repack_all_full or repack_only):
@@ -547,7 +552,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
                     status[fullpath]['lastfullrepack'] = todayiso
             else:
                 logger.warning('Repacking %s was unsuccessful, '
-                               'please run fsck manually!', fullpath)
+                               'not running fsck.', fullpath)
                 grokmirror.unlock_repo(fullpath)
                 continue
 
