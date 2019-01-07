@@ -512,7 +512,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
         manifest = grokmirror.read_manifest(manifile)
         # Don't accept empty manifests -- that indicates something is wrong
         if not len(manifest.keys()):
-            logger.critical('Remote manifest empty or unparseable! Quitting.')
+            logger.warning('Remote manifest empty or unparseable! Quitting.')
             return 1
 
     else:
@@ -943,7 +943,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
                 culled[gitdir]['fingerprint'] = my_fingerprint
                 run_post_update_hook(hookscript, toplevel, gitdir)
             else:
-                logger.critical('Was not able to clone %s', gitdir)
+                logger.warning('Was not able to clone %s', gitdir)
                 # Remove it from our manifest so we can try re-cloning
                 # next time grok-pull runs
                 del culled[gitdir]

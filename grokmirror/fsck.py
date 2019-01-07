@@ -37,9 +37,10 @@ def check_reclone_error(fullpath, config, errors):
     for line in errors:
         for estring in config['reclone_on_errors']:
             if line.find(estring) != -1:
-                # is preciousObjects set for this repo?
-                if check_precious_objects(fullpath):
-                    logger.critical('\tpreciousObjects set, not requesting auto-reclone')
+                # is this repo used for alternates?
+                gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
+                if grokmirror.is_alt_repo(config['toplevel'], gitdir):
+                    logger.critical('\tused for alternates, not requesting auto-reclone')
                     return
                 else:
                     reclone = line
@@ -108,6 +109,8 @@ def run_git_repack(fullpath, config, level=1):
     # Returns false if we hit any errors on the way
     repack_ok = True
 
+    is_precious = check_precious_objects(fullpath)
+
     # Figure out what our repack flags should be.
     repack_flags = list()
     if 'extra_repack_flags' in config and len(config['extra_repack_flags']):
@@ -121,7 +124,13 @@ def run_git_repack(fullpath, config, level=1):
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     if grokmirror.is_alt_repo(config['toplevel'], gitdir):
         # we are a "mother repo"
-        set_precious_objects(fullpath)
+        if not is_precious and ('precious' in config and config['precious'] == 'yes'):
+            is_precious = True
+            set_precious_objects(fullpath)
+
+        if not is_precious:
+            repack_flags.append('-k')
+
         # are we using alternates ourselves? Multiple levels of alternates are
         # a bad idea in general due high possibility of corruption.
         if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
@@ -138,18 +147,20 @@ def run_git_repack(fullpath, config, level=1):
     elif os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
         # we are a "child repo"
         repack_flags.append('-l')
-        repack_flags.append('-d')
         if level > 1:
             repack_flags.append('-A')
 
     else:
         # we have no relationships with other repos
-        repack_flags.append('-d')
         if level > 1:
             logger.info(' repack : performing a full repack for optimal deltas')
             repack_flags.append('-a')
-            repack_flags.append('-k')
+            if not is_precious:
+                repack_flags.append('-k')
             repack_flags += full_repack_flags
+
+    if not is_precious:
+        repack_flags.append('-d')
 
     args = ['repack'] + repack_flags
     logger.info(' repack : repacking with "%s"', ' '.join(repack_flags))
@@ -286,6 +297,7 @@ def get_repo_obj_info(fullpath):
 def set_precious_objects(fullpath):
     # It's better to just set it blindly without checking first,
     # as this results in one fewer shell-out.
+    logger.debug('Setting preciousObjects for %s', fullpath)
     args = ['config', 'extensions.preciousObjects', 'true']
     grokmirror.run_git_command(fullpath, args)
 
@@ -389,6 +401,12 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     today = datetime.datetime.today()
     todayiso = today.strftime('%F')
 
+    if force:
+        # Use randomization for next check, again
+        checkdelay = random.randint(1, frequency)
+    else:
+        checkdelay = frequency
+
     # Go through the manifest and compare with status
     # noinspection PyTypeChecker
     e_find = em.counter(total=len(manifest), desc='Discovering:', unit='repos', leave=False)
@@ -447,7 +465,6 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
         needs_repack = needs_prune = needs_fsck = 0
 
         obj_info = get_repo_obj_info(fullpath)
-        has_precious_objects = check_precious_objects(fullpath)
         try:
             packs = int(obj_info['packs'])
             count_loose = int(obj_info['count'])
@@ -455,16 +472,23 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             logger.warning('Unable to count objects in %s, skipping' % fullpath)
             continue
 
+        schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
+        nextcheck = today + datetime.timedelta(days=checkdelay)
+
         if 'repack' not in config.keys() or config['repack'] != 'yes':
             # don't look at me if you turned off repack
+            logger.debug('Not repacking because repack=no in config')
             needs_repack = 0
         elif repack_all_full and (count_loose > 0 or packs > 1):
+            logger.debug('needs_repack=2 due to repack_all_full')
             needs_repack = 2
         elif repack_all_quick and count_loose > 0:
+            logger.debug('needs_repack=1 due to repack_all_quick')
             needs_repack = 1
         elif conn_only:
             # don't do any repacks if we're running forced connectivity checks, unless
             # you specifically passed --repack-all-foo
+            logger.debug('needs_repack=0 due to --conn-only')
             needs_repack = 0
         else:
             # for now, hardcode the maximum loose objects and packs
@@ -480,34 +504,45 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             if packs >= max_packs:
                 logger.debug('Triggering full repack of %s because packs > 20', fullpath)
                 needs_repack = 2
-            # If we have precious objects, we don't consider loose objects for anything
-            elif not has_precious_objects:
-                if count_loose >= max_loose_objects:
-                    logger.debug('Triggering quick repack of %s because loose objects > 1200', fullpath)
+            elif count_loose >= max_loose_objects:
+                logger.debug('Triggering quick repack of %s because loose objects > 1200', fullpath)
+                needs_repack = 1
+            else:
+                # is the number of loose objects or their size more than 10% of
+                # the overall total?
+                in_pack = int(obj_info['in-pack'])
+                size_loose = int(obj_info['size'])
+                size_pack = int(obj_info['size-pack'])
+                total_obj = count_loose + in_pack
+                total_size = size_loose + size_pack
+                # set some arbitrary "worth bothering" limits so we don't
+                # continuously repack tiny repos.
+                if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
+                    logger.debug('Triggering repack of %s because loose objects > %s%% of total',
+                                 fullpath, pc_loose_objects)
                     needs_repack = 1
-                else:
-                    # is the number of loose objects or their size more than 10% of
-                    # the overall total?
-                    in_pack = int(obj_info['in-pack'])
-                    size_loose = int(obj_info['size'])
-                    size_pack = int(obj_info['size-pack'])
-                    total_obj = count_loose + in_pack
-                    total_size = size_loose + size_pack
-                    # set some arbitrary "worth bothering" limits so we don't
-                    # continuously repack tiny repos.
-                    if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
-                        logger.debug('Triggering repack of %s because loose objects > %s%% of total',
-                                     fullpath, pc_loose_objects)
-                        needs_repack = 1
-                    elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
-                        logger.debug('Triggering repack of %s because loose size > %s%% of total',
-                                     fullpath, pc_loose_size)
-                        needs_repack = 1
+                elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
+                    logger.debug('Triggering repack of %s because loose size > %s%% of total',
+                                 fullpath, pc_loose_size)
+                    needs_repack = 1
+
+        if needs_repack > 0 and check_precious_objects(fullpath):
+            # if we have preciousObjects, then we only repack based on the same
+            # schedule as fsck.
+            logger.debug('preciousObjects is set')
+            # for repos with preciousObjects, we use the fsck schedule for repacking
+            if schedcheck <= today:
+                logger.debug('Time for a full periodic repack of a preciousObjects repo')
+                status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
+                needs_repack = 2
+            else:
+                logger.debug('Not repacking preciousObjects repo outside of schedule')
+                needs_repack = 0
 
         # Do we need to fsck it?
         if not (repack_all_quick or repack_all_full or repack_only):
-            nextcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
-            if nextcheck <= today or force:
+            if schedcheck <= today or force:
+                status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
                 needs_fsck = 1
 
         if needs_repack or needs_fsck or needs_prune:
@@ -565,14 +600,6 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             status[fullpath]['lastcheck'] = todayiso
             status[fullpath]['s_elapsed'] = int(endt-startt)
 
-            if force:
-                # Use randomization for next check, again
-                delay = random.randint(1, frequency)
-            else:
-                delay = frequency
-
-            nextdate = today + datetime.timedelta(days=delay)
-            status[fullpath]['nextcheck'] = nextdate.strftime('%F')
             logger.info('   done : %ss, next check on %s',
                         status[fullpath]['s_elapsed'],
                         status[fullpath]['nextcheck'])
