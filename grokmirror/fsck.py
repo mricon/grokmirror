@@ -128,9 +128,6 @@ def run_git_repack(fullpath, config, level=1):
             is_precious = True
             set_precious_objects(fullpath)
 
-        if not is_precious:
-            repack_flags.append('-k')
-
         # are we using alternates ourselves? Multiple levels of alternates are
         # a bad idea in general due high possibility of corruption.
         if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
@@ -140,6 +137,9 @@ def run_git_repack(fullpath, config, level=1):
             repack_flags.append('-l')
         else:
             repack_flags.append('-a')
+            if not is_precious:
+                repack_flags.append('-k')
+
             if level > 1:
                 logger.info(' repack : performing a full repack for optimal deltas')
                 repack_flags += full_repack_flags
