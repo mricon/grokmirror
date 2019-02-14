@@ -5,10 +5,10 @@ Update git repositories not managed by grokmirror
 -------------------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2018-04-18
+:Date:      2019-02-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.1.0
+:Version:   1.2.0
 :Manual section: 1
 
 SYNOPSIS

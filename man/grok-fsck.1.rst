@@ -5,10 +5,10 @@ Check mirrored repositories for corruption
 ------------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2018-04-18
+:Date:      2019-02-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.1.0
+:Version:   1.2.0
 :Manual section: 1
 
 SYNOPSIS
@@ -33,6 +33,8 @@ OPTIONS
   -f, --force           Force immediate run on all repositories.
   -c CONFIG, --config=CONFIG
                         Location of fsck.conf
+  --repack-only         Only find and repack repositories that need
+                        optimizing (nightly run mode)
   --connectivity        (Assumes --force): Run git fsck on all repos,
                         but only check connectivity
   --repack-all-quick    (Assumes --force): Do a quick repack of all repos
@@ -43,13 +45,15 @@ EXAMPLES
 Locate fsck.conf and modify it to reflect your needs. The default
 configuration file is heavily commented.
 
-Set up a cron job to run nightly and to email any discovered errors to
-root::
+Set up a cron job to run nightly for quick repacks, and weekly for fsck
+checks::
 
     # Make sure MAILTO is set, for error reports
     MAILTO=root
-    # Run nightly, at 2AM
-    00 02 * * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
+    # Run nightly repacks to optimize the repos
+    0 2 1-6 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf --repack-only
+    # Run weekly fsck checks on Sunday
+    0 2 0 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
 
 You can force a full run using the ``-f`` flag, but unless you only have
 a few smallish git repositories, it's not recommended, as it may take
@@ -58,8 +62,8 @@ of all repositories. To make this process faster, you can use:
 
 * ``--connectivity``: when doing fsck, only check object connectivity
 * ``--repack-all-quick``: do a quick repack of all repositories
-* ``--repack-all-full``: if you have ``full_repack_flags`` defined in
-  the configuration file, trigger a full repack of every repository.
+* ``--repack-all-full``: if you have ``extra_repack_flags_full`` defined
+  in the configuration file, trigger a full repack of every repository.
   This can be handy if you need to bring up a newly cloned mirror and
   want to make sure it's repacked and all bitmaps are built before
   serving content.

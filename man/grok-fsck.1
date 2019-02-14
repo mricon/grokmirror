@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-FSCK 1 "2018-04-18" "1.1.0" ""
+.TH GROK-FSCK 1 "2019-02-14" "1.2.0" ""
 .SH NAME
 GROK-FSCK \- Check mirrored repositories for corruption
 .
@@ -65,6 +65,10 @@ Force immediate run on all repositories.
 .BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
 Location of fsck.conf
 .TP
+.B \-\-repack\-only
+Only find and repack repositories that need
+optimizing (nightly run mode)
+.TP
 .B \-\-connectivity
 (Assumes \-\-force): Run git fsck on all repos,
 but only check connectivity
@@ -82,8 +86,8 @@ but only check connectivity
 Locate fsck.conf and modify it to reflect your needs. The default
 configuration file is heavily commented.
 .sp
-Set up a cron job to run nightly and to email any discovered errors to
-root:
+Set up a cron job to run nightly for quick repacks, and weekly for fsck
+checks:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -91,8 +95,10 @@ root:
 .ft C
 # Make sure MAILTO is set, for error reports
 MAILTO=root
-# Run nightly, at 2AM
-00 02 * * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf
+# Run nightly repacks to optimize the repos
+0 2 1\-6 * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf \-\-repack\-only
+# Run weekly fsck checks on Sunday
+0 2 0 * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf
 .ft P
 .fi
 .UNINDENT
@@ -108,8 +114,8 @@ of all repositories. To make this process faster, you can use:
 .IP \(bu 2
 \fB\-\-repack\-all\-quick\fP: do a quick repack of all repositories
 .IP \(bu 2
-\fB\-\-repack\-all\-full\fP: if you have \fBfull_repack_flags\fP defined in
-the configuration file, trigger a full repack of every repository.
+\fB\-\-repack\-all\-full\fP: if you have \fBextra_repack_flags_full\fP defined
+in the configuration file, trigger a full repack of every repository.
 This can be handy if you need to bring up a newly cloned mirror and
 want to make sure it\(aqs repacked and all bitmaps are built before
 serving content.

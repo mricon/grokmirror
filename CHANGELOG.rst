@@ -1,5 +1,5 @@
-v1.2 (2019-02-14)
------------------
+v1.2.0 (2019-02-14)
+-------------------
 - Make sure to set gc.auto=0 on repositories to avoid pruning repos
   that are acting as alternates to others. We run our own prune
   during fsck, so there is no need to auto-gc, ever (unless you

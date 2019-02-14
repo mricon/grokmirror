@@ -8,7 +8,7 @@ Framework to smartly mirror git repositories
 :Date:      2019-02-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.2
+:Version:   1.2.0
 
 DESCRIPTION
 -----------
@@ -166,22 +166,20 @@ manifest. Then, add the following to ``/etc/cron.d/grok-fsck.cron``::
 
     # Make sure MAILTO is set, for error reports
     MAILTO=root
-    # Run nightly, at 2AM
-    00 02 * * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
+    # Run nightly repacks to optimize the repos
+    0 2 1-6 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf --repack-only
+    # Run weekly fsck checks on Sunday
+    0 2 0 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
 
 You can force a full run using the ``-f`` flag, but unless you only have
 a few smallish git repositories, it's not recommended, as it may take
-several hours to complete.
+several hours to complete. See the man page for other flags grok-fsck
+supports.
 
 Before it runs, grok-fsck will put an advisory lock for the git-directory
 being checked (.repository.git.lock). Grok-pull will recognize the lock
 and will postpone any incoming updates to that repository until the lock
 is freed.
-
-You can also tell grok-fsck to repack repository after checking it for
-errors. To do this, set "repack" value in fsck.conf to "yes". If you
-have repositories using alternates, the safer value for repack flags is
-"-Adlq".
 
 FAQ
 ---
