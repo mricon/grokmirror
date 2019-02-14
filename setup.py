@@ -19,7 +19,7 @@ import os
 from setuptools import setup
 
 NAME = 'grokmirror'
-VERSION = '1.2-pre'
+VERSION = '1.2'
 
 
 # Utility function to read the README file.

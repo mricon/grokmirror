@@ -1,5 +1,5 @@
-v1.2-master
------------
+v1.2 (2019-02-14)
+-----------------
 - Make sure to set gc.auto=0 on repositories to avoid pruning repos
   that are acting as alternates to others. We run our own prune
   during fsck, so there is no need to auto-gc, ever (unless you
@@ -10,26 +10,23 @@ v1.2-master
   hardcoded for the moment while testing, but will probably end up
   settable via global and per-repository config settings.
 - The following fsck.conf settings have no further effect:
-
     - repack_flags (replaced with extra_repack_flags)
     - full_repack_flags (replaced with extra_repack_flags_full)
     - full_repack_every (we now figure it out ourselves)
-
 - Move git command invocation routines into a central function to
   reduce the amount of code duplication. You can also set the path
   to the git binary using the GITBIN env variable or by simply
   adding it to your path.
-
 - Add "reclone_on_errors" setting in fsck.conf. If fsck/repack/prune
   comes across a matching error, it will mark the repository for
   recloning and it will be cloned anew from the master the next time
   grok-pull runs. This is useful for auto-correcting corruption on the
   mirrors. You can also manually request a reclone by creating a
   "grokmirror.reclone" file in a repository.
-
 - Set extensions.preciousObjects for repositories used with git
-  alternates. This helps further protect them from erroneous pruning
-  (e.g. done manually by an administrator).
+  alternates if precious=yes is set in fsck.conf. This helps further
+  protect shared repos from erroneous pruning (e.g. done manually by
+  an administrator).
 
 
 v1.1.1 (2018-07-25)

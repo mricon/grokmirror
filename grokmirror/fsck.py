@@ -502,10 +502,10 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
 
             # first, compare against max values:
             if packs >= max_packs:
-                logger.debug('Triggering full repack of %s because packs > 20', fullpath)
+                logger.debug('Triggering full repack of %s because packs > %s', fullpath, max_packs)
                 needs_repack = 2
             elif count_loose >= max_loose_objects:
-                logger.debug('Triggering quick repack of %s because loose objects > 1200', fullpath)
+                logger.debug('Triggering quick repack of %s because loose objects > %s', fullpath, max_loose_objects)
                 needs_repack = 1
             else:
                 # is the number of loose objects or their size more than 10% of

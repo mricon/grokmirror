@@ -29,7 +29,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.2-pre'
+VERSION = '1.2'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 GITBIN = '/usr/bin/git'

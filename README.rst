@@ -5,10 +5,10 @@ Framework to smartly mirror git repositories
 --------------------------------------------
 
 :Author:    konstantin@linuxfoundation.org
-:Date:      2018-04-24
+:Date:      2019-02-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.2-pre
+:Version:   1.2
 
 DESCRIPTION
 -----------
