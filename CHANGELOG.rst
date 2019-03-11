@@ -1,3 +1,14 @@
+v1.2.1 (2019-03-11)
+-------------------
+- Minor feature improvement changing how precious=yes works.
+  Grokmirror will now turn preciousObjects off for the duration
+  of the repack. We still protect shared repositories against
+  inadvertent object pruning by outside processes, but this
+  allows us to clean up loose objects and obsolete packs.
+  To have the 1.2.0 behaviour back, set precious=always, but it
+  is only really useful in very rare cases.
+
+
 v1.2.0 (2019-02-14)
 -------------------
 - Make sure to set gc.auto=0 on repositories to avoid pruning repos

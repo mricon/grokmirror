@@ -4,4 +4,5 @@
 *.pdf
 *~
 dist
+build
 *.egg-info

@@ -29,7 +29,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.2.0'
+VERSION = '1.2.1'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 GITBIN = '/usr/bin/git'
@@ -206,6 +206,7 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
 def is_alt_repo(toplevel, refrepo):
     global _alt_repo_cache
     if _alt_repo_cache is None:
+        logger.info('Finding all repositories using alternates')
         # Populate a simple byte string with contents of all
         # objects/info/alternates we find, and then do a simple match
         _alt_repo_cache = b''

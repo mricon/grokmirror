@@ -63,7 +63,7 @@ def check_reclone_error(fullpath, config, errors):
 
 def run_git_prune(fullpath, config):
     prune_ok = True
-    if 'prune' not in config.keys() or config['prune'] != 'yes':
+    if 'prune' not in config or config['prune'] != 'yes':
         return prune_ok
 
     # Are any other repos using us in their objects/info/alternates?
@@ -109,7 +109,11 @@ def run_git_repack(fullpath, config, level=1):
     # Returns false if we hit any errors on the way
     repack_ok = True
 
-    is_precious = check_precious_objects(fullpath)
+    if 'precious' not in config:
+        config['precious'] = 'yes'
+
+    is_precious = False
+    set_precious = False
 
     # Figure out what our repack flags should be.
     repack_flags = list()
@@ -124,9 +128,15 @@ def run_git_repack(fullpath, config, level=1):
     gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
     if grokmirror.is_alt_repo(config['toplevel'], gitdir):
         # we are a "mother repo"
-        if not is_precious and ('precious' in config and config['precious'] == 'yes'):
+        # Force preciousObjects if precious is "always"
+        if config['precious'] == 'always':
             is_precious = True
-            set_precious_objects(fullpath)
+            set_precious_objects(fullpath, enabled=True)
+        else:
+            # Turn precious off during repacks
+            set_precious_objects(fullpath, enabled=False)
+            # Turn it back on after we're done
+            set_precious = True
 
         # are we using alternates ourselves? Multiple levels of alternates are
         # a bad idea in general due high possibility of corruption.
@@ -169,6 +179,9 @@ def run_git_repack(fullpath, config, level=1):
     repack_flags.append('-q')
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
+
+    if set_precious:
+        set_precious_objects(fullpath, enabled=True)
 
     # With newer versions of git, repack may return warnings that are safe to ignore
     # so use the same strategy to weed out things we aren't interested in seeing
@@ -294,11 +307,15 @@ def get_repo_obj_info(fullpath):
     return obj_info
 
 
-def set_precious_objects(fullpath):
+def set_precious_objects(fullpath, enabled=True):
     # It's better to just set it blindly without checking first,
     # as this results in one fewer shell-out.
     logger.debug('Setting preciousObjects for %s', fullpath)
-    args = ['config', 'extensions.preciousObjects', 'true']
+    if enabled:
+        poval = 'true'
+    else:
+        poval = 'false'
+    args = ['config', 'extensions.preciousObjects', poval]
     grokmirror.run_git_command(fullpath, args)
 
 
@@ -319,14 +336,14 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     # noinspection PyTypeChecker
     em = enlighten.get_manager(series=' -=#')
 
-    if 'log' in config.keys():
+    if 'log' in config:
         ch = logging.FileHandler(config['log'])
         formatter = logging.Formatter(
             "[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         loglevel = logging.INFO
 
-        if 'loglevel' in config.keys():
+        if 'loglevel' in config:
             if config['loglevel'] == 'debug':
                 loglevel = logging.DEBUG
 
@@ -475,7 +492,10 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
         schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
         nextcheck = today + datetime.timedelta(days=checkdelay)
 
-        if 'repack' not in config.keys() or config['repack'] != 'yes':
+        if 'precious' not in config:
+            config['precious'] = 'yes'
+
+        if 'repack' not in config or config['repack'] != 'yes':
             # don't look at me if you turned off repack
             logger.debug('Not repacking because repack=no in config')
             needs_repack = 0
@@ -526,7 +546,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
                                  fullpath, pc_loose_size)
                     needs_repack = 1
 
-        if needs_repack > 0 and check_precious_objects(fullpath):
+        if needs_repack > 0 and (config['precious'] == 'always' and check_precious_objects(fullpath)):
             # if we have preciousObjects, then we only repack based on the same
             # schedule as fsck.
             logger.debug('preciousObjects is set')
@@ -719,6 +739,7 @@ def command():
 
     return grok_fsck(opts.config, opts.verbose, opts.force, opts.repack_only, opts.conn_only,
                      opts.repack_all_quick, opts.repack_all_full)
+
 
 if __name__ == '__main__':
     command()
