@@ -1,3 +1,12 @@
+v1.2.2 (2019-10-23)
+-------------------
+- Small bugfixes
+- Generate commit-graph file if the version of git is new
+  enough to support it. This is done during grok-fsck any time we
+  decide that the repository needs to be repacked. You can force
+  this off by setting commitgraph=never in config.
+
+
 v1.2.1 (2019-03-11)
 -------------------
 - Minor feature improvement changing how precious=yes works.

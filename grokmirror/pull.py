@@ -123,6 +123,7 @@ class PullerThread(threading.Thread):
                     set_agefile(self.toplevel, gitdir, modified)
                     grokmirror.unlock_repo(fullpath)
                     self.out_queue.put((gitdir, my_fingerprint, True))
+                    self.e_bar.update()
                     self.in_queue.task_done()
                     continue
 
@@ -890,6 +891,7 @@ def pull_mirror(name, config, verbose=False, force=False, nomtime=False,
 
             if ts > 0:
                 logger.debug('Looks like %s already cloned, skipping', gitdir)
+                e_clone.update()
                 continue
 
             try:

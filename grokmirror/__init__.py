@@ -29,7 +29,7 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 from git import Repo
 
-VERSION = '1.2.1'
+VERSION = '1.2.2'
 MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 GITBIN = '/usr/bin/git'
@@ -38,6 +38,13 @@ GITBIN = '/usr/bin/git'
 logger = logging.getLogger(__name__)
 
 _alt_repo_cache = None
+
+
+def git_newer_than(minver):
+    from packaging import version
+    (retcode, output, error) = run_git_command('', ['--version'])
+    ver = output.split()[-1]
+    return version.parse(ver) >= version.parse(minver)
 
 
 def run_git_command(fullpath, args):

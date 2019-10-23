@@ -1,3 +1,4 @@
 anyjson
 GitPython
 enlighten
+packaging

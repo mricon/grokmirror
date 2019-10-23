@@ -109,11 +109,9 @@ def run_git_repack(fullpath, config, level=1):
     # Returns false if we hit any errors on the way
     repack_ok = True
 
-    if 'precious' not in config:
-        config['precious'] = 'yes'
-
     is_precious = False
     set_precious = False
+    gen_commitgraph = True
 
     # Figure out what our repack flags should be.
     repack_flags = list()
@@ -156,6 +154,7 @@ def run_git_repack(fullpath, config, level=1):
 
     elif os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
         # we are a "child repo"
+        gen_commitgraph = False
         repack_flags.append('-l')
         if level > 1:
             repack_flags.append('-A')
@@ -211,6 +210,9 @@ def run_git_repack(fullpath, config, level=1):
     if not repack_ok:
         # No need to repack refs if repo is broken
         return False
+
+    if gen_commitgraph and config['commitgraph'] == 'yes':
+        run_git_commit_graph(fullpath)
 
     # only repack refs on full repacks
     if level < 2:
@@ -292,6 +294,19 @@ def run_git_fsck(fullpath, config, conn_only=False):
             for entry in warn:
                 logger.critical("\t%s", entry)
             check_reclone_error(fullpath, config, warn)
+
+
+def run_git_commit_graph(fullpath):
+    # Does our version of git support commit-graph?
+    if not grokmirror.git_newer_than('2.18.0'):
+        logger.debug('Git version too old, not generating commit-graph')
+    logger.info('  graph : generating commit-graph --reachable')
+    args = ['commit-graph', 'write', '--reachable']
+    retcode, output, error = grokmirror.run_git_command(fullpath, args)
+    if retcode == 0:
+        return True
+
+    return False
 
 
 def get_repo_obj_info(fullpath):
@@ -424,6 +439,16 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     else:
         checkdelay = frequency
 
+    if 'precious' not in config:
+        config['precious'] = 'yes'
+    if 'commitgraph' not in config:
+        config['commitgraph'] = 'yes'
+
+    # Is our git version new enough to support it?
+    if config['commitgraph'] == 'yes' and not grokmirror.git_newer_than('2.18.0'):
+        logger.info('Git version too old to support commit graphs, disabling')
+        config['commitgraph'] = 'no'
+
     # Go through the manifest and compare with status
     # noinspection PyTypeChecker
     e_find = em.counter(total=len(manifest), desc='Discovering:', unit='repos', leave=False)
@@ -491,9 +516,6 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
 
         schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
         nextcheck = today + datetime.timedelta(days=checkdelay)
-
-        if 'precious' not in config:
-            config['precious'] = 'yes'
 
         if 'repack' not in config or config['repack'] != 'yes':
             # don't look at me if you turned off repack
@@ -609,6 +631,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
                 logger.warning('Repacking %s was unsuccessful, '
                                'not running fsck.', fullpath)
                 grokmirror.unlock_repo(fullpath)
+                run.update()
                 continue
 
         if needs['prune']:
