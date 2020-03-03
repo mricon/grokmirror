@@ -167,9 +167,9 @@ manifest. Then, add the following to ``/etc/cron.d/grok-fsck.cron``::
     # Make sure MAILTO is set, for error reports
     MAILTO=root
     # Run nightly repacks to optimize the repos
-    0 2 1-6 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf --repack-only
+    0 2 * * 1-6 mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf --repack-only
     # Run weekly fsck checks on Sunday
-    0 2 0 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
+    0 2 * * 0 mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
 
 You can force a full run using the ``-f`` flag, but unless you only have
 a few smallish git repositories, it's not recommended, as it may take
