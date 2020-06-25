@@ -488,6 +488,8 @@ def find_objstore_repo_for(obstdir, fullpath):
 
 def get_forkgroups(obstdir, toplevel):
     forkgroups = dict()
+    if not os.path.exists(obstdir):
+        return forkgroups
     for child in pathlib.Path(obstdir).iterdir():
         if child.is_dir() and child.suffix == '.git':
             forkgroup = child.stem
