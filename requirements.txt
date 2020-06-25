@@ -1,4 +1,3 @@
-anyjson
-GitPython
 enlighten
 packaging
+requests

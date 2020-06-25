@@ -23,6 +23,7 @@ import time
 import json
 import random
 import datetime
+import shutil
 
 import enlighten
 
@@ -34,12 +35,14 @@ logger = logging.getLogger(__name__)
 
 def check_reclone_error(fullpath, config, errors):
     reclone = None
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    errlist = config['fsck'].get('reclone_on_errors', '').split('\n')
     for line in errors:
-        for estring in config['reclone_on_errors']:
+        for estring in errlist:
             if line.find(estring) != -1:
                 # is this repo used for alternates?
-                gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
-                if grokmirror.is_alt_repo(config['toplevel'], gitdir):
+                gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
+                if grokmirror.is_alt_repo(toplevel, gitdir):
                     logger.critical('\tused for alternates, not requesting auto-reclone')
                     return
                 else:
@@ -63,13 +66,8 @@ def check_reclone_error(fullpath, config, errors):
 
 def run_git_prune(fullpath, config):
     prune_ok = True
-    if 'prune' not in config or config['prune'] != 'yes':
-        return prune_ok
-
-    # Are any other repos using us in their objects/info/alternates?
-    gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
-    if grokmirror.is_alt_repo(config['toplevel'], gitdir):
-        logger.info('  prune : skipped, is alternate to other repos')
+    do_prune = config['fsck'].getboolean('prune', True)
+    if not do_prune:
         return prune_ok
 
     # We set expire to yesterday in order to avoid race conditions
@@ -83,9 +81,10 @@ def run_git_prune(fullpath, config):
         # Put things we recognize as fairly benign into debug
         debug = []
         warn = []
+        ierrors = config['fsck'].get('ignore_errors', '').split('\n')
         for line in error.split('\n'):
             ignored = False
-            for estring in config['ignore_errors']:
+            for estring in ierrors:
                 if line.find(estring) != -1:
                     ignored = True
                     debug.append(line)
@@ -105,92 +104,106 @@ def run_git_prune(fullpath, config):
     return prune_ok
 
 
-def run_git_repack(fullpath, config, level=1):
+def run_git_repack(fullpath, config, level=1, prune=True):
     # Returns false if we hit any errors on the way
     repack_ok = True
+    obstdir = os.path.realpath(config['core'].get('objstore'))
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
+    ierrors = config['fsck'].get('ignore_errors', '').split('\n')
 
-    is_precious = False
-    set_precious = False
+    if config['fsck'].get('prune', 'yes') != 'yes':
+        logger.debug('Pruning disabled in config file')
+        prune = False
+
+    if config['fsck'].get('precious', '') == 'always':
+        always_precious = True
+        set_precious_objects(fullpath, enabled=True)
+    else:
+        always_precious = False
+        set_precious_objects(fullpath, enabled=False)
+
+    set_precious_after = False
     gen_commitgraph = True
 
     # Figure out what our repack flags should be.
     repack_flags = list()
-    if 'extra_repack_flags' in config and len(config['extra_repack_flags']):
-        repack_flags += config['extra_repack_flags'].split()
+    extra_repack_flags = config['fsck'].get('extra_repack_flags', '')
+    if extra_repack_flags:
+        repack_flags += extra_repack_flags.split('\n')
 
-    full_repack_flags = ['-f', '-b', '--pack-kept-objects']
-    if 'extra_repack_flags_full' in config and len(config['extra_repack_flags_full']):
-        full_repack_flags += config['extra_repack_flags_full'].split()
+    full_repack_flags = ['-f', '--pack-kept-objects']
+    rfull = config['fsck'].get('extra_repack_flags_full', '')
+    if len(rfull):
+        full_repack_flags += rfull.split()
 
-    # Are any other repos using us in their objects/info/alternates?
-    gitdir = '/' + os.path.relpath(fullpath, config['toplevel']).lstrip('/')
-    if grokmirror.is_alt_repo(config['toplevel'], gitdir):
-        # we are a "mother repo"
-        # Force preciousObjects if precious is "always"
-        if config['precious'] == 'always':
-            is_precious = True
-            set_precious_objects(fullpath, enabled=True)
-        else:
-            # Turn precious off during repacks
-            set_precious_objects(fullpath, enabled=False)
-            # Turn it back on after we're done
-            set_precious = True
+    if grokmirror.is_obstrepo(fullpath, obstdir):
+        set_precious_after = True
+        repack_flags.append('-a')
 
-        # are we using alternates ourselves? Multiple levels of alternates are
-        # a bad idea in general due high possibility of corruption.
-        if os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
+        # We only prune if all repos pointing to us are public
+        urls = grokmirror.list_repo_remotes(fullpath, withurl=True)
+        mine = set([x[1] for x in urls])
+        amap = grokmirror.get_altrepo_map(toplevel)
+        if mine != amap[fullpath]:
+            logger.debug('Cannot prune %s because it is used by non-public repos', fullpath)
+            prune = False
+            if not always_precious:
+                repack_flags.append('-k')
+
+    elif grokmirror.is_alt_repo(toplevel, gitdir):
+        prune = False
+        set_precious_after = True
+        if grokmirror.get_altrepo(fullpath):
+            gen_commitgraph = False
             logger.warning('warning : has alternates and is used by others for alternates')
             logger.warning('        : this can cause grandchild corruption')
             repack_flags.append('-A')
             repack_flags.append('-l')
         else:
             repack_flags.append('-a')
-            if not is_precious:
-                repack_flags.append('-k')
+            repack_flags.append('-b')
 
-            if level > 1:
-                logger.info(' repack : performing a full repack for optimal deltas')
-                repack_flags += full_repack_flags
+        if not always_precious:
+            repack_flags.append('-k')
 
-    elif os.path.exists(os.path.join(fullpath, 'objects', 'info', 'alternates')):
+    elif grokmirror.get_altrepo(fullpath):
         # we are a "child repo"
         gen_commitgraph = False
         repack_flags.append('-l')
-        if level > 1:
-            repack_flags.append('-A')
+        repack_flags.append('-A')
+        if prune:
+            repack_flags.append('--unpack-unreachable=yesterday')
 
     else:
         # we have no relationships with other repos
-        if level > 1:
-            logger.info(' repack : performing a full repack for optimal deltas')
-            repack_flags.append('-a')
-            if not is_precious:
-                repack_flags.append('-k')
-            repack_flags += full_repack_flags
+        repack_flags.append('-a')
+        repack_flags.append('-b')
 
-    if not is_precious:
+    if level > 1:
+        logger.info(' repack : performing a full repack for optimal deltas')
+        repack_flags += full_repack_flags
+
+    if not always_precious:
         repack_flags.append('-d')
 
     args = ['repack'] + repack_flags
     logger.info(' repack : repacking with "%s"', ' '.join(repack_flags))
 
     # We always tack on -q
-    repack_flags.append('-q')
+    args.append('-q')
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
-
-    if set_precious:
-        set_precious_objects(fullpath, enabled=True)
 
     # With newer versions of git, repack may return warnings that are safe to ignore
     # so use the same strategy to weed out things we aren't interested in seeing
     if error:
         # Put things we recognize as fairly benign into debug
-        debug = []
-        warn = []
+        debug = list()
+        warn = list()
         for line in error.split('\n'):
             ignored = False
-            for estring in config['ignore_errors']:
+            for estring in ierrors:
                 if line.find(estring) != -1:
                     ignored = True
                     debug.append(line)
@@ -209,54 +222,52 @@ def run_git_repack(fullpath, config, level=1):
 
     if not repack_ok:
         # No need to repack refs if repo is broken
+        if set_precious_after:
+            set_precious_objects(fullpath, enabled=True)
         return False
 
-    if gen_commitgraph and config['commitgraph'] == 'yes':
+    if gen_commitgraph and config['fsck'].get('commitgraph', 'yes') == 'yes':
         run_git_commit_graph(fullpath)
 
     # only repack refs on full repacks
-    if level < 2:
-        # do we still have loose objects after repacking?
-        obj_info = get_repo_obj_info(fullpath)
-        if obj_info['count'] != '0':
-            return run_git_prune(fullpath, config)
-        return repack_ok
+    if level > 2:
+        # repacking refs requires a separate command, so run it now
+        args = ['pack-refs', '--all']
+        logger.info(' repack : repacking refs')
+        retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
-    # repacking refs requires a separate command, so run it now
-    args = ['pack-refs', '--all']
-    logger.info(' repack : repacking refs')
-    retcode, output, error = grokmirror.run_git_command(fullpath, args)
+        # pack-refs shouldn't return anything, but use the same ignore_errors block
+        # to weed out any future potential benign warnings
+        if error:
+            # Put things we recognize as fairly benign into debug
+            debug = list()
+            warn = list()
+            for line in error.split('\n'):
+                ignored = False
+                for estring in ierrors:
+                    if line.find(estring) != -1:
+                        ignored = True
+                        debug.append(line)
+                        break
+                if not ignored:
+                    warn.append(line)
 
-    # pack-refs shouldn't return anything, but use the same ignore_errors block
-    # to weed out any future potential benign warnings
-    if error:
-        # Put things we recognize as fairly benign into debug
-        debug = []
-        warn = []
-        for line in error.split('\n'):
-            ignored = False
-            for estring in config['ignore_errors']:
-                if line.find(estring) != -1:
-                    ignored = True
-                    debug.append(line)
-                    break
-            if not ignored:
-                warn.append(line)
+            if debug:
+                logger.debug('Stderr: %s', '\n'.join(debug))
+            if warn:
+                logger.critical('Repacking refs %s returned critical errors:', fullpath)
+                repack_ok = False
+                for entry in warn:
+                    logger.critical("\t%s", entry)
 
-        if debug:
-            logger.debug('Stderr: %s', '\n'.join(debug))
-        if warn:
-            logger.critical('Repacking refs %s returned critical errors:',
-                            fullpath)
-            repack_ok = False
-            for entry in warn:
-                logger.critical("\t%s", entry)
+                check_reclone_error(fullpath, config, warn)
 
-            check_reclone_error(fullpath, config, warn)
-
-    if repack_ok and 'prune' in config and config['prune'] == 'yes':
+    if prune:
         # run prune now
-        return run_git_prune(fullpath, config)
+        repack_ok = run_git_prune(fullpath, config)
+
+    if set_precious_after:
+        set_precious_objects(fullpath, enabled=True)
 
     return repack_ok
 
@@ -275,11 +286,12 @@ def run_git_fsck(fullpath, config, conn_only=False):
         # Put things we recognize as fairly benign into debug
         debug = []
         warn = []
+        ierrors = config['fsck'].get('ignore_errors', '').split('\n')
         for line in output.split('\n') + error.split('\n'):
             if not len(line.strip()):
                 continue
             ignored = False
-            for estring in config['ignore_errors']:
+            for estring in ierrors:
                 if line.find(estring) != -1:
                     ignored = True
                     debug.append(line)
@@ -309,19 +321,6 @@ def run_git_commit_graph(fullpath):
     return False
 
 
-def get_repo_obj_info(fullpath):
-    args = ['count-objects', '-v']
-    retcode, output, error = grokmirror.run_git_command(fullpath, args)
-    obj_info = {}
-
-    if output:
-        for line in output.split('\n'):
-            key, value = line.split(':')
-            obj_info[key] = value.strip()
-
-    return obj_info
-
-
 def set_precious_objects(fullpath, enabled=True):
     # It's better to just set it blindly without checking first,
     # as this results in one fewer shell-out.
@@ -330,8 +329,7 @@ def set_precious_objects(fullpath, enabled=True):
         poval = 'true'
     else:
         poval = 'false'
-    args = ['config', 'extensions.preciousObjects', poval]
-    grokmirror.run_git_command(fullpath, args)
+    grokmirror.set_git_config(fullpath, 'extensions.preciousObjects', poval)
 
 
 def check_precious_objects(fullpath):
@@ -342,25 +340,61 @@ def check_precious_objects(fullpath):
     return False
 
 
-def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
+def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_objects=10, pc_loose_size=10):
+    # for now, hardcode the maximum loose objects and packs
+    # XXX: we can probably set this in git config values?
+    #      I don't think this makes sense as a global setting, because
+    #      optimal values will depend on the size of the repo as a whole
+    packs = int(obj_info['packs'])
+    count_loose = int(obj_info['count'])
+
+    needs_repack = 0
+
+    # first, compare against max values:
+    if packs >= max_packs:
+        logger.debug('Triggering full repack because packs > %s', max_packs)
+        needs_repack = 2
+    elif count_loose >= max_loose_objects:
+        logger.debug('Triggering quick repack because loose objects > %s', max_loose_objects)
+        needs_repack = 1
+    else:
+        # is the number of loose objects or their size more than 10% of
+        # the overall total?
+        in_pack = int(obj_info['in-pack'])
+        size_loose = int(obj_info['size'])
+        size_pack = int(obj_info['size-pack'])
+        total_obj = count_loose + in_pack
+        total_size = size_loose + size_pack
+        # set some arbitrary "worth bothering" limits so we don't
+        # continuously repack tiny repos.
+        if total_obj > 500 and count_loose / total_obj * 100 >= pc_loose_objects:
+            logger.debug('Triggering repack because loose objects > %s%% of total', pc_loose_objects)
+            needs_repack = 1
+        elif total_size > 1024 and size_loose / total_size * 100 >= pc_loose_size:
+            logger.debug('Triggering repack because loose size > %s%% of total', pc_loose_size)
+            needs_repack = 1
+
+    return needs_repack
+
+
+def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 conn_only=False, repack_all_quick=False, repack_all_full=False):
     global logger
-    logger = logging.getLogger(name)
+    logger = logging.getLogger('fsck')
     logger.setLevel(logging.DEBUG)
 
     # noinspection PyTypeChecker
     em = enlighten.get_manager(series=' -=#')
 
-    if 'log' in config:
-        ch = logging.FileHandler(config['log'])
-        formatter = logging.Formatter(
-            "[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+    logfile = config['core'].get('log', None)
+    if logfile:
+        ch = logging.FileHandler(logfile)
+        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         loglevel = logging.INFO
 
-        if 'loglevel' in config:
-            if config['loglevel'] == 'debug':
-                loglevel = logging.DEBUG
+        if config['core'].get('loglevel', 'info') == 'debug':
+            loglevel = logging.DEBUG
 
         ch.setLevel(loglevel)
         logger.addHandler(ch)
@@ -383,23 +417,26 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     if conn_only or repack_all_quick or repack_all_full:
         force = True
 
-    logger.info('Running grok-fsck for [%s]', name)
+    logger.info('Running grok-fsck for [%s]', config['core'].get('toplevel'))
 
     # Lock the tree to make sure we only run one instance
-    logger.debug('Attempting to obtain lock on %s', config['lock'])
-    flockh = open(config['lock'], 'w')
+    lockfile = config['core'].get('lock')
+    logger.debug('Attempting to obtain lock on %s', lockfile)
+    flockh = open(lockfile, 'w')
     try:
         lockf(flockh, LOCK_EX | LOCK_NB)
     except IOError:
-        logger.info('Could not obtain exclusive lock on %s', config['lock'])
+        logger.info('Could not obtain exclusive lock on %s', lockfile)
         logger.info('Assuming another process is running.')
         return 0
 
-    manifest = grokmirror.read_manifest(config['manifest'])
+    manifile = config['core'].get('manifest')
+    manifest = grokmirror.read_manifest(manifile)
 
-    if os.path.exists(config['statusfile']):
-        logger.info('Reading status from %s', config['statusfile'])
-        stfh = open(config['statusfile'], 'rb')
+    statusfile = config['fsck'].get('statusfile')
+    if os.path.exists(statusfile):
+        logger.info('Reading status from %s', statusfile)
+        stfh = open(statusfile, 'r')
         # noinspection PyBroadException
         try:
             # Format of the status file:
@@ -415,20 +452,16 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             #    ...
             #  }
 
-            status = json.loads(stfh.read().decode('utf-8'))
+            status = json.loads(stfh.read())
         except:
-            # Huai le!
-            logger.critical('Failed to parse %s', config['statusfile'])
+            logger.critical('Failed to parse %s', statusfile)
             lockf(flockh, LOCK_UN)
             flockh.close()
             return 1
     else:
-        status = {}
+        status = dict()
 
-    if 'frequency' in config:
-        frequency = int(config['frequency'])
-    else:
-        frequency = 30
+    frequency = config['fsck'].getint('frequency', 30)
 
     today = datetime.datetime.today()
     todayiso = today.strftime('%F')
@@ -439,22 +472,20 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     else:
         checkdelay = frequency
 
-    if 'precious' not in config:
-        config['precious'] = 'yes'
-    if 'commitgraph' not in config:
-        config['commitgraph'] = 'yes'
+    commitgraph = config['fsck'].getboolean('commitgraph', True)
 
     # Is our git version new enough to support it?
-    if config['commitgraph'] == 'yes' and not grokmirror.git_newer_than('2.18.0'):
+    if commitgraph and not grokmirror.git_newer_than('2.18.0'):
         logger.info('Git version too old to support commit graphs, disabling')
-        config['commitgraph'] = 'no'
+        config['fsck']['commitgraph'] = 'no'
 
     # Go through the manifest and compare with status
     # noinspection PyTypeChecker
-    e_find = em.counter(total=len(manifest), desc='Discovering:', unit='repos', leave=False)
+    e_find = em.counter(total=len(manifest), desc='Discovering', unit='repos', leave=False)
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
     for gitdir in list(manifest):
         e_find.update()
-        fullpath = os.path.join(config['toplevel'], gitdir.lstrip('/'))
+        fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         if fullpath not in status.keys():
             # Newly added repository
             if not force:
@@ -468,6 +499,7 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             status[fullpath] = {
                 'lastcheck': 'never',
                 'nextcheck': nextcheck,
+                'fingerprint': grokmirror.get_repo_fingerprint(toplevel, gitdir),
             }
             logger.info('%s:', fullpath)
             logger.info('  added : next check on %s', nextcheck)
@@ -475,38 +507,170 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     e_find.close()
 
     # record newly found repos in the status file
-    logger.debug('Updating status file in %s', config['statusfile'])
-    with open(config['statusfile'], 'wb') as stfh:
-        stfh.write(json.dumps(status, indent=2).encode('utf-8'))
+    logger.debug('Updating status file in %s', statusfile)
+    with open(statusfile, 'w') as stfh:
+        stfh.write(json.dumps(status, indent=2))
 
     # Go through status and find all repos that need work done on them.
-    # This is a dictionary that contains:
-    # full_path_to_repo:
-    #   repack: 0, 1, 2 (0-no, 1-needs quick repack, 2-needs full repack)
-    #   fsck: 0/1
-
-    to_process = {}
+    to_process = set()
 
     total_checked = 0
     total_elapsed = 0
 
+    cfg_repack = config['fsck'].getboolean('repack', True)
+    # Can be "always", which is why we don't getboolean
+    cfg_precious = config['fsck'].get('precious', 'yes')
+
+    obstdir = os.path.realpath(config['core'].get('objstore'))
+    logger.info('Getting root commit info from all repos, may take a while')
+    top_roots, obst_roots = grokmirror.get_rootsets(toplevel, obstdir, em=em)
+    amap = grokmirror.get_altrepo_map(toplevel)
+
     # noinspection PyTypeChecker
-    e_cmp = em.counter(total=len(status), desc='Analyzing:', unit='repos', leave=False)
+    e_cmp = em.counter(total=len(status), desc='Analyzing (toplevel)', unit='repos', leave=False)
+    fetched_obstrepos = set()
+    obst_changes = False
     for fullpath in list(status):
         e_cmp.update()
+        e_cmp.refresh()
+        # We do obstrepos separately below, as logic is different
+        if grokmirror.is_obstrepo(fullpath, obstdir):
+            logger.debug('Skipping %s (obstrepo)')
+            continue
 
         # Check to make sure it's still in the manifest
-        gitdir = fullpath.replace(config['toplevel'], '', 1)
+        gitdir = fullpath.replace(toplevel, '', 1)
         gitdir = '/' + gitdir.lstrip('/')
 
         if gitdir not in manifest.keys():
-            del status[fullpath]
+            status.pop(fullpath)
             logger.debug('%s is gone, no longer in manifest', gitdir)
             continue
 
-        needs_repack = needs_prune = needs_fsck = 0
+        # Objstore migration routines
+        # Are we using objstore?
+        altdir = grokmirror.get_altrepo(fullpath)
+        is_private = grokmirror.is_private_repo(config, gitdir)
+        if grokmirror.is_alt_repo(toplevel, gitdir):
+            # Don't prune any repos that are parents -- until migration is fully complete
+            m_prune = False
+        else:
+            m_prune = True
 
-        obj_info = get_repo_obj_info(fullpath)
+        if not altdir:
+            # Do we match any obstdir repos?
+            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots)
+            if obstrepo:
+                obst_changes = True
+                # Yes, set ourselves up to be using that obstdir
+                logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
+                grokmirror.set_altrepo(fullpath, obstrepo)
+                if not is_private:
+                    grokmirror.add_repo_to_objstore(obstrepo, fullpath)
+                    # Fetch into the obstrepo
+                    logger.info('  fetch : fetching %s', gitdir)
+                    grokmirror.fetch_objstore_repo(obstrepo, fullpath)
+                    obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
+                run_git_repack(fullpath, config, level=2, prune=m_prune)
+            else:
+                # Do we have any toplevel siblings?
+                obstrepo = None
+                my_roots = grokmirror.get_repo_roots(fullpath)
+                top_siblings = grokmirror.find_siblings(fullpath, my_roots, top_roots)
+                if len(top_siblings):
+                    # Am I a private repo?
+                    if is_private:
+                        # Are there any non-private siblings?
+                        for top_sibling in grokmirror.find_siblings(fullpath, my_roots, top_roots):
+                            # Are you a private repo?
+                            if grokmirror.is_private_repo(config, top_sibling):
+                                continue
+                            # Great, make an objstore repo out of this sibling
+                            obstrepo = grokmirror.setup_objstore_repo(obstdir)
+                            logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
+                            logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                            grokmirror.add_repo_to_objstore(obstrepo, top_sibling)
+                            # Fetch into the obstrepo
+                            logger.info('  fetch : fetching %s', top_sibling)
+                            grokmirror.fetch_objstore_repo(obstrepo, top_sibling)
+                            obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
+                            # It doesn't matter if this fails, because repacking is still safe
+                            # Other siblings will match in their own due course
+                            break
+                    else:
+                        # Make an objstore repo out of myself
+                        obstrepo = grokmirror.setup_objstore_repo(obstdir)
+                        logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
+                        logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                        grokmirror.add_repo_to_objstore(obstrepo, fullpath)
+
+                if obstrepo:
+                    obst_changes = True
+                    # Set alternates to the obstrepo
+                    grokmirror.set_altrepo(fullpath, obstrepo)
+                    if not is_private:
+                        # Fetch into the obstrepo
+                        logger.info('  fetch : fetching %s', gitdir)
+                        grokmirror.fetch_objstore_repo(obstrepo, fullpath)
+                    run_git_repack(fullpath, config, level=2, prune=m_prune)
+                    obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
+
+        elif altdir.find(obstdir) != 0:
+            # We have an alternates repo, but it's not an objstore repo
+            # Probably left over from grokmirror-1.x
+            # Do we have any matching obstrepos?
+            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots)
+            if obstrepo:
+                logger.info('%s: migrating to %s', gitdir, os.path.basename(obstrepo))
+                if altdir not in fetched_obstrepos:
+                    # We're already sharing objects with altdir, so no need to check if it's private
+                    grokmirror.add_repo_to_objstore(obstrepo, altdir)
+                    logger.info('  fetch : fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
+                    success = grokmirror.fetch_objstore_repo(obstrepo, altdir)
+                    fetched_obstrepos.add(altdir)
+                    if success:
+                        set_precious_objects(altdir, enabled=False)
+                        run_git_repack(altdir, config, level=2, prune=False)
+                    else:
+                        logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
+                        obstrepo = None
+            else:
+                # Make a new obstrepo out of mommy
+                obstrepo = grokmirror.setup_objstore_repo(obstdir)
+                logger.info('%s: migrating to %s', gitdir, os.path.basename(obstrepo))
+                logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                grokmirror.add_repo_to_objstore(obstrepo, altdir)
+                logger.info('  fetch : fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
+                success = grokmirror.fetch_objstore_repo(obstrepo, altdir)
+                fetched_obstrepos.add(altdir)
+                if success:
+                    grokmirror.set_altrepo(altdir, obstrepo)
+                    # mommy is no longer precious
+                    set_precious_objects(altdir, enabled=False)
+                    # Don't prune, because there may be objects others are still borrowing
+                    # It can only be pruned once the full migration is completed
+                    run_git_repack(altdir, config, level=2, prune=False)
+                else:
+                    logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
+                    obstrepo = None
+
+            if obstrepo:
+                obst_changes = True
+                # It should be safe now to repoint the alternates without doing a repack first
+                grokmirror.set_altrepo(fullpath, obstrepo)
+                if not is_private:
+                    # Fetch into the obstrepo
+                    grokmirror.add_repo_to_objstore(obstrepo, fullpath)
+                    logger.info('  fetch : fetching %s', gitdir)
+                    grokmirror.fetch_objstore_repo(obstrepo, fullpath)
+                    set_precious_objects(fullpath, enabled=False)
+                    run_git_repack(fullpath, config, level=2, prune=m_prune)
+                else:
+                    logger.info('  fetch : not fetching %s (private)', gitdir)
+
+                obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
+
+        obj_info = grokmirror.get_repo_obj_info(fullpath)
         try:
             packs = int(obj_info['packs'])
             count_loose = int(obj_info['count'])
@@ -514,61 +678,36 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             logger.warning('Unable to count objects in %s, skipping' % fullpath)
             continue
 
+        # emit a warning if we find garbage in a repo
+        # we do it here so we don't spam people nightly on every cron run,
+        # but only do it when a repo needs actual work done on it
+        if obj_info['garbage'] != '0':
+            logger.warning('%s:\n\tcontains %s garbage files (garbage-size: %s KiB)',
+                           fullpath, obj_info['garbage'], obj_info['size-garbage'])
+
         schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
         nextcheck = today + datetime.timedelta(days=checkdelay)
 
-        if 'repack' not in config or config['repack'] != 'yes':
+        if not cfg_repack:
             # don't look at me if you turned off repack
             logger.debug('Not repacking because repack=no in config')
-            needs_repack = 0
+            repack_level = None
         elif repack_all_full and (count_loose > 0 or packs > 1):
-            logger.debug('needs_repack=2 due to repack_all_full')
-            needs_repack = 2
+            logger.debug('repack_level=2 due to repack_all_full')
+            repack_level = 2
         elif repack_all_quick and count_loose > 0:
-            logger.debug('needs_repack=1 due to repack_all_quick')
-            needs_repack = 1
+            logger.debug('repack_level=1 due to repack_all_quick')
+            repack_level = 1
         elif conn_only:
             # don't do any repacks if we're running forced connectivity checks, unless
             # you specifically passed --repack-all-foo
-            logger.debug('needs_repack=0 due to --conn-only')
-            needs_repack = 0
+            logger.debug('repack_level=None due to --conn-only')
+            repack_level = None
         else:
-            # for now, hardcode the maximum loose objects and packs
-            # TODO: we can probably set this in git config values?
-            #       I don't think this makes sense as a global setting, because
-            #       optimal values will depend on the size of the repo as a whole
-            max_loose_objects = 1200
-            max_packs = 20
-            pc_loose_objects = 10
-            pc_loose_size = 10
+            logger.debug('Checking repack level of %s', fullpath)
+            repack_level = get_repack_level(obj_info)
 
-            # first, compare against max values:
-            if packs >= max_packs:
-                logger.debug('Triggering full repack of %s because packs > %s', fullpath, max_packs)
-                needs_repack = 2
-            elif count_loose >= max_loose_objects:
-                logger.debug('Triggering quick repack of %s because loose objects > %s', fullpath, max_loose_objects)
-                needs_repack = 1
-            else:
-                # is the number of loose objects or their size more than 10% of
-                # the overall total?
-                in_pack = int(obj_info['in-pack'])
-                size_loose = int(obj_info['size'])
-                size_pack = int(obj_info['size-pack'])
-                total_obj = count_loose + in_pack
-                total_size = size_loose + size_pack
-                # set some arbitrary "worth bothering" limits so we don't
-                # continuously repack tiny repos.
-                if total_obj > 500 and count_loose/total_obj*100 >= pc_loose_objects:
-                    logger.debug('Triggering repack of %s because loose objects > %s%% of total',
-                                 fullpath, pc_loose_objects)
-                    needs_repack = 1
-                elif total_size > 1024 and size_loose/total_size*100 >= pc_loose_size:
-                    logger.debug('Triggering repack of %s because loose size > %s%% of total',
-                                 fullpath, pc_loose_size)
-                    needs_repack = 1
-
-        if needs_repack > 0 and (config['precious'] == 'always' and check_precious_objects(fullpath)):
+        if repack_level and (cfg_precious == 'always' and check_precious_objects(fullpath)):
             # if we have preciousObjects, then we only repack based on the same
             # schedule as fsck.
             logger.debug('preciousObjects is set')
@@ -576,32 +715,122 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
             if schedcheck <= today:
                 logger.debug('Time for a full periodic repack of a preciousObjects repo')
                 status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
-                needs_repack = 2
+                repack_level = 2
             else:
                 logger.debug('Not repacking preciousObjects repo outside of schedule')
-                needs_repack = 0
+                repack_level = None
 
-        # Do we need to fsck it?
-        if not (repack_all_quick or repack_all_full or repack_only):
-            if schedcheck <= today or force:
-                status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
-                needs_fsck = 1
-
-        if needs_repack or needs_fsck or needs_prune:
-            # emit a warning if we find garbage in a repo
-            # we do it here so we don't spam people nightly on every cron run,
-            # but only do it when a repo needs actual work done on it
-            if obj_info['garbage'] != '0':
-                logger.warning('%s:\n\tcontains %s garbage files (garbage-size: %s KiB)',
-                               fullpath, obj_info['garbage'], obj_info['size-garbage'])
-
-            to_process[fullpath] = {
-                'repack': needs_repack,
-                'prune': needs_prune,
-                'fsck': needs_fsck,
-            }
+        if repack_level:
+            to_process.add((fullpath, 'repack', repack_level))
+        elif repack_only or repack_all_quick or repack_all_full:
+            continue
+        elif schedcheck <= today or force:
+            to_process.add((fullpath, 'fsck', None))
 
     e_cmp.close()
+
+    # Fetch all objstore repos, if we find any
+    # noinspection PyTypeChecker
+    e_obst = em.counter(total=len(obst_roots), desc='Analyzing (objstore)', unit='repos', leave=False)
+    if obst_changes:
+        # Refresh the alt repo map cache
+        amap = grokmirror.get_altrepo_map(toplevel, refresh=True)
+        # Lock and re-read manifest, so we can update reference and forkgroup data
+        grokmirror.manifest_lock(manifile)
+        manifest = grokmirror.read_manifest(manifile)
+
+    for obstrepo in obst_roots.keys():
+        e_obst.update()
+        e_obst.refresh()
+        logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
+        refrepo = None
+        # Is it redundant with any other objstore repos?
+        my_roots = grokmirror.get_repo_roots(obstrepo)
+        my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
+        siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots)
+        for sibling in siblings:
+            # Who has more remotes?
+            sib_remotes = grokmirror.list_repo_remotes(sibling, withurl=True)
+            if len(sib_remotes) > len(my_remotes):
+                mfrom = obstrepo
+                mto = sibling
+                mremotes = my_remotes
+            else:
+                mfrom = sibling
+                mto = obstrepo
+                mremotes = sib_remotes
+            for virtref, childpath in mremotes:
+                # Is it still relevant?
+                if childpath in amap[mfrom]:
+                    success = grokmirror.add_repo_to_objstore(mto, childpath)
+                    if not success:
+                        continue
+                    success = grokmirror.fetch_objstore_repo(mto, childpath)
+                    if not success:
+                        continue
+                    grokmirror.set_altrepo(childpath, mto)
+
+                args = ['remote', 'remove', virtref]
+                grokmirror.run_git_command(mfrom, args)
+                obst_changes = True
+                logger.info('Migrated %s from %s to %s', childpath, os.path.basename(mfrom), os.path.basename(mto))
+
+            my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
+            # recalculate amap
+            amap = grokmirror.get_altrepo_map(toplevel, refresh=True)
+
+        if obstrepo not in amap or not len(amap[obstrepo]):
+            logger.info('Removed obsolete objstore repo %s', os.path.basename(obstrepo))
+            shutil.rmtree(obstrepo)
+            continue
+
+        for virtref, childpath in my_remotes:
+            # Is it still relevant?
+            if childpath not in amap[obstrepo]:
+                # Remove it and let prune take care of it
+                args = ['remote', 'remove', virtref]
+                logger.info('Removed %s from objstore repo %s (no longer used)', childpath, os.path.basename(obstrepo))
+                grokmirror.run_git_command(obstrepo, args)
+                continue
+
+            gitdir = '/' + os.path.relpath(childpath, toplevel).lstrip('/')
+            if refrepo is None:
+                # Legacy "reference=" setting in manifest
+                refrepo = gitdir
+                manifest[gitdir]['reference'] = None
+            else:
+                manifest[gitdir]['reference'] = refrepo
+
+            manifest[gitdir]['forkgroup'] = os.path.basename(obstrepo[:-4])
+
+        if obstrepo not in status:
+            # We don't use obstrepo fingerprints, so we set it to None
+            status[obstrepo] = {
+                'lastcheck': 'never',
+                'nextcheck': todayiso,
+                'fingerprint': None,
+            }
+
+        nextcheck = datetime.datetime.strptime(status[obstrepo]['nextcheck'], '%Y-%m-%d')
+        if nextcheck <= today:
+            repack_level = 2
+        else:
+            obj_info = grokmirror.get_repo_obj_info(obstrepo)
+            repack_level = get_repack_level(obj_info)
+
+        if repack_level:
+            to_process.add((obstrepo, 'repack', repack_level))
+        elif repack_only or repack_all_quick or repack_all_full:
+            continue
+        elif (nextcheck <= today or force) and not repack_only:
+            status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
+            to_process.add((obstrepo, 'fsck', None))
+
+    e_obst.close()
+    if obst_changes:
+        # We keep the same mtime, because the repos themselves haven't changed
+        grokmirror.write_manifest(manifile, manifest, mtime=os.stat(manifile)[8])
+        grokmirror.manifest_unlock(manifile)
 
     if not len(to_process):
         logger.info('No repos need attention.')
@@ -611,9 +840,12 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
     logger.info('Processing %s repositories', len(to_process))
 
     # noinspection PyTypeChecker
-    run = em.counter(total=len(to_process), desc='Processing:', unit='repos', leave=False)
-    for fullpath, needs in to_process.items():
+    run = em.counter(total=len(to_process), desc='Processing', unit='repos', leave=False)
+    for fullpath, action, repack_level in to_process:
         logger.info('%s:', fullpath)
+        checkdelay = frequency if not force else random.randint(1, frequency)
+        nextcheck = today + datetime.timedelta(days=checkdelay)
+
         # Calculate elapsed seconds
         run.refresh()
         startt = time.time()
@@ -622,50 +854,50 @@ def fsck_mirror(name, config, verbose=False, force=False, repack_only=False,
         # otherwise there may be false-positives if a mirrored repo is updated
         # in the middle of fsck or repack.
         grokmirror.lock_repo(fullpath, nonblocking=False)
-        if needs['repack']:
-            if run_git_repack(fullpath, config, needs['repack']):
+        if action == 'repack':
+            if run_git_repack(fullpath, config, repack_level):
                 status[fullpath]['lastrepack'] = todayiso
-                if needs['repack'] > 1:
+                if repack_level > 1:
                     status[fullpath]['lastfullrepack'] = todayiso
+                    status[fullpath]['lastcheck'] = todayiso
+                    status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
+                    logger.info('   next : %s', status[fullpath]['nextcheck'])
             else:
-                logger.warning('Repacking %s was unsuccessful, '
-                               'not running fsck.', fullpath)
+                logger.warning('Repacking %s was unsuccessful', fullpath)
                 grokmirror.unlock_repo(fullpath)
                 run.update()
                 continue
 
-        if needs['prune']:
-            run_git_prune(fullpath, config)
-
-        if needs['fsck']:
+        elif action == 'fsck':
             run_git_fsck(fullpath, config, conn_only)
-            endt = time.time()
             status[fullpath]['lastcheck'] = todayiso
-            status[fullpath]['s_elapsed'] = int(endt-startt)
+            status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
+            logger.info('   next : %s', status[fullpath]['nextcheck'])
 
-            logger.info('   done : %ss, next check on %s',
-                        status[fullpath]['s_elapsed'],
-                        status[fullpath]['nextcheck'])
+        # noinspection PyTypeChecker
+        elapsed = int(time.time()-startt)
+        status[fullpath]['s_elapsed'] = elapsed
 
+        logger.info('   done : %ss', elapsed)
         run.update()
 
         # We're done with the repo now
         grokmirror.unlock_repo(fullpath)
         total_checked += 1
-        total_elapsed += time.time()-startt
+        total_elapsed += elapsed
 
         # Write status file after each check, so if the process dies, we won't
         # have to recheck all the repos we've already checked
-        logger.debug('Updating status file in %s', config['statusfile'])
-        with open(config['statusfile'], 'wb') as stfh:
-            stfh.write(json.dumps(status, indent=2).encode('utf-8'))
+        logger.debug('Updating status file in %s', statusfile)
+        with open(statusfile, 'w') as stfh:
+            stfh.write(json.dumps(status, indent=2))
 
     run.close()
     em.stop()
     logger.info('Processed %s repos in %0.2fs', total_checked, total_elapsed)
 
-    with open(config['statusfile'], 'wb') as stfh:
-        stfh.write(json.dumps(status, indent=2).encode('utf-8'))
+    with open(statusfile, 'w') as stfh:
+        stfh.write(json.dumps(status, indent=2))
 
     lockf(flockh, LOCK_UN)
     flockh.close()
@@ -686,7 +918,7 @@ def parse_args():
                   action='store_true', default=False,
                   help='Force immediate run on all repositories.')
     op.add_option('-c', '--config', dest='config',
-                  help='Location of fsck.conf')
+                  help='Location of the configuration file')
     op.add_option('--repack-only', dest='repack_only',
                   action='store_true', default=False,
                   help='Only find and repack repositories that need optimizing')
@@ -711,50 +943,18 @@ def parse_args():
     return opts, args
 
 
-def grok_fsck(config, verbose=False, force=False, repack_only=False, conn_only=False,
+def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=False,
               repack_all_quick=False, repack_all_full=False):
-    try:
-        from configparser import ConfigParser
-    except ImportError:
-        from ConfigParser import ConfigParser
 
-    ini = ConfigParser()
-    ini.read(config)
+    config = grokmirror.load_config_file(cfgfile)
 
-    for section in ini.sections():
-        config = {}
-        for (option, value) in ini.items(section):
-            config[option] = value
+    obstdir = config['core'].get('objstore', None)
+    if obstdir is None:
+        obstdir = os.path.join(config['core'].get('toplevel'), '_alternates')
+        config['core']['objstore'] = obstdir
 
-        if 'ignore_errors' not in config:
-            config['ignore_errors'] = [
-                'notice: HEAD points to an unborn branch',
-                'notice: No default references',
-                'contains zero-padded file modes',
-                'warning: disabling bitmap writing, as some objects are not being packed',
-                'ignoring extra bitmap file'
-            ]
-        else:
-            ignore_errors = []
-            for estring in config['ignore_errors'].split('\n'):
-                estring = estring.strip()
-                if len(estring):
-                    ignore_errors.append(estring)
-            config['ignore_errors'] = ignore_errors
-
-        if 'reclone_on_errors' not in config:
-            # We don't do any defaults for this one
-            config['reclone_on_errors'] = []
-        else:
-            reclone_on_errors = []
-            for estring in config['reclone_on_errors'].split('\n'):
-                estring = estring.strip()
-                if len(estring):
-                    reclone_on_errors.append(estring)
-            config['reclone_on_errors'] = reclone_on_errors
-
-        fsck_mirror(section, config, verbose, force, repack_only, conn_only,
-                    repack_all_quick, repack_all_full)
+    fsck_mirror(config, verbose, force, repack_only, conn_only,
+                repack_all_quick, repack_all_full)
 
 
 def command():

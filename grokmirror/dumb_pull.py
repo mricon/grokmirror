@@ -22,8 +22,6 @@ import logging
 import fnmatch
 import subprocess
 
-from git import Repo
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,10 +31,10 @@ def git_rev_parse_all(gitdir):
 
     if error:
         # Put things we recognize into debug
-        debug = []
-        warn = []
+        debug = list()
+        warn = list()
         for line in error.split('\n'):
-                warn.append(line)
+            warn.append(line)
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
@@ -50,8 +48,8 @@ def git_remote_update(args, fullpath):
 
     if error:
         # Put things we recognize into debug
-        debug = []
-        warn = []
+        debug = list()
+        warn = list()
         for line in error.split('\n'):
             if line.find('From ') == 0:
                 debug.append(line)
@@ -68,10 +66,9 @@ def git_remote_update(args, fullpath):
 def dumb_pull_repo(gitdir, remotes, svn=False):
     # verify it's a git repo and fetch all remotes
     logger.debug('Will pull %s with following remotes: %s', gitdir, remotes)
-    try:
-        repo = Repo(gitdir)
-        assert repo.bare is True
-    except:
+    old_revs = git_rev_parse_all(gitdir)
+
+    if not old_revs:
         logger.critical('Error opening %s.', gitdir)
         logger.critical('Make sure it is a bare git repository.')
         sys.exit(1)
@@ -82,8 +79,6 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
         logger.info('Could not obtain exclusive lock on %s', gitdir)
         logger.info('\tAssuming another process is running.')
         return False
-
-    old_revs = git_rev_parse_all(gitdir)
 
     if svn:
         logger.debug('Using git-svn for %s', gitdir)
@@ -99,30 +94,28 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
 
     else:
         # Not an svn remote
-        hasremotes = repo.git.remote()
-        if not len(hasremotes.strip()):
+        myremotes = grokmirror.list_repo_remotes(gitdir)
+        if not len(myremotes):
             logger.info('Repository %s has no defined remotes!', gitdir)
             return False
 
-        logger.debug('existing remotes: %s', hasremotes)
+        logger.debug('existing remotes: %s', myremotes)
         for remote in remotes:
             remotefound = False
-            for hasremote in hasremotes.split('\n'):
-                if fnmatch.fnmatch(hasremote, remote):
+            for myremote in myremotes:
+                if fnmatch.fnmatch(myremote, remote):
                     remotefound = True
-                    logger.debug('existing remote %s matches %s',
-                                 hasremote, remote)
-                    args = ['remote', 'update', hasremote]
-                    logger.info('Updating remote %s in %s', hasremote, gitdir)
+                    logger.debug('existing remote %s matches %s', myremote, remote)
+                    args = ['remote', 'update', myremote, '--prune']
+                    logger.info('Updating remote %s in %s', myremote, gitdir)
 
                     git_remote_update(args, gitdir)
 
             if not remotefound:
-                logger.info('Could not find any remotes matching %s in %s',
-                            remote, gitdir)
+                logger.info('Could not find any remotes matching %s in %s', remote, gitdir)
 
-    new_revs = git_rev_parse_all(gitdir)
     grokmirror.unlock_repo(gitdir)
+    new_revs = git_rev_parse_all(gitdir)
 
     if old_revs == new_revs:
         logger.debug('No new revs, no updates')
@@ -141,8 +134,7 @@ def run_post_update_hook(hookscript, gitdir):
 
     args = [hookscript, gitdir]
     logger.debug('Running: %s', ' '.join(args))
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE).communicate()
+    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
     error = error.decode().strip()
     output = output.decode().strip()
@@ -209,8 +201,7 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
 
     if logfile is not None:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter(
-            "[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)
