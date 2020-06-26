@@ -231,7 +231,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         run_git_commit_graph(fullpath)
 
     # only repack refs on full repacks
-    if level > 2:
+    if level > 1:
         # repacking refs requires a separate command, so run it now
         args = ['pack-refs', '--all']
         logger.info(' repack : repacking refs')
