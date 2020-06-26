@@ -730,9 +730,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
     e_cmp.close()
 
-    # Fetch all objstore repos, if we find any
-    # noinspection PyTypeChecker
-    e_obst = em.counter(total=len(obst_roots), desc='Analyzing (objstore)', unit='repos', leave=False)
     if obst_changes:
         # Refresh the alt repo map cache
         amap = grokmirror.get_altrepo_map(toplevel, refresh=True)
@@ -740,51 +737,72 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         grokmirror.manifest_lock(manifile)
         manifest = grokmirror.read_manifest(manifile)
 
-    for obstrepo in obst_roots.keys():
+    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True)
+    # noinspection PyTypeChecker
+    e_obst = em.counter(total=len(obstrepos), desc='Analyzing (objstore)', unit='repos', leave=False)
+
+    for obstrepo in obstrepos:
         e_obst.update()
         e_obst.refresh()
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
-        refrepo = None
-        # Is it redundant with any other objstore repos?
         my_roots = grokmirror.get_repo_roots(obstrepo)
-        my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
-        siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots)
-        for sibling in siblings:
-            # Who has more remotes?
-            sib_remotes = grokmirror.list_repo_remotes(sibling, withurl=True)
-            if len(sib_remotes) > len(my_remotes):
-                mfrom = obstrepo
-                mto = sibling
-                mremotes = my_remotes
-            else:
-                mfrom = sibling
-                mto = obstrepo
-                mremotes = sib_remotes
-            for virtref, childpath in mremotes:
-                # Is it still relevant?
-                if childpath in amap[mfrom]:
-                    success = grokmirror.add_repo_to_objstore(mto, childpath)
-                    if not success:
-                        continue
-                    success = grokmirror.fetch_objstore_repo(mto, childpath)
-                    if not success:
-                        continue
-                    grokmirror.set_altrepo(childpath, mto)
+        refrepo = None
+        if obstrepo in amap and len(amap[obstrepo]):
+            # Is it redundant with any other objstore repos?
+            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots)
+            if len(siblings):
+                siblings.add(obstrepo)
+                mdest = None
+                rcount = 0
+                # Who has the most remotes?
+                for sibling in siblings:
+                    s_remotes = grokmirror.list_repo_remotes(sibling)
+                    if len(s_remotes) > rcount:
+                        mdest = sibling
+                        rcount = len(s_remotes)
 
-                args = ['remote', 'remove', virtref]
-                grokmirror.run_git_command(mfrom, args)
-                obst_changes = True
-                logger.info('Migrated %s from %s to %s', childpath, os.path.basename(mfrom), os.path.basename(mto))
+                # Migrate all siblings into the repo with most remotes
+                siblings.remove(mdest)
+                for sibling in siblings:
+                    logger.info('%s: merging into %s', os.path.basename(sibling), os.path.basename(mdest))
+                    s_remotes = grokmirror.list_repo_remotes(sibling, withurl=True)
+                    for virtref, childpath in s_remotes:
+                        if childpath not in amap[sibling]:
+                            # The child repo isn't even using us
+                            args = ['remote', 'remove', virtref]
+                            grokmirror.run_git_command(sibling, args)
+                            continue
 
-            my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
-            # recalculate amap
-            amap = grokmirror.get_altrepo_map(toplevel, refresh=True)
+                        success = grokmirror.add_repo_to_objstore(mdest, childpath)
+                        if not success:
+                            logger.critical('Could not add %s to %s', childpath, mdest)
+                            continue
 
+                        logger.info('  fetching : %s', childpath)
+                        success = grokmirror.fetch_objstore_repo(mdest, childpath)
+                        if not success:
+                            logger.critical('Failed to migrate %s from %s to %s', childpath, os.path.basename(sibling),
+                                            os.path.basename(mdest))
+                            continue
+                        logger.info(' migrating : %s', childpath)
+                        grokmirror.set_altrepo(childpath, mdest)
+                        amap[sibling].remove(childpath)
+                        amap[mdest].add(childpath)
+                        args = ['remote', 'remove', virtref]
+                        grokmirror.run_git_command(sibling, args)
+                        logger.info('      done : %s', childpath)
+                        obst_changes = True
+
+        # Not an else, because the previous step may have migrated things
         if obstrepo not in amap or not len(amap[obstrepo]):
+            obst_changes = True
+            # XXX: Theoretically, nothing should have cloned a new repo while we were migrating, because
+            # they should have found a better candidate as well.
             logger.info('Removed obsolete objstore repo %s', os.path.basename(obstrepo))
             shutil.rmtree(obstrepo)
             continue
 
+        my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
         for virtref, childpath in my_remotes:
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
@@ -794,7 +812,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 grokmirror.run_git_command(obstrepo, args)
                 continue
 
-            gitdir = '/' + os.path.relpath(childpath, toplevel).lstrip('/')
+            gitdir = '/' + os.path.relpath(childpath, toplevel)
             if refrepo is None:
                 # Legacy "reference=" setting in manifest
                 refrepo = gitdir
