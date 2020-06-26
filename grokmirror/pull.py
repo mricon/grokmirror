@@ -50,10 +50,12 @@ def queue_worker(config, gitdir, repoinfo, action, obstrepo, is_private):
         return False, gitdir, action, None, obstrepo, is_private
 
     logger.info('  Working: %s (%s)', gitdir, action)
-    desc = repoinfo.get('description')
-    owner = repoinfo.get('owner')
+    desc = repoinfo.get('description', '')
+    owner = repoinfo.get('owner', None)
     if owner is None:
         owner = config['pull'].get('default_owner', 'Grokmirror')
+
+    head = repoinfo.get('head', None)
 
     next_action = None
     success = True
@@ -65,7 +67,7 @@ def queue_worker(config, gitdir, repoinfo, action, obstrepo, is_private):
         action = 'fix_params'
 
     if action == 'fix_params':
-        success = set_repo_params(toplevel, gitdir, owner, desc)
+        set_repo_params(toplevel, gitdir, owner, desc, head)
         next_action = 'pull'
 
     if action == 'reclone':
@@ -92,7 +94,7 @@ def queue_worker(config, gitdir, repoinfo, action, obstrepo, is_private):
                     child.unlink()
             grokmirror.set_git_config(fullpath, 'gc.auto', '0')
             fix_remotes(toplevel, gitdir, site)
-            set_repo_params(toplevel, gitdir, owner, desc)
+            set_repo_params(toplevel, gitdir, owner, desc, head)
 
             if obstrepo:
                 grokmirror.set_altrepo(fullpath, obstrepo)
@@ -193,10 +195,10 @@ def fix_remotes(toplevel, gitdir, site):
     return True
 
 
-def set_repo_params(toplevel, gitdir, owner, description):
-    if owner is None and description is None:
+def set_repo_params(toplevel, gitdir, owner, description, head):
+    if owner is None and description is None and head is None:
         # Let the default git values be there, then
-        return True
+        return
 
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     if description is not None:
@@ -214,7 +216,16 @@ def set_repo_params(toplevel, gitdir, owner, description):
         logger.debug('Setting %s owner to: %s', gitdir, owner)
         grokmirror.set_git_config(fullpath, 'gitweb.owner', owner)
 
-    return True
+    if head is not None:
+        headfile = os.path.join(fullpath, 'HEAD')
+        contents = None
+        if os.path.exists(headfile):
+            with open(headfile) as fh:
+                contents = fh.read()
+        if contents != head:
+            logger.debug('Setting %s HEAD to: %s', gitdir, head)
+            with open(headfile, 'w') as fh:
+                fh.write(head)
 
 
 def set_agefile(toplevel, gitdir, last_modified):
@@ -693,18 +704,20 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
 
             # Fix owner and description, if necessary
             # This code is hurky and needs to be cleaned up
-            r_desc = r_culled[gitdir].get('description')
-            r_owner = r_culled[gitdir].get('owner')
+            r_desc = r_culled[gitdir].get('description', None)
+            r_owner = r_culled[gitdir].get('owner', None)
+            r_head = r_culled[gitdir].get('head', None)
 
-            l_desc = l_manifest[gitdir].get('description')
-            l_owner = l_manifest[gitdir].get('owner')
+            l_desc = l_manifest[gitdir].get('description', None)
+            l_owner = l_manifest[gitdir].get('owner', None)
+            l_head = l_manifest[gitdir].get('head', None)
 
             if l_owner is None:
                 l_owner = config['pull'].get('default_owner', 'Grokmirror')
             if r_owner is None:
                 r_owner = config['pull'].get('default_owner', 'Grokmirror')
 
-            if r_desc != l_desc or r_owner != l_owner:
+            if r_desc != l_desc or r_owner != l_owner or r_head != l_head:
                 todo.add((gitdir, 'fix_params'))
 
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=force)

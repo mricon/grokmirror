@@ -746,7 +746,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         e_obst.refresh()
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
         my_roots = grokmirror.get_repo_roots(obstrepo)
-        refrepo = None
         if obstrepo in amap and len(amap[obstrepo]):
             # Is it redundant with any other objstore repos?
             siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots)
@@ -798,17 +797,19 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             obst_changes = True
             # XXX: Theoretically, nothing should have cloned a new repo while we were migrating, because
             # they should have found a better candidate as well.
-            logger.info('Removed obsolete objstore repo %s', os.path.basename(obstrepo))
+            logger.info('%s: deleting (no longer used by anything)', os.path.basename(obstrepo))
             shutil.rmtree(obstrepo)
             continue
 
         my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
+        # Use the first child repo as our "reference" entry in manifest
+        refrepo = None
         for virtref, childpath in my_remotes:
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
                 # Remove it and let prune take care of it
                 args = ['remote', 'remove', virtref]
-                logger.info('Removed %s from objstore repo %s (no longer used)', childpath, os.path.basename(obstrepo))
+                logger.info('%s: removed remote %s (no longer used)', os.path.basename(obstrepo), childpath)
                 grokmirror.run_git_command(obstrepo, args)
                 continue
 
