@@ -163,9 +163,8 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         else:
             repack_flags.append('-a')
             repack_flags.append('-b')
-
-        if not always_precious:
-            repack_flags.append('-k')
+            if not always_precious:
+                repack_flags.append('-k')
 
     elif grokmirror.get_altrepo(fullpath):
         # we are a "child repo"
@@ -179,6 +178,8 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         # we have no relationships with other repos
         repack_flags.append('-a')
         repack_flags.append('-b')
+        if prune:
+            repack_flags.append('--unpack-unreachable=yesterday')
 
     if level > 1:
         logger.info(' repack : performing a full repack for optimal deltas')
@@ -571,7 +572,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     logger.info('  fetch : fetching %s', gitdir)
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
-                run_git_repack(fullpath, config, level=2, prune=m_prune)
+                run_git_repack(fullpath, config, level=1, prune=m_prune)
             else:
                 # Do we have any toplevel siblings?
                 obstrepo = None
@@ -588,7 +589,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                             # Great, make an objstore repo out of this sibling
                             obstrepo = grokmirror.setup_objstore_repo(obstdir)
                             logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
-                            logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                            logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
                             grokmirror.add_repo_to_objstore(obstrepo, top_sibling)
                             # Fetch into the obstrepo
                             logger.info('  fetch : fetching %s', top_sibling)
@@ -601,7 +602,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                         # Make an objstore repo out of myself
                         obstrepo = grokmirror.setup_objstore_repo(obstdir)
                         logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
-                        logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                        logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
                         grokmirror.add_repo_to_objstore(obstrepo, fullpath)
 
                 if obstrepo:
@@ -612,7 +613,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                         # Fetch into the obstrepo
                         logger.info('  fetch : fetching %s', gitdir)
                         grokmirror.fetch_objstore_repo(obstrepo, fullpath)
-                    run_git_repack(fullpath, config, level=2, prune=m_prune)
+                    run_git_repack(fullpath, config, level=1, prune=m_prune)
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
         elif altdir.find(obstdir) != 0:
@@ -630,7 +631,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     fetched_obstrepos.add(altdir)
                     if success:
                         set_precious_objects(altdir, enabled=False)
-                        run_git_repack(altdir, config, level=2, prune=False)
+                        run_git_repack(altdir, config, level=1, prune=False)
                     else:
                         logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                         obstrepo = None
@@ -638,7 +639,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 # Make a new obstrepo out of mommy
                 obstrepo = grokmirror.setup_objstore_repo(obstdir)
                 logger.info('%s: migrating to %s', gitdir, os.path.basename(obstrepo))
-                logger.info('  setup : new objstore repo %s', os.path.basename(obstrepo))
+                logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
                 grokmirror.add_repo_to_objstore(obstrepo, altdir)
                 logger.info('  fetch : fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
                 success = grokmirror.fetch_objstore_repo(obstrepo, altdir)
@@ -649,7 +650,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     set_precious_objects(altdir, enabled=False)
                     # Don't prune, because there may be objects others are still borrowing
                     # It can only be pruned once the full migration is completed
-                    run_git_repack(altdir, config, level=2, prune=False)
+                    run_git_repack(altdir, config, level=1, prune=False)
                 else:
                     logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                     obstrepo = None
@@ -664,7 +665,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     logger.info('  fetch : fetching %s', gitdir)
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     set_precious_objects(fullpath, enabled=False)
-                    run_git_repack(fullpath, config, level=2, prune=m_prune)
+                    run_git_repack(fullpath, config, level=1, prune=m_prune)
                 else:
                     logger.info('  fetch : not fetching %s (private)', gitdir)
 
