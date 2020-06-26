@@ -754,7 +754,11 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 mdest = None
                 rcount = 0
                 # Who has the most remotes?
-                for sibling in siblings:
+                for sibling in set(siblings):
+                    if sibling not in amap or not len(amap[sibling]):
+                        # Orphaned sibling, ignore it -- it will get cleaned up
+                        siblings.remove(sibling)
+                        continue
                     s_remotes = grokmirror.list_repo_remotes(sibling)
                     if len(s_remotes) > rcount:
                         mdest = sibling
@@ -798,6 +802,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             # XXX: Theoretically, nothing should have cloned a new repo while we were migrating, because
             # they should have found a better candidate as well.
             logger.info('%s: deleting (no longer used by anything)', os.path.basename(obstrepo))
+            if obstrepo in amap:
+                amap.pop(obstrepo)
             shutil.rmtree(obstrepo)
             continue
 
