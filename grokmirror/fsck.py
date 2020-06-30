@@ -142,7 +142,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         repack_flags.append('-a')
 
         # We only prune if all repos pointing to us are public
-        urls = grokmirror.list_repo_remotes(fullpath, withurl=True)
+        urls = set(grokmirror.list_repo_remotes(fullpath, withurl=True))
         mine = set([x[1] for x in urls])
         amap = grokmirror.get_altrepo_map(toplevel)
         if mine != amap[fullpath]:
@@ -775,26 +775,30 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                             args = ['remote', 'remove', virtref]
                             grokmirror.run_git_command(sibling, args)
                             continue
+                        logger.info(' moving: %s', childpath)
 
                         success = grokmirror.add_repo_to_objstore(mdest, childpath)
                         if not success:
                             logger.critical('Could not add %s to %s', childpath, mdest)
                             continue
 
-                        logger.info('  fetching : %s', childpath)
+                        logger.info('       : fetching into %s', os.path.basename(mdest))
                         success = grokmirror.fetch_objstore_repo(mdest, childpath)
                         if not success:
-                            logger.critical('Failed to migrate %s from %s to %s', childpath, os.path.basename(sibling),
+                            logger.critical('Failed to fetch %s from %s to %s', childpath, os.path.basename(sibling),
                                             os.path.basename(mdest))
                             continue
-                        logger.info(' migrating : %s', childpath)
+                        logger.info('       : repointing alternates')
                         grokmirror.set_altrepo(childpath, mdest)
                         amap[sibling].remove(childpath)
                         amap[mdest].add(childpath)
                         args = ['remote', 'remove', virtref]
                         grokmirror.run_git_command(sibling, args)
-                        logger.info('      done : %s', childpath)
+                        logger.info('       : done')
                         obst_changes = True
+                        if mdest in status:
+                            # Force full repack of merged obstrepos
+                            status[mdest]['nextcheck'] = todayiso
 
         # Not an else, because the previous step may have migrated things
         if obstrepo not in amap or not len(amap[obstrepo]):
@@ -838,11 +842,11 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             }
 
         nextcheck = datetime.datetime.strptime(status[obstrepo]['nextcheck'], '%Y-%m-%d')
-        if nextcheck <= today:
-            repack_level = 2
-        else:
-            obj_info = grokmirror.get_repo_obj_info(obstrepo)
-            repack_level = get_repack_level(obj_info)
+        obj_info = grokmirror.get_repo_obj_info(obstrepo)
+        repack_level = get_repack_level(obj_info)
+        if repack_level > 1 and nextcheck > today:
+            # Don't do full repacks outside of schedule
+            repack_level = 1
 
         if repack_level:
             to_process.add((obstrepo, 'repack', repack_level))

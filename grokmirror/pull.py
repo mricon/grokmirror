@@ -116,7 +116,9 @@ def queue_worker(config, gitdir, repoinfo, action, obstrepo, is_private):
             logger.debug('FP match, not pulling %s', gitdir)
 
         if success:
-            set_agefile(toplevel, gitdir, repoinfo.get('modified'))
+            modified = repoinfo.get('modified', None)
+            if modified is not None:
+                set_agefile(toplevel, gitdir, modified)
             if my_fp is not None:
                 grokmirror.set_repo_fingerprint(toplevel, gitdir, fingerprint=my_fp)
 
@@ -384,7 +386,49 @@ def find_next_best_actions(toplevel, todo, obstdir, privmasks, forkgroups, mappi
 
         obstrepo = os.path.join(obstdir, '%s.git' % forkgroup)
         if not os.path.isdir(obstrepo):
-            # No siblings matched an existing objstore repo, we are the first
+            # No siblings matched an existing objstore repo
+            # Do we have any existing siblings that were cloned without obstrepo?
+            # This would happen when an initial fork is created of an existing repo.
+            found = False
+            for s_fullpath in forkgroups[forkgroup]:
+                if os.path.isdir(s_fullpath):
+                    is_private = False
+                    s_gitdir = '/' + os.path.relpath(s_fullpath, toplevel)
+                    for privmask in privmasks:
+                        # Does this repo match privrepo
+                        if fnmatch.fnmatch(s_gitdir, privmask):
+                            is_private = True
+                            break
+                    if is_private:
+                        # Can't use this one, as it's private
+                        continue
+                    # Make a new obstrepo and fetch it there
+                    try:
+                        # XXX: Need to deal with a situation if this repository is not known to us
+                        # via manifests.
+                        logger.debug('reusing existing %s as new obstrepo %s', s_gitdir, obstrepo)
+                        obstrepo = grokmirror.setup_objstore_repo(obstdir, name=forkgroup)
+                        # We want to prevent other siblings from being fetched until
+                        # we have some objects available
+                        pending_obstrepos.add(obstrepo)
+                        logger.debug('locked obstrepo %s', obstrepo)
+                        mapping[s_fullpath] = obstrepo
+                        grokmirror.add_repo_to_objstore(obstrepo, s_fullpath)
+                        grokmirror.set_altrepo(s_fullpath, obstrepo)
+                        candidates.add((s_gitdir, 'objstore', obstrepo, False))
+                        found = True
+                    except IOError:
+                        # External process is keeping it locked
+                        logger.debug('cannot reuse %s until %s is available', s_gitdir, obstrepo)
+                        # mark all siblings as ignore
+                        for sf in forkgroups[forkgroup]:
+                            ignore.add(sf)
+                    break
+
+            if found:
+                continue
+
+            # No existing repos we can reuse, so let's start a new objstore repo.
             # But wait, are we a private repo?
             obstrepo = grokmirror.setup_objstore_repo(obstdir, name=forkgroup)
             if is_private:
@@ -403,7 +447,7 @@ def find_next_best_actions(toplevel, todo, obstdir, privmasks, forkgroups, mappi
                 if not found:
                     # clone as a non-sibling repo, then
                     logger.debug('all siblings are private, so clone as individual repo')
-                    candidates.add((c_gitdir, 'clone', None, True))
+                    candidates.add((c_gitdir, 'init', None, True))
                     continue
                 else:
                     # We'll add it when we come to it
@@ -647,8 +691,8 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
     r_forkgroups = dict()
     for gitdir in set(r_culled.keys()):
         e_cmp.update()
-        if r_culled[gitdir]['fingerprint'] is None:
-            logger.critical('Manifest files without fingeprints no longer supported.')
+        if not r_culled[gitdir].get('fingerprint', None):
+            logger.critical('Repos without fingerprint info (skipped): %s', gitdir)
             continue
 
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -797,12 +841,18 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
                     candidates = find_next_best_actions(toplevel, todo, obstdir, privmasks, forkgroups,
                                                         mapping, maxactions=60-len(results))
                     for gitrepo, action, refrepo, is_private in candidates:
-                        if action == 'init':
+                        if action in ('init', 'objstore'):
                             freshclones.add(gitrepo)
-                        todo.remove((gitrepo, action))
+                        if action == 'objstore':
+                            # Objstore actions aren't in the initial set, because we add them
+                            # on the fly as we repurpose existing repos for objstore
+                            repoinfo = l_manifest[gitrepo]
+                        else:
+                            repoinfo = r_culled[gitrepo]
+                            todo.remove((gitrepo, action))
                         logger.info('   Queued: %s', gitrepo)
                         e_que.update()
-                        res = wpool.apply_async(queue_worker, (config, gitrepo, r_culled[gitrepo],
+                        res = wpool.apply_async(queue_worker, (config, gitrepo, repoinfo,
                                                                action, refrepo, is_private))
                         results.append(res)
                 e_que.refresh()

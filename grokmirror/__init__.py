@@ -355,14 +355,14 @@ def list_repo_remotes(fullpath, withurl=False):
     ecode, out, err = run_git_command(fullpath, args)
     if not len(out):
         logger.debug('Could not list remotes in %s', fullpath)
-        return set()
+        return list()
 
     if not withurl:
-        return set(out.split('\n'))
+        return out.split('\n')
 
-    remotes = set()
+    remotes = list()
     for line in out.split('\n'):
-        remotes.add(tuple(line.split()[:2]))
+        remotes.append(tuple(line.split()[:2]))
     return remotes
 
 
@@ -383,11 +383,16 @@ def add_repo_to_objstore(obstrepo, fullpath):
 
 
 def fetch_objstore_repo(obstrepo, fullpath=None):
+    my_remotes = list_repo_remotes(obstrepo)
     if fullpath:
         virtref = objstore_virtref(fullpath)
-        remotes = {virtref}
+        if virtref in my_remotes:
+            remotes = {virtref}
+        else:
+            logger.debug('%s is not in remotes for %s', fullpath, obstrepo)
+            return False
     else:
-        remotes = list_repo_remotes(obstrepo)
+        remotes = my_remotes
 
     success = True
     for remote in remotes:
@@ -657,7 +662,7 @@ def read_manifest(manifile, wait=False):
     else:
         fh = open(manifile, 'rb')
 
-    logger.info('Reading %s', manifile)
+    logger.debug('Reading %s', manifile)
     jdata = fh.read().decode('utf-8')
     fh.close()
 
@@ -679,7 +684,7 @@ def write_manifest(manifile, manifest, mtime=None, pretty=False):
     import shutil
     import gzip
 
-    logger.info('Writing new %s', manifile)
+    logger.debug('Writing new %s', manifile)
 
     (dirname, basename) = os.path.split(manifile)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)

@@ -37,6 +37,12 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         sys.exit(1)
 
     gitdir = '/' + os.path.relpath(fullpath, toplevel)
+    # Ignore it if it's an empty git repository
+    fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
+    if not fp:
+        logger.info('%s has no heads, ignoring', gitdir)
+        return
+
     if gitdir not in manifest:
         # We didn't normalize paths to be always with a leading '/', so
         # check the manifest for both and make sure we only save the path with a leading /
@@ -48,12 +54,6 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
             manifest[gitdir] = dict()
     else:
         logger.info('Updating %s in the manifest', gitdir)
-
-    # Ignore it if it's an empty git repository
-    fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
-    if not fp:
-        logger.info('%s has no heads, ignoring', gitdir)
-        return
 
     description = None
     try:
@@ -75,7 +75,13 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         args = ['for-each-ref', '--sort=-committerdate', '--format=%(committerdate:iso-strict)', '--count=1']
         ecode, out, err = grokmirror.run_git_command(fullpath, args)
         if len(out):
-            modified = datetime.datetime.fromisoformat(out)
+            try:
+                modified = datetime.datetime.fromisoformat(out)
+            except AttributeError:
+                # Python 3.6 doesn't have fromisoformat
+                # remove : from the TZ info
+                out = out[:-3] + out[-2:]
+                modified = datetime.datetime.strptime(out, '%Y-%m-%dT%H:%M:%S%z')
 
     if not modified:
         modified = datetime.datetime.now()
@@ -208,6 +214,9 @@ def parse_args():
                   help='When running with arguments, wait if manifest is not '
                        'there (can be useful when multiple writers are writing '
                        'the manifest)')
+    op.add_option('-o', '--fetch-objstore', dest='fetchobst',
+                  action='store_true', default=False,
+                  help='Fetch updates into objstore repo (if used)')
     op.add_option('-v', '--verbose', dest='verbose', action='store_true',
                   default=False,
                   help='Be verbose and tell us what you are doing')
@@ -226,8 +235,9 @@ def parse_args():
 
 def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
                   check_export_ok=False, purge=False, remove=False,
-                  pretty=False, ignore=None, wait=False, verbose=False):
+                  pretty=False, ignore=None, wait=False, verbose=False, fetchobst=False):
 
+    startt = datetime.datetime.now()
     if args is None:
         args = list()
     if ignore is None:
@@ -305,6 +315,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
     symlinks = list()
     # noinspection PyTypeChecker
     run = em.counter(total=len(gitdirs), desc='Processing:', unit='repos', leave=False)
+    tofetch = set()
     for gitdir in gitdirs:
         run.update()
         # check to make sure this gitdir is ok to export
@@ -324,16 +335,29 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             symlinks.append(gitdir)
         else:
             update_manifest(manifest, toplevel, gitdir, usenow)
-
-    logger.info('Updated %s records in %0.2fs', len(gitdirs), run.elapsed)
-    run.close()
-    em.stop()
+            if fetchobst:
+                # Do it after we're done with manifest, to avoid keeping it locked
+                tofetch.add(gitdir)
 
     if len(symlinks):
         set_symlinks(manifest, toplevel, symlinks)
 
     grokmirror.write_manifest(manifile, manifest, pretty=pretty)
     grokmirror.manifest_unlock(manifile)
+    run.close()
+    em.stop()
+
+    for gitdir in tofetch:
+        altrepo = grokmirror.get_altrepo(gitdir)
+        if altrepo and re.match(uuidre, altrepo, flags=re.I):
+            logger.info('Fetching objects into %s', os.path.basename(altrepo))
+            grokmirror.fetch_objstore_repo(altrepo, gitdir)
+
+    elapsed = datetime.datetime.now() - startt
+    if len(gitdirs) > 1:
+        logger.info('Updated %s records in %ds', len(gitdirs), elapsed.total_seconds())
+    else:
+        logger.info('Done in %0.2fs', elapsed.total_seconds())
 
 
 def command():
@@ -343,7 +367,8 @@ def command():
         opts.manifile, opts.toplevel, args=args, logfile=opts.logfile,
         usenow=opts.usenow, check_export_ok=opts.check_export_ok,
         purge=opts.purge, remove=opts.remove, pretty=opts.pretty,
-        ignore=opts.ignore, wait=opts.wait, verbose=opts.verbose)
+        ignore=opts.ignore, wait=opts.wait, verbose=opts.verbose,
+        fetchobst=opts.fetchobst)
 
 
 if __name__ == '__main__':
