@@ -26,6 +26,9 @@ import logging
 import hashlib
 import pathlib
 import uuid
+import tempfile
+import shutil
+import gzip
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
@@ -46,6 +49,10 @@ _alt_repo_map = None
 
 # Used to store our requests session
 REQSESSION = None
+
+OBST_PREAMBULE = ('# WARNING: This is a grokmirror object storage repository.\n'
+                  '# Deleting or moving it will cause corruption in the following repositories\n'
+                  '# (caution, this list may be incomplete):\n')
 
 
 def get_requests_session():
@@ -242,9 +249,8 @@ def set_altrepo(fullpath, altdir):
 def get_rootsets(toplevel, obstdir, em=None):
     top_roots = dict()
     obst_roots = dict()
-    ignore = ['%s/*' % obstdir.rstrip('/')]
-    topdirs = find_all_gitdirs(toplevel, ignore=ignore, normalize=True)
-    obstdirs = find_all_gitdirs(obstdir, normalize=True)
+    topdirs = find_all_gitdirs(toplevel, normalize=True, exclude_objstore=True)
+    obstdirs = find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
     e_rts = None
     if em is not None:
         # noinspection PyTypeChecker
@@ -336,6 +342,9 @@ def setup_objstore_repo(obstdir, name=None):
     set_git_config(obstrepo, 'repack.useDeltaIslands', 'true')
     set_git_config(obstrepo, 'repack.writeBitmaps', 'true')
     set_git_config(obstrepo, 'pack.island', 'refs/virtual/([0-9a-f]+)/', operation='--add')
+    telltale = os.path.join(obstrepo, 'grokmirror.objstore')
+    with open(telltale, 'w') as fh:
+        fh.write(OBST_PREAMBULE)
     unlock_repo(obstrepo)
     return obstrepo
 
@@ -379,15 +388,30 @@ def add_repo_to_objstore(obstrepo, fullpath):
         logger.critical('Could not add remote to %s', obstrepo)
         sys.exit(1)
     set_git_config(obstrepo, 'remote.%s.fetch' % virtref, '+refs/*:refs/virtual/%s/*' % virtref)
+    telltale = os.path.join(obstrepo, 'grokmirror.objstore')
+    knownsiblings = set()
+    if os.path.exists(telltale):
+        with open(telltale) as fh:
+            for line in fh.readlines():
+                line = line.strip()
+                if not len(line) or line[0] == '#':
+                    continue
+                if os.path.isdir(line):
+                    knownsiblings.add(line)
+    knownsiblings.add(fullpath)
+    with open(telltale, 'w') as fh:
+        fh.write(OBST_PREAMBULE)
+        fh.write('\n'.join(sorted(list(knownsiblings))) + '\n')
+
     return True
 
 
 def fetch_objstore_repo(obstrepo, fullpath=None):
-    my_remotes = list_repo_remotes(obstrepo)
+    my_remotes = list_repo_remotes(obstrepo, withurl=True)
     if fullpath:
         virtref = objstore_virtref(fullpath)
-        if virtref in my_remotes:
-            remotes = {virtref}
+        if (virtref, fullpath) in my_remotes:
+            remotes = {(virtref, fullpath)}
         else:
             logger.debug('%s is not in remotes for %s', fullpath, obstrepo)
             return False
@@ -395,11 +419,15 @@ def fetch_objstore_repo(obstrepo, fullpath=None):
         remotes = my_remotes
 
     success = True
-    for remote in remotes:
-        ecode, out, err = run_git_command(obstrepo, ['fetch', remote, '--prune'])
+    for (virtref, url) in remotes:
+        ecode, out, err = run_git_command(obstrepo, ['fetch', virtref, '--prune'])
+        r_fp = os.path.join(url, 'grokmirror.fingerprint')
         if ecode > 0:
-            logger.critical('Could not fetch objects from %s to %s', remote, obstrepo)
+            logger.critical('Could not fetch objects from %s to %s', url, obstrepo)
             success = False
+        elif os.path.exists(r_fp):
+            l_fp = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
+            shutil.copy(r_fp, l_fp)
 
     return success
 
@@ -585,7 +613,7 @@ def is_obstrepo(fullpath, obstdir):
     return fullpath.find(obstdir) == 0
 
 
-def find_all_gitdirs(toplevel, ignore=None, normalize=False):
+def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True):
     if ignore is None:
         ignore = set()
 
@@ -605,7 +633,8 @@ def find_all_gitdirs(toplevel, ignore=None, normalize=False):
         fullpath = subp.resolve().as_posix()
         if not is_bare_git_repo(fullpath):
             continue
-
+        if exclude_objstore and os.path.exists(os.path.join(fullpath, 'grokmirror.objstore')):
+            continue
         if normalize:
             fullpath = os.path.realpath(fullpath)
 
@@ -657,7 +686,6 @@ def read_manifest(manifile, wait=False):
         return {}
 
     if manifile.find('.gz') > 0:
-        import gzip
         fh = gzip.open(manifile, 'rb')
     else:
         fh = open(manifile, 'rb')
@@ -680,10 +708,6 @@ def read_manifest(manifile, wait=False):
 
 
 def write_manifest(manifile, manifest, mtime=None, pretty=False):
-    import tempfile
-    import shutil
-    import gzip
-
     logger.debug('Writing new %s', manifile)
 
     (dirname, basename) = os.path.split(manifile)

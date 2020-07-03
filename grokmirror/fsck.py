@@ -737,7 +737,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         grokmirror.manifest_lock(manifile)
         manifest = grokmirror.read_manifest(manifile)
 
-    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True)
+    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
     # noinspection PyTypeChecker
     e_obst = em.counter(total=len(obstrepos), desc='Analyzing (objstore)', unit='repos', leave=False)
 
@@ -811,6 +811,12 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             shutil.rmtree(obstrepo)
             continue
 
+        # Record the latest sibling info in the tracking file
+        telltale = os.path.join(obstrepo, 'grokmirror.objstore')
+        with open(telltale, 'w') as fh:
+            fh.write(grokmirror.OBST_PREAMBULE)
+            fh.write('\n'.join(sorted(list(amap[obstrepo]))) + '\n')
+
         my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
         # Use the first child repo as our "reference" entry in manifest
         refrepo = None
@@ -823,7 +829,25 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 grokmirror.run_git_command(obstrepo, args)
                 continue
 
+            # Does it need fetching?
+            fetch = True
+            l_fpf = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
+            r_fpf = os.path.join(childpath, 'grokmirror.fingerprint')
+            try:
+                with open(l_fpf) as fh:
+                    l_fp = fh.read().strip()
+                with open(r_fpf) as fh:
+                    r_fp = fh.read().strip()
+                if l_fp == r_fp:
+                    fetch = False
+            except IOError:
+                pass
+
             gitdir = '/' + os.path.relpath(childpath, toplevel)
+            if fetch:
+                logger.info('Fetching %s into %s', gitdir, os.path.basename(obstrepo))
+                grokmirror.fetch_objstore_repo(obstrepo, childpath)
+
             if refrepo is None:
                 # Legacy "reference=" setting in manifest
                 refrepo = gitdir

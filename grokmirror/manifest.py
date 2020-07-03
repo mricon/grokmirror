@@ -19,14 +19,10 @@ import sys
 import logging
 import datetime
 import enlighten
-import re
 
 import grokmirror
 
 logger = logging.getLogger(__name__)
-
-# We use it to identify objstore repos
-uuidre = r'.*/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.git$'
 
 
 def update_manifest(manifest, toplevel, fullpath, usenow):
@@ -97,10 +93,8 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
     forkgroup = None
     altrepo = grokmirror.get_altrepo(fullpath)
     if altrepo:
-        # if it's in the UUID format, then it's an objstore repo and we can set a forkgroup
-        match = re.match(uuidre, altrepo, flags=re.I)
-        if match:
-            forkgroup = match.groups()[0]
+        if os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
+            forkgroup = os.path.basename(altrepo)[:-4]
             old_forkgroup = manifest[gitdir].get('forkgroup', None)
             if old_forkgroup != forkgroup:
                 # Use the first remote listed in the forkgroup as our reference, just so
@@ -299,9 +293,8 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     if purge or not len(args) or not len(manifest):
         # We automatically purge when we do a full tree walk
-        for gitdir in grokmirror.find_all_gitdirs(toplevel, ignore=ignore):
-            if not re.match(uuidre, gitdir, flags=re.I):
-                gitdirs.append(gitdir)
+        for gitdir in grokmirror.find_all_gitdirs(toplevel, ignore=ignore, exclude_objstore=True):
+            gitdirs.append(gitdir)
         purge_manifest(manifest, toplevel, gitdirs)
 
     if len(manifest) and len(args):
@@ -349,7 +342,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     for gitdir in tofetch:
         altrepo = grokmirror.get_altrepo(gitdir)
-        if altrepo and re.match(uuidre, altrepo, flags=re.I):
+        if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
             logger.info('Fetching objects into %s', os.path.basename(altrepo))
             grokmirror.fetch_objstore_repo(altrepo, gitdir)
 

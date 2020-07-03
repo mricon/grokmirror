@@ -124,13 +124,8 @@ def queue_worker(config, gitdir, repoinfo, action, obstrepo, is_private):
 
     if action == 'objstore':
         if obstrepo and not is_private:
-            try:
-                grokmirror.lock_repo(obstrepo, nonblocking=True)
-                grokmirror.fetch_objstore_repo(obstrepo, fullpath)
-                grokmirror.unlock_repo(obstrepo)
-            except IOError:
-                # Locked by external process. Don't block here and let the next run fix this.
-                logger.debug('Could not lock %s, not fetching objects into it from %s', obstrepo, fullpath)
+            # Should be safe to do without locking it, as we operate on different heads
+            grokmirror.fetch_objstore_repo(obstrepo, fullpath)
 
     if action == 'repack':
         # Should only trigger after initial clone with objstore repo support, in order
@@ -692,7 +687,7 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
     for gitdir in set(r_culled.keys()):
         e_cmp.update()
         if not r_culled[gitdir].get('fingerprint', None):
-            logger.critical('Repos without fingerprint info (skipped): %s', gitdir)
+            logger.critical('Repo without fingerprint info (skipped): %s', gitdir)
             continue
 
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -943,7 +938,7 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
     if purge:
         to_purge = set()
         found_repos = 0
-        for founddir in grokmirror.find_all_gitdirs(toplevel, ignore='%s/*' % obstdir):
+        for founddir in grokmirror.find_all_gitdirs(toplevel, exclude_objstore=True):
             gitdir = founddir.replace(toplevel, '')
             found_repos += 1
 
