@@ -420,8 +420,18 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
     logger.info('Running grok-fsck for [%s]', config['core'].get('toplevel'))
 
+    statusfile = config['fsck'].get('statusfile')
+    if not statusfile:
+        logger.critical('Please define fsck.statusfile in the config')
+        return 1
+
+    st_dir = os.path.dirname(statusfile)
+    if not os.path.isdir(os.path.dirname(statusfile)):
+        logger.critical('Directory %s is absent', st_dir)
+        return 1
+
     # Lock the tree to make sure we only run one instance
-    lockfile = config['core'].get('lock')
+    lockfile = os.path.join(st_dir, '.%s.lock' % os.path.basename(statusfile))
     logger.debug('Attempting to obtain lock on %s', lockfile)
     flockh = open(lockfile, 'w')
     try:
@@ -434,7 +444,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     manifile = config['core'].get('manifest')
     manifest = grokmirror.read_manifest(manifile)
 
-    statusfile = config['fsck'].get('statusfile')
     if os.path.exists(statusfile):
         logger.info('Reading status from %s', statusfile)
         stfh = open(statusfile, 'r')
@@ -543,7 +552,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         gitdir = fullpath.replace(toplevel, '', 1)
         gitdir = '/' + gitdir.lstrip('/')
 
-        if gitdir not in manifest.keys():
+        if gitdir not in manifest:
             status.pop(fullpath)
             logger.debug('%s is gone, no longer in manifest', gitdir)
             continue
@@ -847,6 +856,9 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             if fetch:
                 logger.info('Fetching %s into %s', gitdir, os.path.basename(obstrepo))
                 grokmirror.fetch_objstore_repo(obstrepo, childpath)
+
+            if gitdir not in manifest:
+                continue
 
             if refrepo is None:
                 # Legacy "reference=" setting in manifest

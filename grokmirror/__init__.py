@@ -29,6 +29,7 @@ import uuid
 import tempfile
 import shutil
 import gzip
+import datetime
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
@@ -219,6 +220,76 @@ def get_repo_obj_info(fullpath):
             obj_info[key] = value.strip()
 
     return obj_info
+
+
+def get_repo_defs(toplevel, gitdir, usenow=False):
+    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+    description = None
+    try:
+        descfile = os.path.join(fullpath, 'description')
+        with open(descfile) as fh:
+            contents = fh.read().strip()
+            if len(contents) and contents.find('edit this file') < 0:
+                # We don't need to tell mirrors to edit this file
+                description = contents
+    except IOError:
+        pass
+
+    entries = get_config_from_git(fullpath, r'gitweb\..*')
+    owner = entries.get('owner', None)
+
+    modified = 0
+
+    if not usenow:
+        args = ['for-each-ref', '--sort=-committerdate', '--format=%(committerdate:iso-strict)', '--count=1']
+        ecode, out, err = run_git_command(fullpath, args)
+        if len(out):
+            try:
+                modified = datetime.datetime.fromisoformat(out)
+            except AttributeError:
+                # Python 3.6 doesn't have fromisoformat
+                # remove : from the TZ info
+                out = out[:-3] + out[-2:]
+                modified = datetime.datetime.strptime(out, '%Y-%m-%dT%H:%M:%S%z')
+
+    if not modified:
+        modified = datetime.datetime.now()
+
+    head = None
+    try:
+        with open(os.path.join(fullpath, 'HEAD')) as fh:
+            head = fh.read().strip()
+    except IOError:
+        pass
+
+    forkgroup = None
+    altrepo = get_altrepo(fullpath)
+    if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
+        forkgroup = os.path.basename(altrepo)[:-4]
+
+    # we need a way to quickly compare whether mirrored repositories match
+    # what is in the master manifest. To this end, we calculate a so-called
+    # "state fingerprint" -- basically the output of "git show-ref | sha1sum".
+    # git show-ref output is deterministic and should accurately list all refs
+    # and their relation to heads/tags/etc.
+    fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
+    # Record it in the repo for other use
+    set_repo_fingerprint(toplevel, gitdir, fingerprint)
+    repoinfo = {
+        'modified': int(modified.timestamp()),
+        'fingerprint': fingerprint,
+        'head': head,
+    }
+
+    # Don't add empty things to manifest
+    if owner:
+        repoinfo['owner'] = owner
+    if description:
+        repoinfo['description'] = description
+    if forkgroup:
+        repoinfo['forkgroup'] = forkgroup
+
+    return repoinfo
 
 
 def get_altrepo(fullpath):

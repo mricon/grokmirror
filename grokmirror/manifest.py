@@ -39,6 +39,8 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         logger.info('%s has no heads, ignoring', gitdir)
         return
 
+    repoinfo = grokmirror.get_repo_defs(toplevel, gitdir, usenow=usenow)
+
     if gitdir not in manifest:
         # We didn't normalize paths to be always with a leading '/', so
         # check the manifest for both and make sure we only save the path with a leading /
@@ -51,84 +53,24 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
     else:
         logger.info('Updating %s in the manifest', gitdir)
 
-    description = None
-    try:
-        descfile = os.path.join(fullpath, 'description')
-        with open(descfile) as fh:
-            contents = fh.read().strip()
-            if len(contents) and contents.find('edit this file') < 0:
-                # We don't need to tell mirrors to edit this file
-                description = contents
-    except IOError:
-        pass
-
-    entries = grokmirror.get_config_from_git(fullpath, r'gitweb\..*')
-    owner = entries.get('owner', None)
-
-    modified = 0
-
-    if not usenow:
-        args = ['for-each-ref', '--sort=-committerdate', '--format=%(committerdate:iso-strict)', '--count=1']
-        ecode, out, err = grokmirror.run_git_command(fullpath, args)
-        if len(out):
-            try:
-                modified = datetime.datetime.fromisoformat(out)
-            except AttributeError:
-                # Python 3.6 doesn't have fromisoformat
-                # remove : from the TZ info
-                out = out[:-3] + out[-2:]
-                modified = datetime.datetime.strptime(out, '%Y-%m-%dT%H:%M:%S%z')
-
-    if not modified:
-        modified = datetime.datetime.now()
-
-    head = None
-    try:
-        with open(os.path.join(fullpath, 'HEAD')) as fh:
-            head = fh.read().strip()
-    except IOError:
-        pass
-
-    reference = None
-    forkgroup = None
     altrepo = grokmirror.get_altrepo(fullpath)
-    if altrepo:
-        if os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
-            forkgroup = os.path.basename(altrepo)[:-4]
-            old_forkgroup = manifest[gitdir].get('forkgroup', None)
-            if old_forkgroup != forkgroup:
-                # Use the first remote listed in the forkgroup as our reference, just so
-                # grokmirror-1.x clients continue to work without doing full clones
-                remotes = grokmirror.list_repo_remotes(altrepo, withurl=True)
-                if len(remotes):
-                    urls = list(x[1] for x in remotes)
-                    urls.sort()
-                    reference = '/' + os.path.relpath(urls[0], toplevel)
-            else:
-                reference = manifest[gitdir].get('reference', None)
-        else:
-            # Not an objstore repo
-            reference = '/' + os.path.relpath(altrepo, toplevel)
+    reference = None
+    if manifest[gitdir].get('forkgroup', None) != repoinfo.get('forkgroup', None):
+        # Use the first remote listed in the forkgroup as our reference, just so
+        # grokmirror-1.x clients continue to work without doing full clones
+        remotes = grokmirror.list_repo_remotes(altrepo, withurl=True)
+        if len(remotes):
+            urls = list(x[1] for x in remotes)
+            urls.sort()
+            reference = '/' + os.path.relpath(urls[0], toplevel)
+    else:
+        reference = manifest[gitdir].get('reference', None)
 
-    # we need a way to quickly compare whether mirrored repositories match
-    # what is in the master manifest. To this end, we calculate a so-called
-    # "state fingerprint" -- basically the output of "git show-ref | sha1sum".
-    # git show-ref output is deterministic and should accurately list all refs
-    # and their relation to heads/tags/etc.
-    fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
-    # Record it in the repo for other use
-    grokmirror.set_repo_fingerprint(toplevel, gitdir, fingerprint)
+    if altrepo and not reference and not repoinfo.get('forkgroup'):
+        # Not an objstore repo
+        reference = '/' + os.path.relpath(altrepo, toplevel)
 
-    manifest[gitdir]['modified'] = int(modified.timestamp())
-    manifest[gitdir]['fingerprint'] = fingerprint
-    manifest[gitdir]['head'] = head
-    # Don't add empty things to manifest
-    if owner:
-        manifest[gitdir]['owner'] = owner
-    if description:
-        manifest[gitdir]['description'] = description
-    if forkgroup:
-        manifest[gitdir]['forkgroup'] = forkgroup
+    manifest[gitdir].update(repoinfo)
     if reference:
         manifest[gitdir]['reference'] = reference
 
@@ -267,6 +209,8 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
     grokmirror.manifest_lock(manifile)
     manifest = grokmirror.read_manifest(manifile, wait=wait)
 
+    toplevel = os.path.realpath(toplevel)
+
     # If manifest is empty, don't use current timestamp
     if not len(manifest.keys()):
         usenow = False
@@ -301,7 +245,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         # limit ourselves to passed dirs only when there is something
         # in the manifest. This precaution makes sure we regenerate the
         # whole file when there is nothing in it or it can't be parsed.
-        gitdirs = args
+        gitdirs = [os.path.realpath(x) for x in args]
         # Don't draw a progress bar for a single repo
         em.enabled = False
 
@@ -340,8 +284,12 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
     run.close()
     em.stop()
 
+    fetched = set()
     for gitdir in tofetch:
         altrepo = grokmirror.get_altrepo(gitdir)
+        if altrepo in fetched:
+            continue
+        fetched.add(altrepo)
         if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
             logger.info('Fetching objects into %s', os.path.basename(altrepo))
             grokmirror.fetch_objstore_repo(altrepo, gitdir)

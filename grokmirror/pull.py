@@ -829,6 +829,8 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
         privmasks = config['core'].get('private', '').split('\n')
         mapping = grokmirror.get_obstrepo_mapping(obstdir)
         freshclones = set()
+        retries = dict()
+        maxretries = config['pull'].getint('retries', 3)
         with mp.Pool(pull_threads) as wpool:
             results = list()
             while len(results) or len(todo):
@@ -841,7 +843,12 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
                         if action == 'objstore':
                             # Objstore actions aren't in the initial set, because we add them
                             # on the fly as we repurpose existing repos for objstore
-                            repoinfo = l_manifest[gitrepo]
+                            if gitrepo in l_manifest:
+                                repoinfo = l_manifest[gitrepo]
+                            else:
+                                # This repo is in neither manifest, but it's on disk, so we may
+                                # as well reuse it.
+                                repoinfo = grokmirror.get_repo_defs(toplevel, gitrepo)
                         else:
                             repoinfo = r_culled[gitrepo]
                             todo.remove((gitrepo, action))
@@ -857,18 +864,31 @@ def pull_mirror(config, verbose=False, force=False, nomtime=False,
                     success, gitrepo, action, next_action, obstrepo, is_private = res.get(timeout=0.1)
                     logger.debug('result: repo=%s, action=%s, next=%s', gitrepo, action, next_action)
                     if not success:
-                        logger.info('   Failed: %s', gitrepo)
-                        failures += 1
-                        # To make sure we check this again during next run,
-                        # fudge the manifest accordingly.
-                        if gitrepo in l_manifest:
-                            r_culled[gitrepo] = l_manifest[gitrepo]
-                        # this is rather hackish, but effective
-                        r_last_modified -= 1
-                        if obstrepo and obstrepo in pending_obstrepos:
-                            pending_obstrepos.remove(obstrepo)
-                            logger.debug('marked available obstrepo %s', obstrepo)
-                        continue
+                        if action == 'pull' and (gitrepo not in retries or gitrepo[retries] <= maxretries):
+                            # Let's retry pulls a few times, just in case there was a network fluke
+                            if gitrepo not in retries:
+                                retries[gitrepo] = 1
+                            else:
+                                retries[gitrepo] += 1
+                            logger.info(' Retry #%d: %s', retries[gitrepo], gitrepo)
+                            next_action = 'pull'
+
+                        if next_action is None:
+                            logger.info('   Failed: %s', gitrepo)
+                            failures += 1
+                            # To make sure we check this again during next run,
+                            # fudge the manifest accordingly.
+                            if gitrepo in l_manifest:
+                                r_culled[gitrepo] = l_manifest[gitrepo]
+                            # this is rather hackish, but effective
+                            r_last_modified -= 1
+                            if obstrepo and obstrepo in pending_obstrepos:
+                                pending_obstrepos.remove(obstrepo)
+                                logger.debug('marked available obstrepo %s', obstrepo)
+
+                            e_fin.update_from(e_que)
+                            e_que.refresh()
+                            continue
 
                     if action == 'objstore' and gitrepo in freshclones:
                         freshclones.remove(gitrepo)
