@@ -317,19 +317,13 @@ def set_altrepo(fullpath, altdir):
         logger.critical('objdir %s does not exist, not setting alternates file %s', objpath, altfile)
 
 
-def get_rootsets(toplevel, obstdir, em=None):
+def get_rootsets(toplevel, obstdir):
     top_roots = dict()
     obst_roots = dict()
     topdirs = find_all_gitdirs(toplevel, normalize=True, exclude_objstore=True)
     obstdirs = find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
-    e_rts = None
-    if em is not None:
-        # noinspection PyTypeChecker
-        e_rts = em.counter(total=len(topdirs)+len(obstdirs), desc='Grokking', color='white', unit='repos', leave=False)
     for fullpath in topdirs:
         # Does it have an alternates file pointing to obstdir?
-        if e_rts is not None:
-            e_rts.update()
         altdir = get_altrepo(fullpath)
         if altdir and altdir.find(obstdir) == 0:
             # return the roots from there instead
@@ -342,16 +336,11 @@ def get_rootsets(toplevel, obstdir, em=None):
             top_roots[fullpath] = roots
 
     for fullpath in obstdirs:
-        if e_rts is not None:
-            e_rts.update()
         if fullpath in obst_roots:
             continue
         roots = get_repo_roots(fullpath)
         if roots:
             obst_roots[fullpath] = roots
-
-    if e_rts is not None:
-        e_rts.close()
 
     return top_roots, obst_roots
 
@@ -385,6 +374,26 @@ def get_repo_roots(fullpath, force=False):
     return roots
 
 
+def setup_bare_repo(fullpath):
+    args = ['init', '--bare', fullpath]
+    ecode, out, err = run_git_command(None, args)
+    if ecode > 0:
+        logger.critical('Unable to bare-init %s', fullpath)
+        return False
+
+    # Remove .sample files from hooks, because they are just dead weight
+    hooksdir = os.path.join(fullpath, 'hooks')
+    for child in pathlib.Path(hooksdir).iterdir():
+        if child.suffix == '.sample':
+            child.unlink()
+    # We never want auto-gc anywhere
+    set_git_config(fullpath, 'gc.auto', '0')
+    # We don't care about FETCH_HEAD information and writing to it just
+    # wastes IO cycles
+    os.symlink('/dev/null', os.path.join(fullpath, 'FETCH_HEAD'))
+    return True
+
+
 def setup_objstore_repo(obstdir, name=None):
     if name is None:
         name = str(uuid.uuid4())
@@ -392,18 +401,8 @@ def setup_objstore_repo(obstdir, name=None):
     obstrepo = os.path.join(obstdir, '%s.git' % name)
     logger.debug('Creating objstore repo in %s', obstrepo)
     lock_repo(obstrepo)
-    args = ['init', '--bare', obstrepo]
-    ecode, out, err = run_git_command(None, args)
-    if ecode > 0:
-        logger.critical('Error creating objstore repo %s: %s', obstrepo, err)
+    if not setup_bare_repo(obstrepo):
         sys.exit(1)
-    # Remove .sample files from hooks, because they are just dead weight
-    hooksdir = os.path.join(obstrepo, 'hooks')
-    for child in pathlib.Path(hooksdir).iterdir():
-        if child.suffix == '.sample':
-            child.unlink()
-    # Never auto-gc
-    set_git_config(obstrepo, 'gc.auto', '0')
     # All our objects are precious -- we only turn this off when repacking
     set_git_config(obstrepo, 'core.repositoryformatversion', '1')
     set_git_config(obstrepo, 'extensions.preciousObjects', 'true')
@@ -496,9 +495,17 @@ def fetch_objstore_repo(obstrepo, fullpath=None):
         if ecode > 0:
             logger.critical('Could not fetch objects from %s to %s', url, obstrepo)
             success = False
-        elif os.path.exists(r_fp):
-            l_fp = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
-            shutil.copy(r_fp, l_fp)
+        else:
+            if os.path.exists(r_fp):
+                l_fp = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
+                shutil.copy(r_fp, l_fp)
+            try:
+                lock_repo(obstrepo, nonblocking=True)
+                run_git_command(obstrepo, ['pack-refs'])
+                unlock_repo(obstrepo)
+            except IOError:
+                # Next run will take care of it
+                pass
 
     return success
 
@@ -653,7 +660,7 @@ def set_repo_fingerprint(toplevel, gitdir, fingerprint=None):
 def get_altrepo_map(toplevel, refresh=False):
     global _alt_repo_map
     if _alt_repo_map is None or refresh:
-        logger.info('Finding all repositories using alternates')
+        logger.info('   search: finding all repos using alternates')
         _alt_repo_map = dict()
         tp = pathlib.Path(toplevel)
         for subp in tp.glob('**/*.git'):
@@ -685,10 +692,17 @@ def is_obstrepo(fullpath, obstdir):
 
 
 def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True):
+    global _alt_repo_map
+    if _alt_repo_map is None:
+        _alt_repo_map = dict()
+        build_amap = True
+    else:
+        build_amap = False
+
     if ignore is None:
         ignore = set()
 
-    logger.info('Finding bare git repos in %s', toplevel)
+    logger.info('   search: finding all repos in %s', toplevel)
     logger.debug('Ignore list: %s', ' '.join(ignore))
     gitdirs = set()
     tp = pathlib.Path(toplevel)
@@ -712,6 +726,14 @@ def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=Tr
         logger.debug('Found %s', fullpath)
         if fullpath not in gitdirs:
             gitdirs.add(fullpath)
+
+        if build_amap:
+            altrepo = get_altrepo(fullpath)
+            if not altrepo:
+                continue
+            if altrepo not in _alt_repo_map:
+                _alt_repo_map[altrepo] = set()
+            _alt_repo_map[altrepo].add(fullpath)
 
     return gitdirs
 
@@ -831,5 +853,20 @@ def load_config_file(cfgfile):
         sys.stderr.write('ERROR: Section [core] must exist in: %s\n' % cfgfile)
         sys.stderr.write('       Perhaps this is a grokmirror-1.x config file?\n')
         sys.exit(1)
+
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    if not os.access(toplevel, os.W_OK):
+        logger.critical('Toplevel %s does not exist or is not writable', toplevel)
+        sys.exit(1)
+
+    obstdir = config['core'].get('objstore', None)
+    if obstdir is None:
+        obstdir = os.path.join(toplevel, '_alternates')
+        config['core']['objstore'] = obstdir
+
+    fstat = os.stat(cfgfile)
+    # stick last config file modification date into the config object,
+    # so we can catch config file updates
+    config.last_modified = fstat[8]
 
     return config

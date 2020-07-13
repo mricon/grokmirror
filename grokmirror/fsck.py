@@ -25,8 +25,6 @@ import random
 import datetime
 import shutil
 
-import enlighten
-
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 # default basic logger. We override it later.
@@ -74,7 +72,7 @@ def run_git_prune(fullpath, config):
     # in repositories that are actively being accessed at the time of
     # running the prune job.
     args = ['prune', '--expire=yesterday']
-    logger.info('  prune : pruning')
+    logger.info('    prune: pruning')
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
     if error:
@@ -156,8 +154,8 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         set_precious_after = True
         if grokmirror.get_altrepo(fullpath):
             gen_commitgraph = False
-            logger.warning('warning : has alternates and is used by others for alternates')
-            logger.warning('        : this can cause grandchild corruption')
+            logger.warning(' warning : has alternates and is used by others for alternates')
+            logger.warning('         : this can cause grandchild corruption')
             repack_flags.append('-A')
             repack_flags.append('-l')
         else:
@@ -182,14 +180,14 @@ def run_git_repack(fullpath, config, level=1, prune=True):
             repack_flags.append('--unpack-unreachable=yesterday')
 
     if level > 1:
-        logger.info(' repack : performing a full repack for optimal deltas')
+        logger.info('   repack: performing a full repack for optimal deltas')
         repack_flags += full_repack_flags
 
     if not always_precious:
         repack_flags.append('-d')
 
     args = ['repack'] + repack_flags
-    logger.info(' repack : repacking with "%s"', ' '.join(repack_flags))
+    logger.info('   repack: repacking with "%s"', ' '.join(repack_flags))
 
     # We always tack on -q
     args.append('-q')
@@ -230,38 +228,40 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     if gen_commitgraph and config['fsck'].get('commitgraph', 'yes') == 'yes':
         run_git_commit_graph(fullpath)
 
-    # only repack refs on full repacks
+    # repacking refs requires a separate command, so run it now
+    args = ['pack-refs']
     if level > 1:
-        # repacking refs requires a separate command, so run it now
-        args = ['pack-refs', '--all']
-        logger.info(' repack : repacking refs')
-        retcode, output, error = grokmirror.run_git_command(fullpath, args)
+        logger.info(' packrefs: repacking all refs')
+        args.append('--all')
+    else:
+        logger.info(' packrefs: repacking refs')
+    retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
-        # pack-refs shouldn't return anything, but use the same ignore_errors block
-        # to weed out any future potential benign warnings
-        if error:
-            # Put things we recognize as fairly benign into debug
-            debug = list()
-            warn = list()
-            for line in error.split('\n'):
-                ignored = False
-                for estring in ierrors:
-                    if line.find(estring) != -1:
-                        ignored = True
-                        debug.append(line)
-                        break
-                if not ignored:
-                    warn.append(line)
+    # pack-refs shouldn't return anything, but use the same ignore_errors block
+    # to weed out any future potential benign warnings
+    if error:
+        # Put things we recognize as fairly benign into debug
+        debug = list()
+        warn = list()
+        for line in error.split('\n'):
+            ignored = False
+            for estring in ierrors:
+                if line.find(estring) != -1:
+                    ignored = True
+                    debug.append(line)
+                    break
+            if not ignored:
+                warn.append(line)
 
-            if debug:
-                logger.debug('Stderr: %s', '\n'.join(debug))
-            if warn:
-                logger.critical('Repacking refs %s returned critical errors:', fullpath)
-                repack_ok = False
-                for entry in warn:
-                    logger.critical("\t%s", entry)
+        if debug:
+            logger.debug('Stderr: %s', '\n'.join(debug))
+        if warn:
+            logger.critical('Repacking refs %s returned critical errors:', fullpath)
+            repack_ok = False
+            for entry in warn:
+                logger.critical("\t%s", entry)
 
-                check_reclone_error(fullpath, config, warn)
+            check_reclone_error(fullpath, config, warn)
 
     if prune:
         # run prune now
@@ -277,9 +277,9 @@ def run_git_fsck(fullpath, config, conn_only=False):
     args = ['fsck', '--no-progress', '--no-dangling', '--no-reflogs']
     if conn_only:
         args.append('--connectivity-only')
-        logger.info('   fsck : running with --connectivity-only')
+        logger.info('     fsck: running with --connectivity-only')
     else:
-        logger.info('   fsck : running full checks')
+        logger.info('     fsck: running full checks')
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
@@ -313,7 +313,7 @@ def run_git_commit_graph(fullpath):
     # Does our version of git support commit-graph?
     if not grokmirror.git_newer_than('2.18.0'):
         logger.debug('Git version too old, not generating commit-graph')
-    logger.info('  graph : generating commit-graph --reachable')
+    logger.info('    graph: generating commit-graph --reachable')
     args = ['commit-graph', 'write', '--reachable']
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
     if retcode == 0:
@@ -384,9 +384,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     logger = logging.getLogger('fsck')
     logger.setLevel(logging.DEBUG)
 
-    # noinspection PyTypeChecker
-    em = enlighten.get_manager(series=' -=#')
-
     logfile = config['core'].get('log', None)
     if logfile:
         ch = logging.FileHandler(logfile)
@@ -408,7 +405,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
-        em.enabled = False
 
     logger.addHandler(ch)
 
@@ -417,8 +413,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
     if conn_only or repack_all_quick or repack_all_full:
         force = True
-
-    logger.info('Running grok-fsck for [%s]', config['core'].get('toplevel'))
 
     statusfile = config['fsck'].get('statusfile')
     if not statusfile:
@@ -442,10 +436,11 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         return 0
 
     manifile = config['core'].get('manifest')
+    logger.info('Analyzing %s', manifile)
     manifest = grokmirror.read_manifest(manifile)
 
     if os.path.exists(statusfile):
-        logger.info('Reading status from %s', statusfile)
+        logger.info('   status: reading %s', statusfile)
         stfh = open(statusfile, 'r')
         # noinspection PyBroadException
         try:
@@ -490,11 +485,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         config['fsck']['commitgraph'] = 'no'
 
     # Go through the manifest and compare with status
-    # noinspection PyTypeChecker
-    e_find = em.counter(total=len(manifest), desc='Discovering', unit='repos', leave=False)
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     for gitdir in list(manifest):
-        e_find.update()
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         if fullpath not in status.keys():
             # Newly added repository
@@ -512,9 +504,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 'fingerprint': grokmirror.get_repo_fingerprint(toplevel, gitdir),
             }
             logger.info('%s:', fullpath)
-            logger.info('  added : next check on %s', nextcheck)
-
-    e_find.close()
+            logger.info('    added: next check on %s', nextcheck)
 
     # record newly found repos in the status file
     logger.debug('Updating status file in %s', statusfile)
@@ -532,17 +522,16 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     cfg_precious = config['fsck'].get('precious', 'yes')
 
     obstdir = os.path.realpath(config['core'].get('objstore'))
-    logger.info('Getting root commit info from all repos, may take a while')
-    top_roots, obst_roots = grokmirror.get_rootsets(toplevel, obstdir, em=em)
+    logger.info('   search: getting parent commit info from all repos, may take a while')
+    top_roots, obst_roots = grokmirror.get_rootsets(toplevel, obstdir)
     amap = grokmirror.get_altrepo_map(toplevel)
 
-    # noinspection PyTypeChecker
-    e_cmp = em.counter(total=len(status), desc='Analyzing (toplevel)', unit='repos', leave=False)
     fetched_obstrepos = set()
     obst_changes = False
+    analyzed = 0
+    logger.info('Analyzing %s (%s repos)', toplevel, len(status))
     for fullpath in list(status):
-        e_cmp.update()
-        e_cmp.refresh()
+        analyzed += 1
         # We do obstrepos separately below, as logic is different
         if grokmirror.is_obstrepo(fullpath, obstdir):
             logger.debug('Skipping %s (obstrepo)')
@@ -556,6 +545,16 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             status.pop(fullpath)
             logger.debug('%s is gone, no longer in manifest', gitdir)
             continue
+
+        # Make sure FETCH_HEAD is pointing to /dev/null
+        fetch_headf = os.path.join(fullpath, 'FETCH_HEAD')
+        if not os.path.islink(fetch_headf):
+            logger.debug('  replacing FETCH_HEAD with symlink to /dev/null')
+            try:
+                os.unlink(fetch_headf)
+            except FileNotFoundError:
+                pass
+            os.symlink('/dev/null', fetch_headf)
 
         # Objstore migration routines
         # Are we using objstore?
@@ -578,7 +577,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 if not is_private:
                     grokmirror.add_repo_to_objstore(obstrepo, fullpath)
                     # Fetch into the obstrepo
-                    logger.info('  fetch : fetching %s', gitdir)
+                    logger.info('    fetch: fetching %s', gitdir)
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
                 run_git_repack(fullpath, config, level=1, prune=m_prune)
@@ -598,10 +597,10 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                             # Great, make an objstore repo out of this sibling
                             obstrepo = grokmirror.setup_objstore_repo(obstdir)
                             logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
-                            logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
+                            logger.info('     init: new objstore repo %s', os.path.basename(obstrepo))
                             grokmirror.add_repo_to_objstore(obstrepo, top_sibling)
                             # Fetch into the obstrepo
-                            logger.info('  fetch : fetching %s', top_sibling)
+                            logger.info('    fetch: fetching %s', top_sibling)
                             grokmirror.fetch_objstore_repo(obstrepo, top_sibling)
                             obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
                             # It doesn't matter if this fails, because repacking is still safe
@@ -611,7 +610,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                         # Make an objstore repo out of myself
                         obstrepo = grokmirror.setup_objstore_repo(obstdir)
                         logger.info('%s: can use %s', gitdir, os.path.basename(obstrepo))
-                        logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
+                        logger.info('     init: new objstore repo %s', os.path.basename(obstrepo))
                         grokmirror.add_repo_to_objstore(obstrepo, fullpath)
 
                 if obstrepo:
@@ -620,7 +619,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     grokmirror.set_altrepo(fullpath, obstrepo)
                     if not is_private:
                         # Fetch into the obstrepo
-                        logger.info('  fetch : fetching %s', gitdir)
+                        logger.info('    fetch: fetching %s', gitdir)
                         grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
@@ -635,7 +634,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 if altdir not in fetched_obstrepos:
                     # We're already sharing objects with altdir, so no need to check if it's private
                     grokmirror.add_repo_to_objstore(obstrepo, altdir)
-                    logger.info('  fetch : fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
+                    logger.info('    fetch: fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
                     success = grokmirror.fetch_objstore_repo(obstrepo, altdir)
                     fetched_obstrepos.add(altdir)
                     if success:
@@ -648,9 +647,9 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 # Make a new obstrepo out of mommy
                 obstrepo = grokmirror.setup_objstore_repo(obstdir)
                 logger.info('%s: migrating to %s', gitdir, os.path.basename(obstrepo))
-                logger.info('   init : new objstore repo %s', os.path.basename(obstrepo))
+                logger.info('     init: new objstore repo %s', os.path.basename(obstrepo))
                 grokmirror.add_repo_to_objstore(obstrepo, altdir)
-                logger.info('  fetch : fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
+                logger.info('    fetch: fetching %s (previous parent)', os.path.relpath(altdir, toplevel))
                 success = grokmirror.fetch_objstore_repo(obstrepo, altdir)
                 fetched_obstrepos.add(altdir)
                 if success:
@@ -671,12 +670,12 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 if not is_private:
                     # Fetch into the obstrepo
                     grokmirror.add_repo_to_objstore(obstrepo, fullpath)
-                    logger.info('  fetch : fetching %s', gitdir)
+                    logger.info('    fetch: fetching %s', gitdir)
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     set_precious_objects(fullpath, enabled=False)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
                 else:
-                    logger.info('  fetch : not fetching %s (private)', gitdir)
+                    logger.info('    fetch: not fetching %s (private)', gitdir)
 
                 obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
@@ -692,7 +691,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         # we do it here so we don't spam people nightly on every cron run,
         # but only do it when a repo needs actual work done on it
         if obj_info['garbage'] != '0':
-            logger.warning('%s:\n\tcontains %s garbage files (garbage-size: %s KiB)',
+            logger.warning('%s:\n\tcontains %s garbage files (size-garbage: %s KiB)',
                            fullpath, obj_info['garbage'], obj_info['size-garbage'])
 
         schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
@@ -732,12 +731,15 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
         if repack_level:
             to_process.add((fullpath, 'repack', repack_level))
+            if repack_level > 1:
+                logger.info('   queued: %s (full repack) [%sq/%st]', fullpath, analyzed, len(status))
+            else:
+                logger.info('   queued: %s (repack) [%sq/%st]', fullpath, analyzed, len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif schedcheck <= today or force:
             to_process.add((fullpath, 'fsck', None))
-
-    e_cmp.close()
+            logger.info('   queued: %s (fsck) [%sq/%st]', fullpath, analyzed, len(status))
 
     if obst_changes:
         # Refresh the alt repo map cache
@@ -747,12 +749,11 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         manifest = grokmirror.read_manifest(manifile)
 
     obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
-    # noinspection PyTypeChecker
-    e_obst = em.counter(total=len(obstrepos), desc='Analyzing (objstore)', unit='repos', leave=False)
 
+    analyzed = 0
+    logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
     for obstrepo in obstrepos:
-        e_obst.update()
-        e_obst.refresh()
+        analyzed += 1
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
         my_roots = grokmirror.get_repo_roots(obstrepo)
         if obstrepo in amap and len(amap[obstrepo]):
@@ -784,26 +785,26 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                             args = ['remote', 'remove', virtref]
                             grokmirror.run_git_command(sibling, args)
                             continue
-                        logger.info(' moving: %s', childpath)
+                        logger.info('   moving: %s', childpath)
 
                         success = grokmirror.add_repo_to_objstore(mdest, childpath)
                         if not success:
                             logger.critical('Could not add %s to %s', childpath, mdest)
                             continue
 
-                        logger.info('       : fetching into %s', os.path.basename(mdest))
+                        logger.info('         : fetching into %s', os.path.basename(mdest))
                         success = grokmirror.fetch_objstore_repo(mdest, childpath)
                         if not success:
                             logger.critical('Failed to fetch %s from %s to %s', childpath, os.path.basename(sibling),
                                             os.path.basename(mdest))
                             continue
-                        logger.info('       : repointing alternates')
+                        logger.info('         : repointing alternates')
                         grokmirror.set_altrepo(childpath, mdest)
                         amap[sibling].remove(childpath)
                         amap[mdest].add(childpath)
                         args = ['remote', 'remove', virtref]
                         grokmirror.run_git_command(sibling, args)
-                        logger.info('       : done')
+                        logger.info('         : done')
                         obst_changes = True
                         if mdest in status:
                             # Force full repack of merged obstrepos
@@ -854,7 +855,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
             gitdir = '/' + os.path.relpath(childpath, toplevel)
             if fetch:
-                logger.info('Fetching %s into %s', gitdir, os.path.basename(obstrepo))
+                logger.info('    fetch: %s -> %s', gitdir, os.path.basename(obstrepo))
                 grokmirror.fetch_objstore_repo(obstrepo, childpath)
 
             if gitdir not in manifest:
@@ -876,44 +877,50 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 'nextcheck': todayiso,
                 'fingerprint': None,
             }
+            # Always full-repack brand new obstrepos
+            repack_level = 2
+        else:
+            obj_info = grokmirror.get_repo_obj_info(obstrepo)
+            repack_level = get_repack_level(obj_info)
 
         nextcheck = datetime.datetime.strptime(status[obstrepo]['nextcheck'], '%Y-%m-%d')
-        obj_info = grokmirror.get_repo_obj_info(obstrepo)
-        repack_level = get_repack_level(obj_info)
         if repack_level > 1 and nextcheck > today:
             # Don't do full repacks outside of schedule
             repack_level = 1
 
         if repack_level:
             to_process.add((obstrepo, 'repack', repack_level))
+            if repack_level > 1:
+                logger.info('   queued: %s (full repack) [%sq/%st]',
+                            os.path.basename(obstrepo), analyzed, len(obstrepos))
+            else:
+                logger.info('   queued: %s (repack) [%sq/%st]',
+                            os.path.basename(obstrepo), analyzed, len(obstrepos))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif (nextcheck <= today or force) and not repack_only:
             status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
             to_process.add((obstrepo, 'fsck', None))
+            logger.info('   queued: %s (fsck) [%sq/%st]',
+                        os.path.basename(obstrepo), analyzed, len(obstrepos))
 
-    e_obst.close()
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed
-        grokmirror.write_manifest(manifile, manifest, mtime=os.stat(manifile)[8])
+        grokmirror.write_manifest(manifile, manifest)
         grokmirror.manifest_unlock(manifile)
 
     if not len(to_process):
         logger.info('No repos need attention.')
-        em.stop()
         return
 
     logger.info('Processing %s repositories', len(to_process))
 
-    # noinspection PyTypeChecker
-    run = em.counter(total=len(to_process), desc='Processing', unit='repos', leave=False)
     for fullpath, action, repack_level in to_process:
         logger.info('%s:', fullpath)
         checkdelay = frequency if not force else random.randint(1, frequency)
         nextcheck = today + datetime.timedelta(days=checkdelay)
 
         # Calculate elapsed seconds
-        run.refresh()
         startt = time.time()
 
         # Wait till the repo is available and lock it for the duration of checks,
@@ -927,30 +934,27 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     status[fullpath]['lastfullrepack'] = todayiso
                     status[fullpath]['lastcheck'] = todayiso
                     status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
-                    logger.info('   next : %s', status[fullpath]['nextcheck'])
+                    logger.info('    next: %s', status[fullpath]['nextcheck'])
             else:
                 logger.warning('Repacking %s was unsuccessful', fullpath)
                 grokmirror.unlock_repo(fullpath)
-                run.update()
                 continue
 
         elif action == 'fsck':
             run_git_fsck(fullpath, config, conn_only)
             status[fullpath]['lastcheck'] = todayiso
             status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
-            logger.info('   next : %s', status[fullpath]['nextcheck'])
+            logger.info('     next: %s', status[fullpath]['nextcheck'])
 
         # noinspection PyTypeChecker
         elapsed = int(time.time()-startt)
         status[fullpath]['s_elapsed'] = elapsed
 
-        logger.info('   done : %ss', elapsed)
-        run.update()
-
         # We're done with the repo now
         grokmirror.unlock_repo(fullpath)
         total_checked += 1
         total_elapsed += elapsed
+        logger.info('     done: %ss (%sc/%st)', elapsed, total_checked, len(to_process))
 
         # Write status file after each check, so if the process dies, we won't
         # have to recheck all the repos we've already checked
@@ -958,8 +962,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         with open(statusfile, 'w') as stfh:
             stfh.write(json.dumps(status, indent=2))
 
-    run.close()
-    em.stop()
     logger.info('Processed %s repos in %0.2fs', total_checked, total_elapsed)
 
     with open(statusfile, 'w') as stfh:

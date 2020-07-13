@@ -18,7 +18,6 @@ import os
 import sys
 import logging
 import datetime
-import enlighten
 
 import grokmirror
 
@@ -36,7 +35,7 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
     # Ignore it if it's an empty git repository
     fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
     if not fp:
-        logger.info('%s has no heads, ignoring', gitdir)
+        logger.info(' manifest: ignored %s (no heads)', gitdir)
         return
 
     repoinfo = grokmirror.get_repo_defs(toplevel, gitdir, usenow=usenow)
@@ -46,12 +45,12 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         # check the manifest for both and make sure we only save the path with a leading /
         if gitdir.lstrip('/') in manifest:
             manifest[gitdir] = manifest.pop(gitdir.lstrip('/'))
-            logger.info('Updating %s in the manifest', gitdir)
+            logger.info(' manifest: updated %s', gitdir)
         else:
-            logger.info('Adding %s to manifest', gitdir)
+            logger.info(' manifest: added %s', gitdir)
             manifest[gitdir] = dict()
     else:
-        logger.info('Updating %s in the manifest', gitdir)
+        logger.info(' manifest: updated %s', gitdir)
 
     altrepo = grokmirror.get_altrepo(fullpath)
     reference = None
@@ -79,34 +78,34 @@ def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:
         target = os.path.realpath(symlink)
         if target.find(toplevel) < 0:
-            logger.info('Symlink %s points outside toplevel, ignored', symlink)
+            logger.debug('Symlink %s points outside toplevel, ignored', symlink)
             continue
         tgtgitdir = '/' + os.path.relpath(target, toplevel)
         if tgtgitdir not in manifest:
-            logger.info('Symlink %s points to %s, which we do not recognize', symlink, target)
+            logger.debug('Symlink %s points to %s, which we do not recognize', symlink, target)
             continue
         relative = '/' + os.path.relpath(symlink, toplevel)
         if 'symlinks' in manifest[tgtgitdir]:
             if relative not in manifest[tgtgitdir]['symlinks']:
-                logger.info('Recording symlink %s->%s', relative, tgtgitdir)
+                logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
                 manifest[tgtgitdir]['symlinks'].append(relative)
         else:
             manifest[tgtgitdir]['symlinks'] = [relative]
-            logger.info('Recording symlink %s to %s', relative, tgtgitdir)
+            logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
 
         # Now go through all repos and fix any references pointing to the
         # symlinked location. We shouldn't need to do anything with forkgroups.
         for gitdir in manifest:
             if manifest[gitdir]['reference'] == relative:
-                logger.info('Adjusted symlinked reference for %s: %s->%s', gitdir, relative, tgtgitdir)
+                logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
                 manifest[gitdir]['reference'] = tgtgitdir
 
 
 def purge_manifest(manifest, toplevel, gitdirs):
     for oldrepo in list(manifest):
         if os.path.join(toplevel, oldrepo.lstrip('/')) not in gitdirs:
-            logger.info('Purged deleted %s', oldrepo)
-            del manifest[oldrepo]
+            logger.info(' manifest: purged %s (gone)', oldrepo)
+            manifest.remove(oldrepo)
 
 
 def parse_args():
@@ -221,9 +220,9 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             repo = '/' + os.path.relpath(fullpath, toplevel)
             if repo in manifest:
                 manifest.pop(repo)
-                logger.info('Repository %s removed from manifest', repo)
+                logger.info(' manifest: removed %s', repo)
             else:
-                logger.info('Repository %s not in manifest', repo)
+                logger.info(' manifest: %s not in manifest', repo)
 
         # XXX: need to add logic to make sure we don't break the world
         #      by removing a repository used as a reference for others
@@ -250,17 +249,14 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         em.enabled = False
 
     symlinks = list()
-    # noinspection PyTypeChecker
-    run = em.counter(total=len(gitdirs), desc='Processing:', unit='repos', leave=False)
     tofetch = set()
     for gitdir in gitdirs:
-        run.update()
         # check to make sure this gitdir is ok to export
         if check_export_ok and not os.path.exists(os.path.join(gitdir, 'git-daemon-export-ok')):
             # is it curently in the manifest?
             repo = '/' + os.path.relpath(gitdir, toplevel)
             if repo in list(manifest):
-                logger.info('Repository %s is no longer exported, removing from manifest', repo)
+                logger.info(' manifest: removed %s (no longer exported)', repo)
                 manifest.pop(repo)
 
             # XXX: need to add logic to make sure we don't break the world
@@ -281,8 +277,6 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     grokmirror.write_manifest(manifile, manifest, pretty=pretty)
     grokmirror.manifest_unlock(manifile)
-    run.close()
-    em.stop()
 
     fetched = set()
     for gitdir in tofetch:
@@ -291,7 +285,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
             continue
         fetched.add(altrepo)
         if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
-            logger.info('Fetching objects into %s', os.path.basename(altrepo))
+            logger.info(' manifest: objstore %s->%s', gitdir, os.path.basename(altrepo))
             grokmirror.fetch_objstore_repo(altrepo, gitdir)
 
     elapsed = datetime.datetime.now() - startt
