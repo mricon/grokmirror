@@ -147,7 +147,7 @@ def pull_worker(config, q_pull, q_done):
             grokmirror.lock_repo(fullpath, nonblocking=True)
         except IOError:
             # Let the next run deal with this one
-            q_done.put((gitdir, repoinfo, False))
+            q_done.put((gitdir, repoinfo, q_action, False))
             continue
 
         if action == 'purge':
@@ -804,6 +804,8 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
             if not pw.is_alive():
                 pws.remove(pw)
                 logger.info('   worker: terminated (%s remaining)', len(pws))
+                logger.info('      ---:  %s done, %s active, %s queued, %s failed',
+                            good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
                 continue
 
         # Any new results?
@@ -812,7 +814,6 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
             try:
                 actions.remove((gitdir, q_action))
             except KeyError:
-                # Could have originated from the listener
                 pass
 
             forkgroup = repoinfo.get('forkgroup')
@@ -823,7 +824,9 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
                 good += 1
             else:
                 bad += 1
-            logger.info('     done: %s (%sc/%sa/%sq/%sf)', gitdir, good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
+            logger.info('     done: %s', gitdir)
+            logger.info('      ---: %s done, %s active, %s queued, %s failed',
+                        good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
             if len(done) >= 100:
                 # Write manifest every 100 repos
                 update_manifest(config, done)
@@ -832,7 +835,7 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
         except queue.Empty:
             pass
 
-        if time.time() - lastrun >= refresh:
+        if not runonce and time.time() - lastrun >= refresh:
             new_actions = fill_todo_from_manifest(config, actions, nomtime=False, forcepurge=forcepurge)
             for (gitdir, repoinfo, action) in new_actions:
                 actions.add((gitdir, action))
@@ -859,6 +862,9 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
                 time.sleep(0.1)
                 continue
 
+        if (gitdir, q_action) not in actions:
+            # Probably fed straight to the queue by the socket listener
+            actions.add((gitdir, q_action))
         if repoinfo is None:
             repoinfo = dict()
 
@@ -905,7 +911,7 @@ def todo_worker(config, q_todo, q_pull, q_done, runonce, nomtime, forcepurge):
 
         if not grokmirror.setup_bare_repo(fullpath):
             logger.critical('Unable to bare-init %s', fullpath)
-            q_done.put((gitdir, repoinfo, False))
+            q_done.put((gitdir, repoinfo, q_action, False))
             continue
 
         fix_remotes(toplevel, gitdir, config['remote'].get('site'))

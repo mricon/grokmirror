@@ -732,14 +732,16 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         if repack_level:
             to_process.add((fullpath, 'repack', repack_level))
             if repack_level > 1:
-                logger.info('   queued: %s (full repack) [%sq/%st]', fullpath, analyzed, len(status))
+                logger.info('   queued: %s (full repack)', fullpath)
             else:
-                logger.info('   queued: %s (repack) [%sq/%st]', fullpath, analyzed, len(status))
+                logger.info('   queued: %s (repack)', fullpath)
+            logger.info('         : %s queued, %s total', analyzed, len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif schedcheck <= today or force:
             to_process.add((fullpath, 'fsck', None))
-            logger.info('   queued: %s (fsck) [%sq/%st]', fullpath, analyzed, len(status))
+            logger.info('   queued: %s (fsck)', fullpath)
+            logger.info('         : %s queued, %s total', analyzed, len(status))
 
     if obst_changes:
         # Refresh the alt repo map cache
@@ -891,18 +893,18 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         if repack_level:
             to_process.add((obstrepo, 'repack', repack_level))
             if repack_level > 1:
-                logger.info('   queued: %s (full repack) [%sq/%st]',
-                            os.path.basename(obstrepo), analyzed, len(obstrepos))
+                logger.info('   queued: %s (full repack)', os.path.basename(obstrepo))
+                logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
             else:
-                logger.info('   queued: %s (repack) [%sq/%st]',
-                            os.path.basename(obstrepo), analyzed, len(obstrepos))
+                logger.info('   queued: %s (repack)', os.path.basename(obstrepo))
+                logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif (nextcheck <= today or force) and not repack_only:
             status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
             to_process.add((obstrepo, 'fsck', None))
-            logger.info('   queued: %s (fsck) [%sq/%st]',
-                        os.path.basename(obstrepo), analyzed, len(obstrepos))
+            logger.info('   queued: %s (fsck)', os.path.basename(obstrepo))
+            logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
 
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed
@@ -954,7 +956,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         grokmirror.unlock_repo(fullpath)
         total_checked += 1
         total_elapsed += elapsed
-        logger.info('     done: %ss (%sc/%st)', elapsed, total_checked, len(to_process))
+        logger.info('     done: %ss', elapsed)
+        logger.info('           %s done, %s total', total_checked, len(to_process))
 
         # Write status file after each check, so if the process dies, we won't
         # have to recheck all the repos we've already checked

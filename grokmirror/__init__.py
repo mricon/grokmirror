@@ -476,7 +476,7 @@ def add_repo_to_objstore(obstrepo, fullpath):
     return True
 
 
-def fetch_objstore_repo(obstrepo, fullpath=None):
+def fetch_objstore_repo(obstrepo, fullpath=None, pack_refs=False):
     my_remotes = list_repo_remotes(obstrepo, withurl=True)
     if fullpath:
         virtref = objstore_virtref(fullpath)
@@ -499,13 +499,14 @@ def fetch_objstore_repo(obstrepo, fullpath=None):
             if os.path.exists(r_fp):
                 l_fp = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
                 shutil.copy(r_fp, l_fp)
-            try:
-                lock_repo(obstrepo, nonblocking=True)
-                run_git_command(obstrepo, ['pack-refs'])
-                unlock_repo(obstrepo)
-            except IOError:
-                # Next run will take care of it
-                pass
+            if pack_refs:
+                try:
+                    lock_repo(obstrepo, nonblocking=True)
+                    run_git_command(obstrepo, ['pack-refs'])
+                    unlock_repo(obstrepo)
+                except IOError:
+                    # Next run will take care of it
+                    pass
 
     return success
 
