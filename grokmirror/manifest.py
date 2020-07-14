@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2013-2018 by The Linux Foundation and contributors
+# Copyright (C) 2013-2020 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -180,7 +180,6 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     logger.setLevel(logging.DEBUG)
     # noinspection PyTypeChecker
-    em = enlighten.get_manager(series=' -=#')
 
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(message)s')
@@ -190,7 +189,6 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.CRITICAL)
-        em.enabled = False
 
     logger.addHandler(ch)
 
@@ -246,7 +244,6 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
         # whole file when there is nothing in it or it can't be parsed.
         gitdirs = [os.path.realpath(x) for x in args]
         # Don't draw a progress bar for a single repo
-        em.enabled = False
 
     symlinks = list()
     tofetch = set()

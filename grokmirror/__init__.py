@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2013-2018 by The Linux Foundation and contributors
+# Copyright (C) 2013-2020 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -45,7 +45,6 @@ GITBIN = '/usr/bin/git'
 # default logger. Will probably be overridden.
 logger = logging.getLogger(__name__)
 
-_alt_repo_set = None
 _alt_repo_map = None
 
 # Used to store our requests session
@@ -871,3 +870,50 @@ def load_config_file(cfgfile):
     config.last_modified = fstat[8]
 
     return config
+
+
+def is_precious(fullpath):
+    args = ['config', '--get', 'extensions.preciousObjects']
+    retcode, output, error = run_git_command(fullpath, args)
+    if output.strip().lower() in ('yes', 'true', '1'):
+        return True
+    return False
+
+
+def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_objects=10, pc_loose_size=10):
+    # for now, hardcode the maximum loose objects and packs
+    # XXX: we can probably set this in git config values?
+    #      I don't think this makes sense as a global setting, because
+    #      optimal values will depend on the size of the repo as a whole
+    packs = int(obj_info['packs'])
+    count_loose = int(obj_info['count'])
+
+    needs_repack = 0
+
+    # first, compare against max values:
+    if packs >= max_packs:
+        logger.debug('Triggering full repack because packs > %s', max_packs)
+        needs_repack = 2
+    elif count_loose >= max_loose_objects:
+        logger.debug('Triggering quick repack because loose objects > %s', max_loose_objects)
+        needs_repack = 1
+    else:
+        # is the number of loose objects or their size more than 10% of
+        # the overall total?
+        in_pack = int(obj_info['in-pack'])
+        size_loose = int(obj_info['size'])
+        size_pack = int(obj_info['size-pack'])
+        total_obj = count_loose + in_pack
+        total_size = size_loose + size_pack
+        # set some arbitrary "worth bothering" limits so we don't
+        # continuously repack tiny repos.
+        if total_obj > 500 and count_loose / total_obj * 100 >= pc_loose_objects:
+            logger.debug('Triggering repack because loose objects > %s%% of total', pc_loose_objects)
+            needs_repack = 1
+        elif total_size > 1024 and size_loose / total_size * 100 >= pc_loose_size:
+            logger.debug('Triggering repack because loose size > %s%% of total', pc_loose_size)
+            needs_repack = 1
+
+    return needs_repack
+
+

@@ -1,3 +1,2 @@
-enlighten
 packaging
 requests

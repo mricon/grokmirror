@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2013-2018 by The Linux Foundation and contributors
+# Copyright (C) 2013-2020 by The Linux Foundation and contributors
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ import json
 import random
 import datetime
 import shutil
+import gc
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
@@ -334,11 +335,7 @@ def set_precious_objects(fullpath, enabled=True):
 
 
 def check_precious_objects(fullpath):
-    args = ['config', '--get', 'extensions.preciousObjects']
-    retcode, output, error = grokmirror.run_git_command(fullpath, args)
-    if output.strip().lower() == 'true':
-        return True
-    return False
+    return grokmirror.is_precious(fullpath)
 
 
 def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_objects=10, pc_loose_size=10):
@@ -735,13 +732,13 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 logger.info('   queued: %s (full repack)', fullpath)
             else:
                 logger.info('   queued: %s (repack)', fullpath)
-            logger.info('         : %s queued, %s total', analyzed, len(status))
+            logger.info('      ---: %s queued, %s total', analyzed, len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif schedcheck <= today or force:
             to_process.add((fullpath, 'fsck', None))
             logger.info('   queued: %s (fsck)', fullpath)
-            logger.info('         : %s queued, %s total', analyzed, len(status))
+            logger.info('      ---: %s queued, %s total', analyzed, len(status))
 
     if obst_changes:
         # Refresh the alt repo map cache
@@ -894,17 +891,16 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             to_process.add((obstrepo, 'repack', repack_level))
             if repack_level > 1:
                 logger.info('   queued: %s (full repack)', os.path.basename(obstrepo))
-                logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
             else:
                 logger.info('   queued: %s (repack)', os.path.basename(obstrepo))
-                logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
+            logger.info('      ---: %s queued, %s total', analyzed, len(obstrepos))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif (nextcheck <= today or force) and not repack_only:
             status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
             to_process.add((obstrepo, 'fsck', None))
             logger.info('   queued: %s (fsck)', os.path.basename(obstrepo))
-            logger.info('         : %s queued, %s total', analyzed, len(obstrepos))
+            logger.info('      ---: %s queued, %s total', analyzed, len(obstrepos))
 
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed
@@ -914,6 +910,12 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     if not len(to_process):
         logger.info('No repos need attention.')
         return
+
+    # Delete some vars that are huge for large repo sets -- we no longer need them and the
+    # next step will likely eat lots of ram.
+    del obst_roots
+    del top_roots
+    gc.collect()
 
     logger.info('Processing %s repositories', len(to_process))
 
@@ -957,7 +959,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         total_checked += 1
         total_elapsed += elapsed
         logger.info('     done: %ss', elapsed)
-        logger.info('           %s done, %s total', total_checked, len(to_process))
+        logger.info('      ---: %s done, %s queued', total_checked, len(to_process)-total_checked)
 
         # Write status file after each check, so if the process dies, we won't
         # have to recheck all the repos we've already checked

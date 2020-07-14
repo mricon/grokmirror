@@ -1,0 +1,13 @@
+[Unit]
+Description=Grok-pull service for %I
+After=network.target
+Documentation=https://github.com/mricon/grokmirror
+
+[Service]
+ExecStart=/usr/bin/grok-pull -c /etc/grokmirror/%i.conf
+Type=simple
+User=mirror
+Group=mirror
+
+[Install]
+WantedBy=multi-user.target

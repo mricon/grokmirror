@@ -1,0 +1,9 @@
+[Unit]
+Description=Grok-fsck service for %I
+Documentation=https://github.com/mricon/grokmirror
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/grok-fsck -c /etc/grokmirror/%i.conf
+User=mirror
+Group=mirror

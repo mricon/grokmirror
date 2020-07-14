@@ -1,0 +1,9 @@
+[Unit]
+Description=Grok-fsck timer for %I
+Documentation=https://github.com/mricon/grokmirror
+
+[Timer]
+OnCalendar=Sat 04:00
+
+[Install]
+WantedBy=timers.target
