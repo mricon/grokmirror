@@ -627,10 +627,10 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         }
         json.dump(r_mani_status, fh)
 
-    logger.info(' manifest: remote contains %s entries', len(r_manifest))
-
     l_manifest = grokmirror.read_manifest(l_mani_path)
     r_culled = cull_manifest(r_manifest, config)
+    logger.info(' manifest: %s relevant entries', len(r_culled))
+
     toplevel = os.path.realpath(config['core'].get('toplevel'))
 
     obstdir = os.path.realpath(config['core'].get('objstore'))

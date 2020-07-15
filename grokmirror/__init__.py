@@ -764,7 +764,7 @@ def read_manifest(manifile, wait=False):
     while True:
         if not wait or os.path.exists(manifile):
             break
-        logger.info('Manifest file not yet found, waiting...')
+        logger.info(' manifest: manifest does not exist yet, waiting ...')
         # Unlock the manifest so other processes aren't waiting for us
         was_locked = False
         if MANIFEST_LOCKH is not None:
@@ -775,7 +775,7 @@ def read_manifest(manifile, wait=False):
             manifest_lock(manifile)
 
     if not os.path.exists(manifile):
-        logger.info('%s not found, assuming initial run', manifile)
+        logger.info(' manifest: no local manifest, assuming initial run')
         return {}
 
     if manifile.find('.gz') > 0:
