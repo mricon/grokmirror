@@ -977,7 +977,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                     bad += 1
                 logger.info('     done: %s', gitdir)
                 logger.info('      ---:  %s done, %s active, %s queued, %s waiting, %s failed',
-                            good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
+                            good, len(pws), q_pull.qsize(), q_todo.qsize(), bad)
                 if len(done) >= 100:
                     # Write manifest every 100 repos
                     update_manifest(config, done)
