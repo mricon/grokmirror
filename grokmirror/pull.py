@@ -626,6 +626,8 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         }
         json.dump(r_mani_status, fh)
 
+    logger.info(' manifest: remote contains %s entries', len(r_manifest))
+
     l_manifest = grokmirror.read_manifest(l_mani_path)
     r_culled = cull_manifest(r_manifest, config)
     toplevel = os.path.realpath(config['core'].get('toplevel'))
@@ -805,6 +807,9 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         if (gitdir, action) in active_actions:
             logger.debug('already in the queue: %s, %s', gitdir, action)
             continue
+        if action == 'pull' and (gitdir, 'init') in active_actions:
+            logger.debug('already in the queue as init: %s, %s', gitdir, action)
+            continue
         if action != 'purge':
             repoinfo = r_culled[gitdir]
         else:
@@ -950,8 +955,8 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 if not pw.is_alive():
                     pws.remove(pw)
                     logger.info('   worker: terminated (%s remaining)', len(pws))
-                    logger.info('      ---:  %s done, %s active, %s queued, %s failed',
-                                good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
+                    logger.info('      ---:  %s done, %s active, %s queued, %s waiting, %s failed',
+                                good, len(pws), q_pull.qsize(), q_todo.qsize(), bad)
                     continue
 
             # Any new results?
@@ -971,7 +976,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 else:
                     bad += 1
                 logger.info('     done: %s', gitdir)
-                logger.info('      ---: %s done, %s active, %s queued, %s failed',
+                logger.info('      ---:  %s done, %s active, %s queued, %s waiting, %s failed',
                             good, len(pws), q_pull.qsize() + q_todo.qsize(), bad)
                 if len(done) >= 100:
                     # Write manifest every 100 repos
