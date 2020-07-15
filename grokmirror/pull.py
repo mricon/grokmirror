@@ -58,8 +58,9 @@ class SignalHandler:
         self.sw.join()
 
         for pw in self.pws:
-            pw.terminate()
-            pw.join()
+            if pw:
+                pw.terminate()
+                pw.join()
 
         if len(self.done):
             update_manifest(self.config, self.done)
@@ -865,7 +866,9 @@ def update_manifest(config, entries):
 
 def socket_worker(config, q_todo, sockfile):
     logger.info(' listener: listening on socket %s', sockfile)
+    curmask = os.umask(0)
     with ThreadedUnixStreamServer(sockfile, Handler) as server:
+        os.umask(curmask)
         # Stick some objects into the server
         server.q_todo = q_todo
         server.config = config
