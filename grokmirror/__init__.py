@@ -211,7 +211,7 @@ def set_repo_timestamp(toplevel, gitdir, ts):
 def get_repo_obj_info(fullpath):
     args = ['count-objects', '-v']
     retcode, output, error = run_git_command(fullpath, args)
-    obj_info = {}
+    obj_info = dict()
 
     if output:
         for line in output.split('\n'):
