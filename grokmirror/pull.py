@@ -319,10 +319,13 @@ def pull_worker(config, q_pull, q_spa, q_done):
                                 # We fetch right now, as other repos may be waiting on these objects
                                 logger.info(' objstore: %s', gitdir)
                                 grokmirror.fetch_objstore_repo(altrepo, fullpath)
+                                spa_actions.append('repack')
                             else:
                                 # We lazy-fetch in the spa
                                 spa_actions.append('objstore')
-                            spa_actions.append('repack')
+                                if my_fp is None:
+                                    # Initial clone, trigger a repack after objstore
+                                    spa_actions.append('repack')
 
                         if my_fp is None:
                             # This was the initial clone, so pack all refs
