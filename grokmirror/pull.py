@@ -187,6 +187,11 @@ def spa_worker(config, q_spa):
             # We'll get it during grok-fsck
             continue
 
+        if not q_spa.empty():
+            logger.info('      spa: 1 active, %s waiting', q_spa.qsize())
+        else:
+            logger.info('      spa: 1 active')
+
         done = list()
         for action in actions:
             if action in done:
@@ -217,8 +222,6 @@ def spa_worker(config, q_spa):
 
         grokmirror.unlock_repo(fullpath)
         logger.info('      spa: %s (done: %s)', gitdir, ', '.join(done))
-        if not q_spa.empty():
-            logger.info('      spa: %s waiting', q_spa.qsize())
 
 
 def pull_worker(config, q_pull, q_spa, q_done):
