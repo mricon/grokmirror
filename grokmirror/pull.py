@@ -217,7 +217,7 @@ def spa_worker(config, q_diet):
                     logger.debug('Could not pack-refs %s', fullpath)
 
         grokmirror.unlock_repo(fullpath)
-        logger.info('   dieted: %s (%s)', gitdir, ', '.join(done))
+        logger.info(' massaged: %s (%s)', gitdir, ', '.join(done))
 
 
 def pull_worker(config, q_pull, q_diet, q_done):
@@ -305,9 +305,9 @@ def pull_worker(config, q_pull, q_diet, q_done):
                     run_post_update_hook(toplevel, gitdir, config['pull'].get('post_update_hook', ''))
                     post_pull_fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
                     repoinfo['fingerprint'] = post_pull_fp
+                    altrepo = grokmirror.get_altrepo(fullpath)
                     if post_pull_fp != my_fp:
                         grokmirror.set_repo_fingerprint(toplevel, gitdir, fingerprint=post_pull_fp)
-                        altrepo = grokmirror.get_altrepo(fullpath)
                         if altrepo and grokmirror.is_obstrepo(altrepo, obstdir) and not repoinfo.get('private'):
                             # do we have any objects in the objstore repo?
                             o_obj_info = grokmirror.get_repo_obj_info(altrepo)
@@ -318,18 +318,19 @@ def pull_worker(config, q_pull, q_diet, q_done):
                             else:
                                 # We lazy-fetch in the spa
                                 diet_actions.append('objstore')
-                            diet_actions.append('repack')
+
                         if my_fp is None:
                             # This was the initial clone, so pack all refs
+                            diet_actions.append('repack')
                             diet_actions.append('packrefs-all')
-                        else:
-                            if not grokmirror.is_precious(fullpath):
-                                # See if doing a quick repack would be beneficial
-                                obj_info = grokmirror.get_repo_obj_info(fullpath)
-                                if grokmirror.get_repack_level(obj_info):
-                                    # We only do quick repacks, so we don't care about precise level
-                                    diet_actions.append('repack')
-                                    diet_actions.append('packrefs')
+
+                        if not grokmirror.is_precious(fullpath):
+                            # See if doing a quick repack would be beneficial
+                            obj_info = grokmirror.get_repo_obj_info(fullpath)
+                            if grokmirror.get_repack_level(obj_info):
+                                # We only do quick repacks, so we don't care about precise level
+                                diet_actions.append('repack')
+                                diet_actions.append('packrefs')
 
                     modified = repoinfo.get('modified')
                     if modified is not None:
@@ -928,7 +929,7 @@ def showstats(q_todo, q_pull, q_diet, good, bad, pws, dws):
     if not q_todo.empty():
         stats.append('%s waiting' % q_todo.qsize())
     if len(dws) or not q_diet.empty():
-        stats.append('%s dieting' % (q_diet.qsize() + len(dws)))
+        stats.append('%s in-spa' % (q_diet.qsize() + len(dws)))
     if bad:
         stats.append('%s failed' % bad)
 
@@ -1026,7 +1027,6 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
             for dw in dws:
                 if dw and not dw.is_alive():
                     dws.remove(dw)
-                    logger.info('      spa: terminated')
                     showstats(q_todo, q_pull, q_diet, good, bad, pws, dws)
                     continue
 
@@ -1034,7 +1034,6 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 dw = mp.Process(target=spa_worker, args=(config, q_diet))
                 dw.start()
                 dws.append(dw)
-                logger.info('      spa: started')
 
             # Any new results?
             try:
