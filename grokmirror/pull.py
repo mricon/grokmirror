@@ -173,7 +173,19 @@ def build_optimal_forkgroups(l_manifest, r_manifest, toplevel, obstdir):
 
 def spa_worker(config, q_spa):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
+    cpus = mp.cpu_count()
+    saidpaused = False
     while True:
+        load = os.getloadavg()
+        if load[0] > cpus:
+            if not saidpaused:
+                logger.info('      spa: paused (system load), %s waiting', q_spa.qsize())
+                saidpaused = True
+            time.sleep(5)
+            continue
+
+        saidpaused = False
+
         try:
             (gitdir, actions) = q_spa.get(timeout=1)
         except queue.Empty:
