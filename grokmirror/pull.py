@@ -311,7 +311,7 @@ def pull_worker(config, q_pull, q_diet, q_done):
                         if altrepo and grokmirror.is_obstrepo(altrepo, obstdir) and not repoinfo.get('private'):
                             # do we have any objects in the objstore repo?
                             o_obj_info = grokmirror.get_repo_obj_info(altrepo)
-                            if o_obj_info.get('count') == '0':
+                            if o_obj_info.get('count') == '0' and o_obj_info.get('in-pack') == '0':
                                 # We fetch right now, as other repos may be waiting on these objects
                                 logger.info(' objstore: %s', gitdir)
                                 grokmirror.fetch_objstore_repo(altrepo, fullpath)
