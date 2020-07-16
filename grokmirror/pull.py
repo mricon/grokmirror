@@ -319,10 +319,10 @@ def pull_worker(config, q_pull, q_spa, q_done):
                             else:
                                 # We lazy-fetch in the spa
                                 spa_actions.append('objstore')
+                            spa_actions.append('repack')
 
                         if my_fp is None:
                             # This was the initial clone, so pack all refs
-                            spa_actions.append('repack')
                             spa_actions.append('packrefs-all')
 
                         if not grokmirror.is_precious(fullpath):
