@@ -323,13 +323,13 @@ def pull_worker(config, q_pull, q_diet, q_done):
                             # This was the initial clone, so pack all refs
                             diet_actions.append('packrefs-all')
                         else:
-                            diet_actions.append('packrefs')
                             if not grokmirror.is_precious(fullpath):
                                 # See if doing a quick repack would be beneficial
                                 obj_info = grokmirror.get_repo_obj_info(fullpath)
                                 if grokmirror.get_repack_level(obj_info):
                                     # We only do quick repacks, so we don't care about precise level
                                     diet_actions.append('repack')
+                                    diet_actions.append('packrefs')
 
                     modified = repoinfo.get('modified')
                     if modified is not None:
@@ -340,6 +340,8 @@ def pull_worker(config, q_pull, q_diet, q_done):
         if action == 'objstore_migrate':
             diet_actions.append('objstore')
             diet_actions.append('repack')
+
+        grokmirror.unlock_repo(fullpath)
 
         symlinks = repoinfo.get('symlinks')
         if os.path.exists(fullpath) and symlinks:
@@ -364,7 +366,6 @@ def pull_worker(config, q_pull, q_diet, q_done):
                         os.makedirs(os.path.dirname(target))
                     os.symlink(fullpath, target)
 
-        grokmirror.unlock_repo(fullpath)
         q_done.put((gitdir, repoinfo, q_action, success))
         if diet_actions:
             q_diet.put((gitdir, diet_actions))
@@ -926,7 +927,7 @@ def showstats(q_todo, q_pull, q_diet, good, bad, pws, dws):
         stats.append('%s queued' % q_pull.qsize())
     if not q_todo.empty():
         stats.append('%s waiting' % q_todo.qsize())
-    if not q_diet.empty():
+    if len(dws) or not q_diet.empty():
         stats.append('%s dieting' % (q_diet.qsize() + len(dws)))
     if bad:
         stats.append('%s failed' % bad)
