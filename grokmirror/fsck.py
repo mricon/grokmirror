@@ -619,6 +619,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                         logger.info('    fetch: fetching %s', gitdir)
                         grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
+                    logger.info('      ---: %s analyzed, %s total', analyzed, len(status))
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
         elif altdir.find(obstdir) != 0:
@@ -637,6 +638,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     if success:
                         set_precious_objects(altdir, enabled=False)
                         run_git_repack(altdir, config, level=1, prune=False)
+                        logger.info('      ---: %s analyzed, %s total', analyzed, len(status))
                     else:
                         logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                         obstrepo = None
@@ -656,6 +658,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     # Don't prune, because there may be objects others are still borrowing
                     # It can only be pruned once the full migration is completed
                     run_git_repack(altdir, config, level=1, prune=False)
+                    logger.info('      ---: %s analyzed, %s total', analyzed, len(status))
                 else:
                     logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                     obstrepo = None
@@ -671,6 +674,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     set_precious_objects(fullpath, enabled=False)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
+                    logger.info('      ---: %s analyzed, %s total', analyzed, len(status))
                 else:
                     logger.info('    fetch: not fetching %s (private)', gitdir)
 
@@ -732,13 +736,13 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 logger.info('   queued: %s (full repack)', fullpath)
             else:
                 logger.info('   queued: %s (repack)', fullpath)
-            logger.info('      ---: %s queued, %s total', analyzed, len(status))
+            logger.info('      ---: %s queued, %s total', len(to_process), len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif schedcheck <= today or force:
             to_process.add((fullpath, 'fsck', None))
             logger.info('   queued: %s (fsck)', fullpath)
-            logger.info('      ---: %s queued, %s total', analyzed, len(status))
+            logger.info('      ---: %s queued, %s total', len(to_process), len(status))
 
     if obst_changes:
         # Refresh the alt repo map cache
@@ -893,14 +897,14 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
                 logger.info('   queued: %s (full repack)', os.path.basename(obstrepo))
             else:
                 logger.info('   queued: %s (repack)', os.path.basename(obstrepo))
-            logger.info('      ---: %s queued, %s total', analyzed, len(obstrepos))
+            logger.info('      ---: %s queued, %s total', len(to_process), len(obstrepos))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif (nextcheck <= today or force) and not repack_only:
             status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
             to_process.add((obstrepo, 'fsck', None))
             logger.info('   queued: %s (fsck)', os.path.basename(obstrepo))
-            logger.info('      ---: %s queued, %s total', analyzed, len(obstrepos))
+            logger.info('      ---: %s queued, %s total', len(to_process), len(obstrepos))
 
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed

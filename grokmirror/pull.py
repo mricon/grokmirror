@@ -171,11 +171,11 @@ def build_optimal_forkgroups(l_manifest, r_manifest, toplevel, obstdir):
     return forkgroups
 
 
-def spa_worker(config, q_diet):
+def spa_worker(config, q_spa):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     while True:
         try:
-            (gitdir, actions) = q_diet.get(timeout=1)
+            (gitdir, actions) = q_spa.get(timeout=1)
         except queue.Empty:
             return
 
@@ -187,7 +187,6 @@ def spa_worker(config, q_diet):
             # We'll get it during grok-fsck
             continue
 
-        logger.info('   in-spa: %s', gitdir)
         done = list()
         for action in actions:
             if action in done:
@@ -217,10 +216,12 @@ def spa_worker(config, q_diet):
                     logger.debug('Could not pack-refs %s', fullpath)
 
         grokmirror.unlock_repo(fullpath)
-        logger.info(' massaged: %s (%s)', gitdir, ', '.join(done))
+        logger.info('      spa: %s (done: %s)', gitdir, ', '.join(done))
+        if not q_spa.empty():
+            logger.info('      spa: %s waiting', q_spa.qsize())
 
 
-def pull_worker(config, q_pull, q_diet, q_done):
+def pull_worker(config, q_pull, q_spa, q_done):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     obstdir = os.path.realpath(config['core'].get('objstore'))
     maxretries = config['pull'].getint('retries', 3)
@@ -235,7 +236,7 @@ def pull_worker(config, q_pull, q_diet, q_done):
         logger.debug('pull_worker: gitdir=%s, action=%s', gitdir, action)
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         success = True
-        diet_actions = list()
+        spa_actions = list()
 
         try:
             grokmirror.lock_repo(fullpath, nonblocking=True)
@@ -317,20 +318,20 @@ def pull_worker(config, q_pull, q_diet, q_done):
                                 grokmirror.fetch_objstore_repo(altrepo, fullpath)
                             else:
                                 # We lazy-fetch in the spa
-                                diet_actions.append('objstore')
+                                spa_actions.append('objstore')
 
                         if my_fp is None:
                             # This was the initial clone, so pack all refs
-                            diet_actions.append('repack')
-                            diet_actions.append('packrefs-all')
+                            spa_actions.append('repack')
+                            spa_actions.append('packrefs-all')
 
                         if not grokmirror.is_precious(fullpath):
                             # See if doing a quick repack would be beneficial
                             obj_info = grokmirror.get_repo_obj_info(fullpath)
                             if grokmirror.get_repack_level(obj_info):
                                 # We only do quick repacks, so we don't care about precise level
-                                diet_actions.append('repack')
-                                diet_actions.append('packrefs')
+                                spa_actions.append('repack')
+                                spa_actions.append('packrefs')
 
                     modified = repoinfo.get('modified')
                     if modified is not None:
@@ -339,8 +340,8 @@ def pull_worker(config, q_pull, q_diet, q_done):
                 logger.debug('FP match, not pulling %s', gitdir)
 
         if action == 'objstore_migrate':
-            diet_actions.append('objstore')
-            diet_actions.append('repack')
+            spa_actions.append('objstore')
+            spa_actions.append('repack')
 
         grokmirror.unlock_repo(fullpath)
 
@@ -368,8 +369,8 @@ def pull_worker(config, q_pull, q_diet, q_done):
                     os.symlink(fullpath, target)
 
         q_done.put((gitdir, repoinfo, q_action, success))
-        if diet_actions:
-            q_diet.put((gitdir, diet_actions))
+        if spa_actions:
+            q_spa.put((gitdir, spa_actions))
 
 
 def cull_manifest(manifest, config):
@@ -918,18 +919,18 @@ def socket_worker(config, q_todo, sockfile):
         server.serve_forever()
 
 
-def showstats(q_todo, q_pull, q_diet, good, bad, pws, dws):
+def showstats(q_todo, q_pull, q_spa, good, bad, pws, dws):
     stats = list()
     if good:
-        stats.append('%s done' % good)
+        stats.append('%s fetched' % good)
     if pws:
         stats.append('%s active' % len(pws))
     if not q_pull.empty():
         stats.append('%s queued' % q_pull.qsize())
     if not q_todo.empty():
         stats.append('%s waiting' % q_todo.qsize())
-    if len(dws) or not q_diet.empty():
-        stats.append('%s in-spa' % (q_diet.qsize() + len(dws)))
+    if len(dws) or not q_spa.empty():
+        stats.append('%s in spa' % (q_spa.qsize() + len(dws)))
     if bad:
         stats.append('%s failed' % bad)
 
@@ -976,7 +977,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
     q_todo = mp.Queue()
     q_pull = mp.Queue()
     q_done = mp.Queue()
-    q_diet = mp.Queue()
+    q_spa = mp.Queue()
 
     sw = None
     sockfile = config['pull'].get('socket')
@@ -1021,17 +1022,17 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 if pw and not pw.is_alive():
                     pws.remove(pw)
                     logger.info('   worker: terminated (%s remaining)', len(pws))
-                    showstats(q_todo, q_pull, q_diet, good, bad, pws, dws)
+                    showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
                     continue
 
             for dw in dws:
                 if dw and not dw.is_alive():
                     dws.remove(dw)
-                    showstats(q_todo, q_pull, q_diet, good, bad, pws, dws)
+                    showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
                     continue
 
-            if not q_diet.empty() and not len(dws):
-                dw = mp.Process(target=spa_worker, args=(config, q_diet))
+            if not q_spa.empty() and not len(dws):
+                dw = mp.Process(target=spa_worker, args=(config, q_spa))
                 dw.start()
                 dws.append(dw)
 
@@ -1052,7 +1053,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 else:
                     bad += 1
                 logger.info('     done: %s', gitdir)
-                showstats(q_todo, q_pull, q_diet, good, bad, pws, dws)
+                showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
                 if len(done) >= 100:
                     # Write manifest every 100 repos
                     update_manifest(config, done)
@@ -1108,7 +1109,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                 loopmark = None
 
             if len(pws) < pull_threads:
-                pw = mp.Process(target=pull_worker, args=(config, q_pull, q_diet, q_done))
+                pw = mp.Process(target=pull_worker, args=(config, q_pull, q_spa, q_done))
                 pw.start()
                 pws.append(pw)
                 logger.info('   worker: started (%s running)', len(pws))
