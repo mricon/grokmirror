@@ -201,7 +201,7 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
 
     if logfile is not None:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("dumb-pull[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)

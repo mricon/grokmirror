@@ -194,7 +194,7 @@ def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
 
     if logfile is not None:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("manifest[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
 
         ch.setLevel(logging.DEBUG)

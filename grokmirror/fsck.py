@@ -384,7 +384,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     logfile = config['core'].get('log', None)
     if logfile:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("fsck[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         loglevel = logging.INFO
 
@@ -526,6 +526,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     fetched_obstrepos = set()
     obst_changes = False
     analyzed = 0
+    sibling_strategy = config['core'].get('objstore_sibling_strategy', 'loose')
     logger.info('Analyzing %s (%s repos)', toplevel, len(status))
     for fullpath in list(status):
         analyzed += 1
@@ -762,7 +763,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         my_roots = grokmirror.get_repo_roots(obstrepo)
         if obstrepo in amap and len(amap[obstrepo]):
             # Is it redundant with any other objstore repos?
-            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots)
+            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, notifdisparate=True)
             if len(siblings):
                 siblings.add(obstrepo)
                 mdest = None
@@ -838,9 +839,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
                 # Remove it and let prune take care of it
-                args = ['remote', 'remove', virtref]
+                grokmirror.remove_from_objstore(obstrepo, childpath)
                 logger.info('%s: removed remote %s (no longer used)', os.path.basename(obstrepo), childpath)
-                grokmirror.run_git_command(obstrepo, args)
                 continue
 
             # Does it need fetching?

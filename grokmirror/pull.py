@@ -964,7 +964,7 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
     logfile = config['core'].get('log', None)
     if logfile:
         ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("pull[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         loglevel = logging.INFO
 

@@ -103,7 +103,7 @@ def git_newer_than(minver):
     return version.parse(ver) >= version.parse(minver)
 
 
-def run_git_command(fullpath, args):
+def run_git_command(fullpath, args, stdin=None):
     if 'GITBIN' in os.environ:
         _git = os.environ['GITBIN']
     else:
@@ -120,8 +120,8 @@ def run_git_command(fullpath, args):
 
     logger.debug('Running: %s', ' '.join(cmdargs))
 
-    child = subprocess.Popen(cmdargs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = child.communicate()
+    child = subprocess.Popen(cmdargs, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = child.communicate(input=stdin)
 
     output = output.decode().strip()
     error = error.decode().strip()
@@ -322,15 +322,7 @@ def get_rootsets(toplevel, obstdir):
     topdirs = find_all_gitdirs(toplevel, normalize=True, exclude_objstore=True)
     obstdirs = find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
     for fullpath in topdirs:
-        # Does it have an alternates file pointing to obstdir?
-        altdir = get_altrepo(fullpath)
-        if altdir and altdir.find(obstdir) == 0:
-            # return the roots from there instead
-            roots = get_repo_roots(altdir)
-            if altdir not in obst_roots:
-                obst_roots[altdir] = roots
-        else:
-            roots = get_repo_roots(fullpath)
+        roots = get_repo_roots(fullpath)
         if roots:
             top_roots[fullpath] = roots
 
@@ -425,6 +417,39 @@ def objstore_virtref(fullpath):
     return vh.hexdigest()[:12]
 
 
+def remove_from_objstore(obstrepo, fullpath):
+    # is fullpath still using us?
+    altrepo = get_altrepo(fullpath)
+    if altrepo and os.path.realpath(obstrepo) == os.path.realpath(altrepo):
+        # Repack the child first, using minimal flags
+        args = ['repack', '-abq']
+        ecode, out, err = run_git_command(fullpath, args)
+        if ecode > 0:
+            logger.debug('Could not repack child repo %s for removal from %s', fullpath, obstrepo)
+            return False
+        os.unlink(os.path.join(fullpath, 'objects', 'info', 'alternates'))
+
+    virtref = objstore_virtref(fullpath)
+    # Find all refs we have from this sibling
+    args = ['for-each-ref', '--format', 'delete %(refname)', 'refs/virtual/%s' % virtref]
+    ecode, out, err = run_git_command(obstrepo, args)
+    if ecode == 0 and len(out):
+        out += '\n'
+        args = ['update-ref', '--stdin']
+        ecode, out, err = run_git_command(obstrepo, args, stdin=out.encode())
+        # Remove the remote
+        if ecode > 0:
+            return False
+
+    args = ['remote', 'remove', virtref]
+    run_git_command(obstrepo, args)
+    try:
+        os.unlink(os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref))
+    except (IOError, FileNotFoundError):
+        pass
+    return True
+
+
 def list_repo_remotes(fullpath, withurl=False):
     args = ['remote']
     if withurl:
@@ -440,7 +465,9 @@ def list_repo_remotes(fullpath, withurl=False):
 
     remotes = list()
     for line in out.split('\n'):
-        remotes.append(tuple(line.split()[:2]))
+        entry = tuple(line.split()[:2])
+        if entry not in remotes:
+            remotes.append(entry)
     return remotes
 
 
@@ -522,33 +549,38 @@ def is_private_repo(config, fullpath):
     return False
 
 
-def find_siblings(fullpath, my_roots, known_roots):
+def find_siblings(fullpath, my_roots, known_roots, notifdisparate=False):
     siblings = set()
     for gitpath, gitroots in known_roots.items():
         # Of course we're going to match ourselves
-        if fullpath == gitpath or not my_roots:
+        if fullpath == gitpath or not my_roots or not gitroots:
             continue
-        if gitroots and len(gitroots.intersection(my_roots)):
-            # These are sibling repositories
+        if notifdisparate and len(gitroots.difference(my_roots)) > len(my_roots):
+            # Don't consider siblings with too many unrelated parents
+            # Naively, "too many" is "more than I have total roots"
+            continue
+
+        if len(gitroots.intersection(my_roots)):
             siblings.add(gitpath)
 
     return siblings
 
 
 def find_best_obstrepo(mypath, obst_roots):
-    # We want to find an intersect with most matching roots
+    # We want to find a repo with best intersect len to total roots len ratio
     myroots = get_repo_roots(mypath)
     if not myroots:
         return None
     obstrepo = None
-    bestcount = 0
+    bestratio = 0
     for path, roots in obst_roots.items():
         if path == mypath or not roots:
             continue
         icount = len(roots.intersection(myroots))
-        if icount > bestcount:
+        ratio = icount / len(roots)
+        if ratio > bestratio:
             obstrepo = path
-            bestcount = icount
+            bestratio = ratio
 
     return obstrepo
 
