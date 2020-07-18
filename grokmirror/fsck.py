@@ -753,7 +753,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         grokmirror.manifest_lock(manifile)
         manifest = grokmirror.read_manifest(manifile)
 
-    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
+    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False, flat=True)
 
     analyzed = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
@@ -763,7 +763,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         my_roots = grokmirror.get_repo_roots(obstrepo)
         if obstrepo in amap and len(amap[obstrepo]):
             # Is it redundant with any other objstore repos?
-            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, notifdisparate=True)
+            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, exact=True)
             if len(siblings):
                 siblings.add(obstrepo)
                 mdest = None

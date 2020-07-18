@@ -549,18 +549,15 @@ def is_private_repo(config, fullpath):
     return False
 
 
-def find_siblings(fullpath, my_roots, known_roots, notifdisparate=False):
+def find_siblings(fullpath, my_roots, known_roots, exact=False):
     siblings = set()
     for gitpath, gitroots in known_roots.items():
         # Of course we're going to match ourselves
         if fullpath == gitpath or not my_roots or not gitroots:
             continue
-        if notifdisparate and len(gitroots.difference(my_roots)) > len(my_roots):
-            # Don't consider siblings with too many unrelated parents
-            # Naively, "too many" is "more than I have total roots"
-            continue
-
-        if len(gitroots.intersection(my_roots)):
+        if exact and gitroots == my_roots:
+            siblings.add(gitpath)
+        elif not exact and len(gitroots.intersection(my_roots)):
             siblings.add(gitpath)
 
     return siblings
@@ -723,7 +720,7 @@ def is_obstrepo(fullpath, obstdir):
     return fullpath.find(obstdir) == 0
 
 
-def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True):
+def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True, flat=False):
     global _alt_repo_map
     if _alt_repo_map is None:
         _alt_repo_map = dict()
@@ -738,7 +735,11 @@ def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=Tr
     logger.debug('Ignore list: %s', ' '.join(ignore))
     gitdirs = set()
     tp = pathlib.Path(toplevel)
-    for subp in tp.glob('**/*.git'):
+    if flat:
+        globpatt = '*.git'
+    else:
+        globpatt = '**/*.git'
+    for subp in tp.glob(globpatt):
         # Should we ignore this dir?
         ignored = False
         for ignoreglob in ignore:
