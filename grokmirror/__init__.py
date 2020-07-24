@@ -948,5 +948,3 @@ def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_ob
             needs_repack = 1
 
     return needs_repack
-
-

@@ -25,6 +25,7 @@ import random
 import datetime
 import shutil
 import gc
+import fnmatch
 
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
@@ -526,7 +527,6 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
     fetched_obstrepos = set()
     obst_changes = False
     analyzed = 0
-    sibling_strategy = config['core'].get('objstore_sibling_strategy', 'loose')
     logger.info('Analyzing %s (%s repos)', toplevel, len(status))
     for fullpath in list(status):
         analyzed += 1
@@ -757,6 +757,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
     analyzed = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
+    baselines = [x.strip() for x in config['core'].get('baselines', '').split('\n')]
+    islandcores = [x.strip() for x in config['core'].get('islandcores', '').split('\n')]
     for obstrepo in obstrepos:
         analyzed += 1
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
@@ -818,8 +820,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         # Not an else, because the previous step may have migrated things
         if obstrepo not in amap or not len(amap[obstrepo]):
             obst_changes = True
-            # XXX: Theoretically, nothing should have cloned a new repo while we were migrating, because
-            # they should have found a better candidate as well.
+            # XXX: Is there a possible race condition here if grok-pull cloned a new repo
+            #      while we were migrating this one?
             logger.info('%s: deleting (no longer used by anything)', os.path.basename(obstrepo))
             if obstrepo in amap:
                 amap.pop(obstrepo)
@@ -835,6 +837,8 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
         my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
         # Use the first child repo as our "reference" entry in manifest
         refrepo = None
+        set_baseline = False
+        set_islandcore = False
         for virtref, childpath in my_remotes:
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
@@ -865,6 +869,42 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
             if gitdir not in manifest:
                 continue
 
+            # Do we need to set any alternateRefsPrefixes?
+            if not set_baseline:
+                is_baseline = False
+                for baseline in baselines:
+                    # Does this repo match a baseline
+                    if fnmatch.fnmatch(gitdir, baseline):
+                        is_baseline = True
+                        break
+                if is_baseline:
+                    set_baseline = True
+                    refpref = 'refs/virtual/%s/heads/' % virtref
+                    # Go through all remotes and set their alternateRefsPrefixes
+                    for s_virtref, s_childpath in my_remotes:
+                        # is it already set to that?
+                        entries = grokmirror.get_config_from_git(s_childpath, r'core\.alternate*')
+                        if entries.get('alternaterefsprefixes') != refpref:
+                            s_gitdir = '/' + os.path.relpath(s_childpath, toplevel)
+                            logger.info(' reconfig: %s (baseline to %s)', s_gitdir, virtref)
+                            grokmirror.set_git_config(s_childpath, 'core.alternateRefsPrefixes', refpref)
+
+            # Do we need to set islandCore?
+            if not set_islandcore:
+                is_islandcore = False
+                for islandcore in islandcores:
+                    # Does this repo match a baseline
+                    if fnmatch.fnmatch(gitdir, islandcore):
+                        is_islandcore = True
+                        break
+                if is_islandcore:
+                    set_islandcore = True
+                    # is it already set to that?
+                    entries = grokmirror.get_config_from_git(obstrepo, r'pack\.island*')
+                    if entries.get('islandcore') != virtref:
+                        logger.info(' reconfig: %s (islandCore to %s)', os.path.basename(obstrepo), virtref)
+                        grokmirror.set_git_config(obstrepo, 'pack.islandCore', virtref)
+
             if refrepo is None:
                 # Legacy "reference=" setting in manifest
                 refrepo = gitdir
@@ -874,7 +914,7 @@ def fsck_mirror(config, verbose=False, force=False, repack_only=False,
 
             manifest[gitdir]['forkgroup'] = os.path.basename(obstrepo[:-4])
 
-        if obstrepo not in status:
+        if obstrepo not in status or set_islandcore:
             # We don't use obstrepo fingerprints, so we set it to None
             status[obstrepo] = {
                 'lastcheck': 'never',
