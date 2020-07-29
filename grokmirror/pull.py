@@ -641,7 +641,8 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
             headers['If-Modified-Since'] = last_modified_h
 
         try:
-            res = session.get(r_mani_url, headers=headers)
+            # 30 seconds to connect, 5 minutes between reads
+            res = session.get(r_mani_url, headers=headers, timeout=(30, 300))
         except requests.exceptions.RequestException as ex:
             logger.warning('Could not fetch %s', r_mani_url)
             logger.warning('Server returned: %s', ex)
