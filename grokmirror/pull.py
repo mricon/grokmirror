@@ -1210,9 +1210,9 @@ def parse_args():
     op.add_option('', '--force-purge', dest='forcepurge',
                   action='store_true', default=False,
                   help='Force purge despite significant repo deletions.')
-    op.add_option('-o', '--once', dest='runonce',
-                  action='store_true', default=False,
-                  help='Run once and exit instead of running continuously.')
+    op.add_option('-o', '--continuous', dest='runonce',
+                  action='store_false', default=True,
+                  help='Run continuously (no effect if refresh is not set in config).')
     op.add_option('-c', '--config', dest='config',
                   help='Location of the configuration file')
 
