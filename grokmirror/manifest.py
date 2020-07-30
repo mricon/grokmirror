@@ -171,37 +171,15 @@ def parse_args():
 def grok_manifest(manifile, toplevel, args=None, logfile=None, usenow=False,
                   check_export_ok=False, purge=False, remove=False,
                   pretty=False, ignore=None, wait=False, verbose=False, fetchobst=False):
+    global logger
+    loglevel = logging.INFO
+    logger = grokmirror.init_logger('manifest', logfile, loglevel, verbose)
 
     startt = datetime.datetime.now()
     if args is None:
         args = list()
     if ignore is None:
         ignore = list()
-
-    logger.setLevel(logging.DEBUG)
-    # noinspection PyTypeChecker
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(message)s')
-    ch.setFormatter(formatter)
-
-    if verbose:
-        ch.setLevel(logging.INFO)
-    else:
-        ch.setLevel(logging.CRITICAL)
-
-    logger.addHandler(ch)
-
-    if logfile is not None:
-        ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("manifest[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
-        ch.setFormatter(formatter)
-
-        ch.setLevel(logging.DEBUG)
-        logger.addHandler(ch)
-
-    # push our logger into grokmirror to override the default
-    grokmirror.logger = logger
 
     grokmirror.manifest_lock(manifile)
     manifest = grokmirror.read_manifest(manifile, wait=wait)

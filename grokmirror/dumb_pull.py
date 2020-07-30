@@ -180,35 +180,14 @@ def parse_args():
     return opts, args
 
 
-def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
-              logfile=None):
+def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='', logfile=None):
+    global logger
+
+    loglevel = logging.INFO
+    logger = grokmirror.init_logger('dumb-pull', logfile, loglevel, verbose)
 
     if remotes is None:
         remotes = ['*']
-
-    logger.setLevel(logging.DEBUG)
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(message)s')
-    ch.setFormatter(formatter)
-
-    if verbose:
-        ch.setLevel(logging.INFO)
-    else:
-        ch.setLevel(logging.CRITICAL)
-
-    logger.addHandler(ch)
-
-    if logfile is not None:
-        ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("dumb-pull[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
-        ch.setFormatter(formatter)
-
-        ch.setLevel(logging.DEBUG)
-        logger.addHandler(ch)
-
-    # push our logger into grokmirror to override the default
-    grokmirror.logger = logger
 
     # Find all repositories we are to pull
     for entry in args:
@@ -231,7 +210,6 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='',
 
 
 def command():
-
     opts, args = parse_args()
 
     return dumb_pull(

@@ -23,6 +23,7 @@ import fnmatch
 import subprocess
 import requests
 import logging
+import logging.handlers
 import hashlib
 import pathlib
 import uuid
@@ -42,7 +43,7 @@ MANIFEST_LOCKH = None
 REPO_LOCKH = {}
 GITBIN = '/usr/bin/git'
 
-# default logger. Will probably be overridden.
+# default logger. Will be overridden.
 logger = logging.getLogger(__name__)
 
 _alt_repo_map = None
@@ -948,3 +949,29 @@ def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_ob
             needs_repack = 1
 
     return needs_repack
+
+
+def init_logger(subcommand, logfile, loglevel, verbose):
+    global logger
+
+    logger = logging.getLogger('grokmirror')
+    logger.setLevel(logging.DEBUG)
+
+    if logfile:
+        ch = logging.handlers.WatchedFileHandler(logfile)
+        formatter = logging.Formatter(subcommand + '[%(process)d] %(asctime)s - %(levelname)s - %(message)s')
+        ch.setFormatter(formatter)
+        ch.setLevel(loglevel)
+        logger.addHandler(ch)
+
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('%(message)s')
+    ch.setFormatter(formatter)
+
+    if verbose:
+        ch.setLevel(logging.INFO)
+    else:
+        ch.setLevel(logging.CRITICAL)
+
+    logger.addHandler(ch)
+    return logger

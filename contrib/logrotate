@@ -1,0 +1,5 @@
+/var/log/grokmirror/*.log {
+    missingok
+    notifempty
+    delaycompress
+}

@@ -956,39 +956,7 @@ def showstats(q_todo, q_pull, q_spa, good, bad, pws, dws):
     logger.info('      ---:  %s', ', '.join(stats))
 
 
-def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=False):
-    global logger
-
-    logger = logging.getLogger('pull')
-    logger.setLevel(logging.DEBUG)
-
-    logfile = config['core'].get('log', None)
-    if logfile:
-        ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("pull[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
-        ch.setFormatter(formatter)
-        loglevel = logging.INFO
-
-        if config['core'].get('loglevel', 'info') == 'debug':
-            loglevel = logging.DEBUG
-
-        ch.setLevel(loglevel)
-        logger.addHandler(ch)
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(message)s')
-    ch.setFormatter(formatter)
-
-    if verbose:
-        ch.setLevel(logging.INFO)
-    else:
-        ch.setLevel(logging.CRITICAL)
-
-    logger.addHandler(ch)
-
-    # push it into grokmirror to override the default logger
-    grokmirror.logger = logger
-
+def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     obstdir = os.path.realpath(config['core'].get('objstore'))
     refresh = config['pull'].getint('refresh', 300)
@@ -1042,13 +1010,11 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                     pws.remove(pw)
                     logger.info('   worker: terminated (%s remaining)', len(pws))
                     showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
-                    continue
 
             for dw in dws:
                 if dw and not dw.is_alive():
                     dws.remove(dw)
                     showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
-                    continue
 
             if not q_spa.empty() and not len(dws):
                 if runonce:
@@ -1225,12 +1191,21 @@ def parse_args():
 
 
 def grok_pull(cfgfile, verbose=False, nomtime=False, forcepurge=False, runonce=False):
+    global logger
 
     config = grokmirror.load_config_file(cfgfile)
     if config['pull'].get('refresh', None) is None:
         runonce = True
 
-    return pull_mirror(config, verbose, nomtime, forcepurge, runonce)
+    logfile = config['core'].get('log', None)
+    if config['core'].get('loglevel', 'info') == 'debug':
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+
+    logger = grokmirror.init_logger('pull', logfile, loglevel, verbose)
+
+    return pull_mirror(config, nomtime, forcepurge, runonce)
 
 
 def command():

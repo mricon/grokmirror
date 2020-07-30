@@ -376,38 +376,8 @@ def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_ob
     return needs_repack
 
 
-def fsck_mirror(config, verbose=False, force=False, repack_only=False,
-                conn_only=False, repack_all_quick=False, repack_all_full=False):
-    global logger
-    logger = logging.getLogger('fsck')
-    logger.setLevel(logging.DEBUG)
-
-    logfile = config['core'].get('log', None)
-    if logfile:
-        ch = logging.FileHandler(logfile)
-        formatter = logging.Formatter("fsck[%(process)d] %(asctime)s - %(levelname)s - %(message)s")
-        ch.setFormatter(formatter)
-        loglevel = logging.INFO
-
-        if config['core'].get('loglevel', 'info') == 'debug':
-            loglevel = logging.DEBUG
-
-        ch.setLevel(loglevel)
-        logger.addHandler(ch)
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(message)s')
-    ch.setFormatter(formatter)
-
-    if verbose:
-        ch.setLevel(logging.INFO)
-    else:
-        ch.setLevel(logging.CRITICAL)
-
-    logger.addHandler(ch)
-
-    # push it into grokmirror to override the default logger
-    grokmirror.logger = logger
+def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
+                repack_all_quick=False, repack_all_full=False):
 
     if conn_only or repack_all_quick or repack_all_full:
         force = True
@@ -1063,6 +1033,7 @@ def parse_args():
 
 def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=False,
               repack_all_quick=False, repack_all_full=False):
+    global logger
 
     config = grokmirror.load_config_file(cfgfile)
 
@@ -1071,8 +1042,15 @@ def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=
         obstdir = os.path.join(config['core'].get('toplevel'), '_alternates')
         config['core']['objstore'] = obstdir
 
-    fsck_mirror(config, verbose, force, repack_only, conn_only,
-                repack_all_quick, repack_all_full)
+    logfile = config['core'].get('log', None)
+    if config['core'].get('loglevel', 'info') == 'debug':
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+
+    logger = grokmirror.init_logger('pull', logfile, loglevel, verbose)
+
+    fsck_mirror(config, force, repack_only, conn_only, repack_all_quick, repack_all_full)
 
 
 def command():
