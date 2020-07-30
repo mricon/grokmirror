@@ -171,20 +171,20 @@ def build_optimal_forkgroups(l_manifest, r_manifest, toplevel, obstdir):
     return forkgroups
 
 
-def spa_worker(config, q_spa):
+def spa_worker(config, q_spa, pauseonload):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     cpus = mp.cpu_count()
     saidpaused = False
     while True:
-        load = os.getloadavg()
-        if load[0] > cpus:
-            if not saidpaused:
-                logger.info('      spa: paused (system load), %s waiting', q_spa.qsize())
-                saidpaused = True
-            time.sleep(5)
-            continue
-
-        saidpaused = False
+        if pauseonload:
+            load = os.getloadavg()
+            if load[0] > cpus:
+                if not saidpaused:
+                    logger.info('      spa: paused (system load), %s waiting', q_spa.qsize())
+                    saidpaused = True
+                time.sleep(5)
+                continue
+            saidpaused = False
 
         try:
             (gitdir, actions) = q_spa.get(timeout=1)
@@ -1051,7 +1051,11 @@ def pull_mirror(config, verbose=False, nomtime=False, forcepurge=False, runonce=
                     continue
 
             if not q_spa.empty() and not len(dws):
-                dw = mp.Process(target=spa_worker, args=(config, q_spa))
+                if runonce:
+                    pauseonload = False
+                else:
+                    pauseonload = True
+                dw = mp.Process(target=spa_worker, args=(config, q_spa, pauseonload))
                 dw.start()
                 dws.append(dw)
 
