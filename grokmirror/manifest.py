@@ -116,6 +116,9 @@ def parse_args():
     '''
 
     op = OptionParser(usage=usage, version=grokmirror.VERSION)
+    op.add_option('', '--cfgfile', dest='cfgfile',
+                  default=None,
+                  help='Path to grokmirror.conf containing a [manifest] section')
     op.add_option('-m', '--manifest', dest='manifile',
                   help='Location of manifest.js or manifest.js.gz')
     op.add_option('-t', '--toplevel', dest='toplevel',
@@ -128,8 +131,7 @@ def parse_args():
                   help='Use current timestamp instead of parsing commits')
     op.add_option('-c', '--check-export-ok', dest='check_export_ok',
                   action='store_true', default=False,
-                  help='Export only repositories marked as '
-                       'git-daemon-export-ok')
+                  help='Export only repositories marked as git-daemon-export-ok')
     op.add_option('-p', '--purge', dest='purge', action='store_true',
                   default=False,
                   help='Purge deleted git repositories from manifest')
@@ -140,15 +142,13 @@ def parse_args():
                   default=False,
                   help='Pretty-print manifest (sort keys and add indentation)')
     op.add_option('-i', '--ignore-paths', dest='ignore', action='append',
-                  default=[],
+                  default=None,
                   help='When finding git dirs, ignore these paths '
-                       '(can be used multiple times, accepts shell-style '
-                       'globbing wildcards)')
+                       '(can be used multiple times, accepts shell-style globbing wildcards)')
     op.add_option('-w', '--wait-for-manifest', dest='wait',
                   action='store_true', default=False,
-                  help='When running with arguments, wait if manifest is not '
-                       'there (can be useful when multiple writers are writing '
-                       'the manifest)')
+                  help='When running with arguments, wait if manifest is not there '
+                       '(can be useful when multiple writers are writing the manifest)')
     op.add_option('-o', '--fetch-objstore', dest='fetchobst',
                   action='store_true', default=False,
                   help='Fetch updates into objstore repo (if used)')
@@ -158,10 +158,32 @@ def parse_args():
 
     opts, args = op.parse_args()
 
+    if opts.cfgfile:
+        config = grokmirror.load_config_file(opts.cfgfile)
+        if not opts.manifile:
+            opts.manifile = config['core'].get('manifest')
+        if not opts.toplevel:
+            opts.toplevel = os.path.realpath(config['core'].get('toplevel'))
+        if not opts.logfile:
+            opts.logfile = config['core'].get('logfile')
+
+        if 'manifest' in config:
+            if not opts.ignore:
+                opts.ignore = [x.strip() for x in config['manifest'].get('ignore', '').split('\n')]
+            if not opts.check_export_ok:
+                opts.check_export_ok = config['manifest'].getboolean('check_export_ok', False)
+            if not opts.pretty:
+                opts.pretty = config['manifest'].getboolean('pretty', False)
+            if not opts.fetchobst:
+                opts.fetchobst = config['manifest'].getboolean('fetch_objstore', False)
+
     if not opts.manifile:
         op.error('You must provide the path to the manifest file')
     if not opts.toplevel:
         op.error('You must provide the toplevel path')
+    if opts.ignore is None:
+        opts.ignore = list()
+
     if not len(args) and opts.wait:
         op.error('--wait option only makes sense when dirs are passed')
 

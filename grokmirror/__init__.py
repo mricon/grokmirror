@@ -788,6 +788,7 @@ def manifest_unlock(manifile):
     global MANIFEST_LOCKH
     if MANIFEST_LOCKH is not None:
         logger.debug('Unlocking manifest %s', manifile)
+        # noinspection PyTypeChecker
         lockf(MANIFEST_LOCKH, LOCK_UN)
         # noinspection PyUnresolvedReferences
         MANIFEST_LOCKH.close()

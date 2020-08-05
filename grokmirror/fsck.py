@@ -727,8 +727,8 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     analyzed = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
-    baselines = [x.strip() for x in config['core'].get('baselines', '').split('\n')]
-    islandcores = [x.strip() for x in config['core'].get('islandcores', '').split('\n')]
+    baselines = [x.strip() for x in config['fsck'].get('baselines', '').split('\n')]
+    islandcores = [x.strip() for x in config['fsck'].get('islandcores', '').split('\n')]
     for obstrepo in obstrepos:
         analyzed += 1
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
@@ -918,8 +918,12 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
 
     if obst_changes:
+        if 'manifest' in config:
+            pretty = config['manifest'].getboolean('pretty', False)
+        else:
+            pretty = False
         # We keep the same mtime, because the repos themselves haven't changed
-        grokmirror.write_manifest(manifile, manifest)
+        grokmirror.write_manifest(manifile, manifest, pretty=pretty)
         grokmirror.manifest_unlock(manifile)
 
     if not len(to_process):

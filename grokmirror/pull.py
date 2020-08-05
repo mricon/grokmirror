@@ -275,7 +275,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
 
         if action == 'fix_remotes':
             logger.info(' reorigin: %s', gitdir)
-            success = fix_remotes(toplevel, gitdir, site)
+            success = fix_remotes(toplevel, gitdir, site, config)
             if success:
                 action = 'fix_params'
             else:
@@ -293,7 +293,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
                 shutil.move(fullpath, '%s.reclone' % fullpath)
                 shutil.rmtree('%s.reclone' % fullpath)
                 grokmirror.setup_bare_repo(fullpath)
-                fix_remotes(toplevel, gitdir, site)
+                fix_remotes(toplevel, gitdir, site, config)
                 set_repo_params(fullpath, repoinfo)
                 grokmirror.set_altrepo(fullpath, altrepo)
                 action = 'pull'
@@ -418,7 +418,7 @@ def cull_manifest(manifest, config):
     return culled
 
 
-def fix_remotes(toplevel, gitdir, site):
+def fix_remotes(toplevel, gitdir, site, config):
     # Remove all existing remotes and set new origin
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     ecode, out, err = grokmirror.run_git_command(fullpath, ['remote'])
@@ -432,12 +432,21 @@ def fix_remotes(toplevel, gitdir, site):
 
     # set my origin
     origin = os.path.join(site, gitdir.lstrip('/'))
-    ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'add', '--mirror', 'origin', origin])
+    ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'add', '--mirror=fetch', 'origin', origin])
     if ecode > 0:
         logger.critical('FATAL: Could not set origin to %s in %s', origin, fullpath)
         return False
 
-    logger.debug('\tset new origin as %s', origin)
+    ffonly = False
+    for globpatt in set([x.strip() for x in config['pull'].get('ffonly', '').split('\n')]):
+        if fnmatch.fnmatch(gitdir, globpatt):
+            ffonly = True
+            break
+    if ffonly:
+        grokmirror.set_git_config(fullpath, 'remote.origin.fetch', 'refs/*:refs/*')
+        logger.debug('\tset new origin as %s (ff-only)', origin)
+    else:
+        logger.debug('\tset new origin as %s', origin)
     return True
 
 
@@ -919,7 +928,11 @@ def update_manifest(config, entries):
         manifest[gitdir] = repoinfo
         changed = True
     if changed:
-        grokmirror.write_manifest(manifile, manifest)
+        if 'manifest' in config:
+            pretty = config['manifest'].getboolean('pretty', False)
+        else:
+            pretty = False
+        grokmirror.write_manifest(manifile, manifest, pretty=pretty)
         logger.info(' manifest: wrote %s (%d entries)', manifile, len(manifest))
         # write out projects.list, if asked to
         write_projects_list(config, manifest)
@@ -1127,7 +1140,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                 q_done.put((gitdir, repoinfo, q_action, False))
                 continue
 
-            fix_remotes(toplevel, gitdir, config['remote'].get('site'))
+            fix_remotes(toplevel, gitdir, config['remote'].get('site'), config)
             set_repo_params(fullpath, repoinfo)
             grokmirror.unlock_repo(fullpath)
 
