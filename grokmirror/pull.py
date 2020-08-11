@@ -559,7 +559,7 @@ def write_projects_list(config, manifest):
         return
 
     trimtop = config['pull'].get('projectslist_trimtop', '')
-    add_symlinks = config['pull'].get('projectslist_symlinks', False)
+    add_symlinks = config['pull'].getboolean('projectslist_symlinks', False)
 
     (dirname, basename) = os.path.split(plpath)
     (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
