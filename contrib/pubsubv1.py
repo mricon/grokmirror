@@ -29,6 +29,9 @@ import socket
 
 from configparser import ConfigParser, ExtendedInterpolation
 
+# Some sanity defaults
+MAX_PROJ_LEN = 32
+MAX_REPO_LEN = 1024
 
 # noinspection PyBroadException
 class PubsubListener(object):
@@ -62,6 +65,11 @@ class PubsubListener(object):
         if proj.find('/') > -1:
             resp.status = falcon.HTTP_500
             resp.body = 'Invalid characters in project name\n'
+            return
+
+        if len(proj) > MAX_PROJ_LEN or len(repo) > MAX_REPO_LEN:
+            resp.status = falcon.HTTP_500
+            resp.body = 'Repo or project value too long\n'
             return
 
         confdir = os.environ.get('GROKMIRROR_CONFIG_DIR', '/etc/grokmirror')
