@@ -26,6 +26,7 @@ import falcon
 import json
 import os
 import socket
+import re
 
 from configparser import ConfigParser, ExtendedInterpolation
 
@@ -61,15 +62,21 @@ class PubsubListener(object):
             resp.body = 'Not a pubsub v1 payload\n'
             return
 
-        # Proj shouldn't contain slashes
-        if proj.find('/') > -1:
+        if len(proj) > MAX_PROJ_LEN or len(repo) > MAX_REPO_LEN:
+            resp.status = falcon.HTTP_500
+            resp.body = 'Repo or project value too long\n'
+            return
+
+        # Proj shouldn't contain slashes or whitespace
+        if re.search(r'[\s/]', proj):
             resp.status = falcon.HTTP_500
             resp.body = 'Invalid characters in project name\n'
             return
 
-        if len(proj) > MAX_PROJ_LEN or len(repo) > MAX_REPO_LEN:
+        # Repo shouldn't contain whitespace
+        if re.search(r'\s', proj):
             resp.status = falcon.HTTP_500
-            resp.body = 'Repo or project value too long\n'
+            resp.body = 'Invalid characters in repo name\n'
             return
 
         confdir = os.environ.get('GROKMIRROR_CONFIG_DIR', '/etc/grokmirror')
