@@ -405,6 +405,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     manifile = config['core'].get('manifest')
     logger.info('Analyzing %s', manifile)
+    grokmirror.manifest_lock(manifile)
     manifest = grokmirror.read_manifest(manifile)
 
     if os.path.exists(statusfile):
@@ -454,8 +455,17 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     # Go through the manifest and compare with status
     toplevel = os.path.realpath(config['core'].get('toplevel'))
+    changed = False
     for gitdir in list(manifest):
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+        # Does it exist?
+        if not os.path.isdir(fullpath):
+            # Remove it from manifest and status
+            manifest.pop(gitdir)
+            status.pop(fullpath)
+            changed = True
+            continue
+
         if fullpath not in status.keys():
             # Newly added repository
             if not force:
@@ -473,6 +483,16 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             }
             logger.info('%s:', fullpath)
             logger.info('    added: next check on %s', nextcheck)
+
+    if 'manifest' in config:
+        pretty = config['manifest'].getboolean('pretty', False)
+    else:
+        pretty = False
+
+    if changed:
+        grokmirror.write_manifest(manifile, manifest, pretty=pretty)
+
+    grokmirror.manifest_unlock(manifile)
 
     # record newly found repos in the status file
     logger.debug('Updating status file in %s', statusfile)
@@ -918,10 +938,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
 
     if obst_changes:
-        if 'manifest' in config:
-            pretty = config['manifest'].getboolean('pretty', False)
-        else:
-            pretty = False
         # We keep the same mtime, because the repos themselves haven't changed
         grokmirror.write_manifest(manifile, manifest, pretty=pretty)
         grokmirror.manifest_unlock(manifile)
