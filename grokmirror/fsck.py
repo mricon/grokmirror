@@ -26,7 +26,10 @@ import datetime
 import shutil
 import gc
 import fnmatch
+import io
+import smtplib
 
+from email.message import EmailMessage
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
 # default basic logger. We override it later.
@@ -1070,7 +1073,32 @@ def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=
 
     logger = grokmirror.init_logger('pull', logfile, loglevel, verbose)
 
+    rh = io.StringIO()
+    ch = logging.StreamHandler(stream=rh)
+    formatter = logging.Formatter('%(message)s')
+    ch.setFormatter(formatter)
+    ch.setLevel(logging.CRITICAL)
+    logger.addHandler(ch)
+
     fsck_mirror(config, force, repack_only, conn_only, repack_all_quick, repack_all_full)
+
+    report = rh.getvalue()
+    if len(report):
+        msg = EmailMessage()
+        msg.set_content(report)
+        subject = config['fsck'].get('report_subject')
+        if not subject:
+            import platform
+            subject = 'grok-fsck errors on {} ({})'.format(platform.node(), cfgfile)
+        msg['Subject'] = subject
+        from_addr = config['fsck'].get('report_from', 'root')
+        msg['From'] = from_addr
+        report_to = config['fsck'].get('report_to', 'root')
+        msg['To'] = report_to
+        mailhost = config['fsck'].get('report_mailhost', 'localhost')
+        s = smtplib.SMTP(mailhost)
+        s.send_message(msg)
+        s.quit()
 
 
 def command():
