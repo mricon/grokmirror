@@ -5,5 +5,7 @@ Documentation=https://github.com/mricon/grokmirror
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/grok-fsck -c /etc/grokmirror/%i.conf
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
 User=mirror
 Group=mirror
