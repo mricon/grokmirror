@@ -256,8 +256,10 @@ def pull_worker(config, q_pull, q_spa, q_done):
         try:
             grokmirror.lock_repo(fullpath, nonblocking=True)
         except IOError:
-            # Let the next run deal with this one
-            q_done.put((gitdir, repoinfo, q_action, False))
+            # Take a quick nap and put it back into queue
+            logger.info('    defer: %s (locked)', gitdir)
+            time.sleep(5)
+            q_pull.put((gitdir, repoinfo, action, q_action))
             continue
 
         if action == 'purge':
