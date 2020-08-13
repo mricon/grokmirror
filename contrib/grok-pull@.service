@@ -6,6 +6,7 @@ Documentation=https://github.com/mricon/grokmirror
 [Service]
 ExecStart=/usr/bin/grok-pull -o -c /etc/grokmirror/%i.conf
 Type=simple
+Restart=on-failure
 User=mirror
 Group=mirror
 
