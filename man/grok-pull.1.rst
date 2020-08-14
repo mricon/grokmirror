@@ -5,25 +5,40 @@ Clone or update local git repositories
 --------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2019-02-14
+:Date:      2020-08-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.2.0
+:Version:   2.0.0
 :Manual section: 1
 
 SYNOPSIS
 --------
-    grok-pull -c /path/to/repos.conf
+  grok-pull -c /path/to/grokmirror.conf
 
 DESCRIPTION
 -----------
-This utility runs from a cronjob and downloads the latest manifest from
-the grokmirror master. If there are new repositories or changes in the
-existing repositories, grok-pull will perform the necessary git commands
-to clone or fetch the required data from the master.
+Grok-pull is the main tool for replicating repository updates from the
+grokmirror primary server to the mirrors.
 
-At the end of its run, grok-pull will generate its own manifest file,
-which can then be used for further mirroring.
+Grok-pull has two modes of operation -- onetime and continous
+(daemonized). In one-time operation mode, it downloads the latest
+manifest and applies any outstanding updates. If there are new
+repositories or changes in the existing repositories, grok-pull will
+perform the necessary git commands to clone or fetch the required data
+from the master. Once all updates are applied, it will write its own
+manifest and exit. In this mode, grok-pull can be run manually or from
+cron.
+
+In continuous operation mode (when run with -o), grok-pull will continue
+running after all updates have been applied and will periodically
+re-download the manifest from the server to check for new updates. For
+this to work, you must set pull.refresh in grokmirror.conf to the amount
+of seconds you would like it to wait between refreshes.
+
+If pull.socket is specified, grok-pull will also listen on a socket for
+any push updates (relative repository path as present in the manifest
+file, terminated with newlines). This can be used for pubsub
+subscriptions (see contrib).
 
 OPTIONS
 -------
@@ -31,37 +46,17 @@ OPTIONS
   -h, --help            show this help message and exit
   -v, --verbose         Be verbose and tell us what you are doing
   -n, --no-mtime-check  Run without checking manifest mtime.
-  -f, --force           Force full git update regardless of last-modified
-                        times. Also useful when repos.conf has changed.
-  -p, --purge           Remove any git trees that are no longer in manifest.
-  -y, --pretty          Pretty-print the generated manifest (sort repos
-                        and add indentation). This is much slower, so
-                        should be used with caution on large
-                        collections.
-  -r, --no-reuse-existing-repos
-                        If any existing repositories are found on disk,
-                        do NOT set new remote origin and reuse, just
-                        skip them entirely
-  -m, --verify-mirror   Do not perform any updates, just verify that mirror
-                        matches upstream manifest.
-  -s SUBPATH, --verify-subpath=SUBPATH
-                        Only verify a subpath (accepts shell globbing)
+  -o, --continuous      Run continuously (no effect if refresh is not set)
   -c CONFIG, --config=CONFIG
-                        Location of repos.conf
+                        Location of the configuration file
+  --force-purge         Force purge operation despite significant repo deletions
 
 EXAMPLES
 --------
-Locate repos.conf and modify it to reflect your needs. The default
-configuration file is heavily commented.
+Use grokmirror.conf and modify it to reflect your needs. The example
+configuration file is heavily commented. To invoke, run::
 
-Add a cronjob to run as frequently as you like. For example, add the
-following to ``/etc/cron.d/grokmirror.cron``::
-
-    # Run grok-pull every minute as user "mirror"
-    * * * * * mirror /usr/bin/grok-pull -p -c /etc/grokmirror/repos.conf
-
-Make sure the user "mirror" (or whichever user you specified) is able to
-write to the toplevel, log and lock locations specified in repos.conf.
+  grok-pull -v -c /path/to/grokmirror.conf
 
 SEE ALSO
 --------
@@ -71,6 +66,4 @@ SEE ALSO
 
 SUPPORT
 -------
-Please open an issue on Github:
-
-    https://github.com/mricon/grokmirror/issues
+Please email tools@linux.kernel.org.

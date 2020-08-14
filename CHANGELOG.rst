@@ -1,3 +1,19 @@
+v2.0.0 (2020-08-14)
+-------------------
+- Major rewrite to improve shared object storage. See UPGRADING.rst for
+  upgrade strategy. Below are major highlights.
+- Drop support for python < 3.6
+- Introduce "object storage" repositories that benefit from git-pack
+  delta islands
+- Make grok-pull operate in daemon mode (with -o) (see contrib for
+  systemd unit files)
+- Provide a socket listener for pubsub push updates (see contrib for
+  Google pubsubv1.py)
+- Merge fsck.conf and repos.conf into a single config file
+- Grok-manifest will now record where HEAD is pointing so replicas can
+  properly track these changes.
+
+
 v1.2.2 (2019-10-23)
 -------------------
 - Small bugfixes

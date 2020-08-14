@@ -1,8 +1,8 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-FSCK 1 "2019-02-14" "1.2.0" ""
+.TH GROK-FSCK 1 "2020-08-14" "2.0.0" ""
 .SH NAME
-GROK-FSCK \- Check mirrored repositories for corruption
+GROK-FSCK \- Optimize mirrored repositories and check for corruption
 .
 .nr rst2man-indent-level 0
 .
@@ -33,18 +33,19 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .SH SYNOPSIS
 .INDENT 0.0
 .INDENT 3.5
-grok\-fsck \-c /path/to/fsck.conf
+grok\-fsck \-c /path/to/grokmirror.conf
 .UNINDENT
 .UNINDENT
 .SH DESCRIPTION
 .sp
-Git repositories can get corrupted whether they are frequently updated
-or not, which is why it is useful to routinely check them using "git
-fsck". Grokmirror ships with a "grok\-fsck" utility that will run "git
-fsck" on all mirrored git repositories. It is supposed to be run
-nightly from cron, and will do its best to randomly stagger the checks
-so only a subset of repositories is checked each night. Any errors will
-be sent to the user set in MAILTO.
+Git repositories should be routinely repacked and checked for
+corruption. This utility will perform the necessary optimizations and
+report any problems to the email defined via fsck.report_to (\(aqroot\(aq by
+default). It should run weekly from cron or from the systemd timer (see
+contrib).
+.sp
+Please examine the example grokmirror.conf file for various things you
+can tweak.
 .SH OPTIONS
 .INDENT 0.0
 .INDENT 3.5
@@ -81,45 +82,6 @@ but only check connectivity
 .UNINDENT
 .UNINDENT
 .UNINDENT
-.SH EXAMPLES
-.sp
-Locate fsck.conf and modify it to reflect your needs. The default
-configuration file is heavily commented.
-.sp
-Set up a cron job to run nightly for quick repacks, and weekly for fsck
-checks:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-# Make sure MAILTO is set, for error reports
-MAILTO=root
-# Run nightly repacks to optimize the repos
-0 2 1\-6 * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf \-\-repack\-only
-# Run weekly fsck checks on Sunday
-0 2 0 * * mirror /usr/bin/grok\-fsck \-c /etc/grokmirror/fsck.conf
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-You can force a full run using the \fB\-f\fP flag, but unless you only have
-a few smallish git repositories, it\(aqs not recommended, as it may take
-several hours to complete, as it will do a full repack, prune and fsck
-of all repositories. To make this process faster, you can use:
-.INDENT 0.0
-.IP \(bu 2
-\fB\-\-connectivity\fP: when doing fsck, only check object connectivity
-.IP \(bu 2
-\fB\-\-repack\-all\-quick\fP: do a quick repack of all repositories
-.IP \(bu 2
-\fB\-\-repack\-all\-full\fP: if you have \fBextra_repack_flags_full\fP defined
-in the configuration file, trigger a full repack of every repository.
-This can be handy if you need to bring up a newly cloned mirror and
-want to make sure it\(aqs repacked and all bitmaps are built before
-serving content.
-.UNINDENT
 .SH SEE ALSO
 .INDENT 0.0
 .IP \(bu 2
@@ -131,17 +93,7 @@ git(1)
 .UNINDENT
 .SH SUPPORT
 .sp
-Please open an issue on Github:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-https://github.com/mricon/grokmirror/issues
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
+Email \fI\%tools@linux.kernel.org\fP\&.
 .SH AUTHOR
 mricon@kernel.org
 

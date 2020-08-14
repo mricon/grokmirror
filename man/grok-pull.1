@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH GROK-PULL 1 "2019-02-14" "1.2.0" ""
+.TH GROK-PULL 1 "2020-08-14" "2.0.0" ""
 .SH NAME
 GROK-PULL \- Clone or update local git repositories
 .
@@ -33,18 +33,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .SH SYNOPSIS
 .INDENT 0.0
 .INDENT 3.5
-grok\-pull \-c /path/to/repos.conf
+grok\-pull \-c /path/to/grokmirror.conf
 .UNINDENT
 .UNINDENT
 .SH DESCRIPTION
 .sp
-This utility runs from a cronjob and downloads the latest manifest from
-the grokmirror master. If there are new repositories or changes in the
-existing repositories, grok\-pull will perform the necessary git commands
-to clone or fetch the required data from the master.
+Grok\-pull is the main tool for replicating repository updates from the
+grokmirror primary server to the mirrors.
 .sp
-At the end of its run, grok\-pull will generate its own manifest file,
-which can then be used for further mirroring.
+Grok\-pull has two modes of operation \-\- onetime and continous
+(daemonized). In one\-time operation mode, it downloads the latest
+manifest and applies any outstanding updates. If there are new
+repositories or changes in the existing repositories, grok\-pull will
+perform the necessary git commands to clone or fetch the required data
+from the master. Once all updates are applied, it will write its own
+manifest and exit. In this mode, grok\-pull can be run manually or from
+cron.
+.sp
+In continuous operation mode (when run with \-o), grok\-pull will continue
+running after all updates have been applied and will periodically
+re\-download the manifest from the server to check for new updates. For
+this to work, you must set pull.refresh in grokmirror.conf to the amount
+of seconds you would like it to wait between refreshes.
+.sp
+If pull.socket is specified, grok\-pull will also listen on a socket for
+any push updates (relative repository path as present in the manifest
+file, terminated with newlines). This can be used for pubsub
+subscriptions (see contrib).
 .SH OPTIONS
 .INDENT 0.0
 .INDENT 3.5
@@ -62,57 +77,31 @@ Be verbose and tell us what you are doing
 .B \-n\fP,\fB  \-\-no\-mtime\-check
 Run without checking manifest mtime.
 .TP
-.B \-f\fP,\fB  \-\-force
-Force full git update regardless of last\-modified
-times. Also useful when repos.conf has changed.
-.TP
-.B \-p\fP,\fB  \-\-purge
-Remove any git trees that are no longer in manifest.
-.TP
-.B \-y\fP,\fB  \-\-pretty
-Pretty\-print the generated manifest (sort repos
-and add indentation). This is much slower, so
-should be used with caution on large
-collections.
-.TP
-.B \-r\fP,\fB  \-\-no\-reuse\-existing\-repos
-If any existing repositories are found on disk,
-do NOT set new remote origin and reuse, just
-skip them entirely
-.TP
-.B \-m\fP,\fB  \-\-verify\-mirror
-Do not perform any updates, just verify that mirror
-matches upstream manifest.
-.TP
-.BI \-s \ SUBPATH\fP,\fB \ \-\-verify\-subpath\fB= SUBPATH
-Only verify a subpath (accepts shell globbing)
+.B \-o\fP,\fB  \-\-continuous
+Run continuously (no effect if refresh is not set)
 .TP
 .BI \-c \ CONFIG\fP,\fB \ \-\-config\fB= CONFIG
-Location of repos.conf
+Location of the configuration file
+.TP
+.B \-\-force\-purge
+Force purge operation despite significant repo deletions
 .UNINDENT
 .UNINDENT
 .UNINDENT
 .SH EXAMPLES
 .sp
-Locate repos.conf and modify it to reflect your needs. The default
-configuration file is heavily commented.
-.sp
-Add a cronjob to run as frequently as you like. For example, add the
-following to \fB/etc/cron.d/grokmirror.cron\fP:
+Use grokmirror.conf and modify it to reflect your needs. The example
+configuration file is heavily commented. To invoke, run:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-# Run grok\-pull every minute as user "mirror"
-* * * * * mirror /usr/bin/grok\-pull \-p \-c /etc/grokmirror/repos.conf
+grok\-pull \-v \-c /path/to/grokmirror.conf
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
-.sp
-Make sure the user "mirror" (or whichever user you specified) is able to
-write to the toplevel, log and lock locations specified in repos.conf.
 .SH SEE ALSO
 .INDENT 0.0
 .IP \(bu 2
@@ -124,12 +113,7 @@ git(1)
 .UNINDENT
 .SH SUPPORT
 .sp
-Please open an issue on Github:
-.INDENT 0.0
-.INDENT 3.5
-\fI\%https://github.com/mricon/grokmirror/issues\fP
-.UNINDENT
-.UNINDENT
+Please email \fI\%tools@linux.kernel.org\fP\&.
 .SH AUTHOR
 mricon@kernel.org
 

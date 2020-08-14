@@ -1,29 +1,30 @@
 GROK-FSCK
 =========
-------------------------------------------
-Check mirrored repositories for corruption
-------------------------------------------
+-------------------------------------------------------
+Optimize mirrored repositories and check for corruption
+-------------------------------------------------------
 
 :Author:    mricon@kernel.org
-:Date:      2019-02-14
+:Date:      2020-08-14
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
-:Version:   1.2.0
+:Version:   2.0.0
 :Manual section: 1
 
 SYNOPSIS
 --------
-    grok-fsck -c /path/to/fsck.conf
+    grok-fsck -c /path/to/grokmirror.conf
 
 DESCRIPTION
 -----------
-Git repositories can get corrupted whether they are frequently updated
-or not, which is why it is useful to routinely check them using "git
-fsck". Grokmirror ships with a "grok-fsck" utility that will run "git
-fsck" on all mirrored git repositories. It is supposed to be run
-nightly from cron, and will do its best to randomly stagger the checks
-so only a subset of repositories is checked each night. Any errors will
-be sent to the user set in MAILTO.
+Git repositories should be routinely repacked and checked for
+corruption. This utility will perform the necessary optimizations and
+report any problems to the email defined via fsck.report_to ('root' by
+default). It should run weekly from cron or from the systemd timer (see
+contrib).
+
+Please examine the example grokmirror.conf file for various things you
+can tweak.
 
 OPTIONS
 -------
@@ -40,34 +41,6 @@ OPTIONS
   --repack-all-quick    (Assumes --force): Do a quick repack of all repos
   --repack-all-full     (Assumes --force): Do a full repack of all repos
 
-EXAMPLES
---------
-Locate fsck.conf and modify it to reflect your needs. The default
-configuration file is heavily commented.
-
-Set up a cron job to run nightly for quick repacks, and weekly for fsck
-checks::
-
-    # Make sure MAILTO is set, for error reports
-    MAILTO=root
-    # Run nightly repacks to optimize the repos
-    0 2 1-6 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf --repack-only
-    # Run weekly fsck checks on Sunday
-    0 2 0 * * mirror /usr/bin/grok-fsck -c /etc/grokmirror/fsck.conf
-
-You can force a full run using the ``-f`` flag, but unless you only have
-a few smallish git repositories, it's not recommended, as it may take
-several hours to complete, as it will do a full repack, prune and fsck
-of all repositories. To make this process faster, you can use:
-
-* ``--connectivity``: when doing fsck, only check object connectivity
-* ``--repack-all-quick``: do a quick repack of all repositories
-* ``--repack-all-full``: if you have ``extra_repack_flags_full`` defined
-  in the configuration file, trigger a full repack of every repository.
-  This can be handy if you need to bring up a newly cloned mirror and
-  want to make sure it's repacked and all bitmaps are built before
-  serving content.
-
 SEE ALSO
 --------
 * grok-manifest(1)
@@ -76,6 +49,4 @@ SEE ALSO
 
 SUPPORT
 -------
-Please open an issue on Github::
-
-    https://github.com/mricon/grokmirror/issues
+Email tools@linux.kernel.org.
