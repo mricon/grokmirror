@@ -832,6 +832,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         refrepo = None
         set_baseline = False
         set_islandcore = False
+        new_islandcore = False
         for virtref, childpath in my_remotes:
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
@@ -895,6 +896,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     # is it already set to that?
                     entries = grokmirror.get_config_from_git(obstrepo, r'pack\.island*')
                     if entries.get('islandcore') != virtref:
+                        new_islandcore = True
                         logger.info(' reconfig: %s (islandCore to %s)', os.path.basename(obstrepo), virtref)
                         grokmirror.set_git_config(obstrepo, 'pack.islandCore', virtref)
 
@@ -907,7 +909,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
             manifest[gitdir]['forkgroup'] = os.path.basename(obstrepo[:-4])
 
-        if obstrepo not in status or set_islandcore:
+        if obstrepo not in status or new_islandcore:
             # We don't use obstrepo fingerprints, so we set it to None
             status[obstrepo] = {
                 'lastcheck': 'never',
