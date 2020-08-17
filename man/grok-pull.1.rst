@@ -49,6 +49,7 @@ OPTIONS
   -o, --continuous      Run continuously (no effect if refresh is not set)
   -c CONFIG, --config=CONFIG
                         Location of the configuration file
+  -p, --purge           Remove any git trees that are no longer in manifest.
   --force-purge         Force purge operation despite significant repo deletions
 
 EXAMPLES

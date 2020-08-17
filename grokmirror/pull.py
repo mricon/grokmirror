@@ -845,7 +845,7 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         # Finally, clone ourselves.
         actions.append((gitdir, 'init'))
 
-    if config['pull'].get('purge') == 'yes':
+    if config['pull'].getboolean('purge', False):
         to_purge = set()
         found_repos = 0
         for founddir in grokmirror.find_all_gitdirs(toplevel, exclude_objstore=True):
@@ -1188,6 +1188,9 @@ def parse_args():
     op.add_option('-n', '--no-mtime-check', dest='nomtime',
                   action='store_true', default=False,
                   help='Run without checking manifest mtime.')
+    op.add_option('-p', '--purge', dest='purge',
+                  action='store_true', default=False,
+                  help='Remove any git trees that are no longer in manifest.')
     op.add_option('', '--force-purge', dest='forcepurge',
                   action='store_true', default=False,
                   help='Force purge despite significant repo deletions.')
@@ -1205,7 +1208,7 @@ def parse_args():
     return opts, args
 
 
-def grok_pull(cfgfile, verbose=False, nomtime=False, forcepurge=False, runonce=False):
+def grok_pull(cfgfile, verbose=False, nomtime=False, purge=False, forcepurge=False, runonce=False):
     global logger
 
     config = grokmirror.load_config_file(cfgfile)
@@ -1218,6 +1221,10 @@ def grok_pull(cfgfile, verbose=False, nomtime=False, forcepurge=False, runonce=F
     else:
         loglevel = logging.INFO
 
+    if purge:
+        # Override the pull.purge setting
+        config['pull']['purge'] = 'yes'
+
     logger = grokmirror.init_logger('pull', logfile, loglevel, verbose)
 
     return pull_mirror(config, nomtime, forcepurge, runonce)
@@ -1227,7 +1234,7 @@ def command():
     opts, args = parse_args()
 
     retval = grok_pull(
-        opts.config, opts.verbose, opts.nomtime, opts.forcepurge, opts.runonce)
+        opts.config, opts.verbose, opts.nomtime, opts.purge, opts.forcepurge, opts.runonce)
 
     sys.exit(retval)
 
