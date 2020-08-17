@@ -940,6 +940,13 @@ def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_ob
         size_pack = int(obj_info['size-pack'])
         total_obj = count_loose + in_pack
         total_size = size_loose + size_pack
+        # If we have an alternate, then add those numbers in
+        alternate = obj_info.get('alternate')
+        if alternate and len(alternate) > 8 and alternate[-8:] == '/objects':
+            alt_obj_info = get_repo_obj_info(alternate[:-8])
+            total_obj += int(alt_obj_info['in-pack'])
+            total_size += int(alt_obj_info['size-pack'])
+
         # set some arbitrary "worth bothering" limits so we don't
         # continuously repack tiny repos.
         if total_obj > 500 and count_loose / total_obj * 100 >= pc_loose_objects:
