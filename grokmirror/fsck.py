@@ -675,6 +675,21 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
                 obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
+        elif altdir.find(obstdir) == 0 and not is_private:
+            # Make sure this repo is properly set up with obstrepo
+            # (e.g. it could have been cloned/copied and obstrepo is not tracking it yet)
+            obstrepo = altdir
+            s_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
+            found = False
+            for virtref, childpath in s_remotes:
+                if childpath == fullpath:
+                    found = True
+                    break
+            if not found:
+                # Set it up properly
+                grokmirror.add_repo_to_objstore(obstrepo, fullpath)
+                logger.info(' reconfig: %s to fetch into %s', gitdir, os.path.basename(obstrepo))
+
         obj_info = grokmirror.get_repo_obj_info(fullpath)
         try:
             packs = int(obj_info['packs'])
