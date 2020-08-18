@@ -480,11 +480,11 @@ def set_repo_params(fullpath, repoinfo):
         contents = None
         if os.path.exists(headfile):
             with open(headfile) as fh:
-                contents = fh.read()
+                contents = fh.read().rstrip()
         if contents != head:
             logger.debug('Setting %s HEAD to: %s', fullpath, head)
             with open(headfile, 'w') as fh:
-                fh.write(head)
+                fh.write('{}\n'.format(head))
 
 
 def set_agefile(toplevel, gitdir, last_modified):
