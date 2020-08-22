@@ -564,30 +564,31 @@ def write_projects_list(config, manifest):
     add_symlinks = config['pull'].getboolean('projectslist_symlinks', False)
 
     (dirname, basename) = os.path.split(plpath)
-    (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
 
     try:
-        with open(tmpfile, 'wt') as fh:
-            for gitdir in manifest:
-                if trimtop and gitdir.startswith(trimtop):
-                    pgitdir = gitdir[len(trimtop):]
-                else:
-                    pgitdir = gitdir
+        (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
+        fh = os.fdopen(fd, 'wb', 0)
+        for gitdir in manifest:
+            if trimtop and gitdir.startswith(trimtop):
+                pgitdir = gitdir[len(trimtop):]
+            else:
+                pgitdir = gitdir
 
-                # Always remove leading slash, otherwise cgit breaks
-                pgitdir = pgitdir.lstrip('/')
-                fh.write('%s\n' % pgitdir)
+            # Always remove leading slash, otherwise cgit breaks
+            pgitdir = pgitdir.lstrip('/')
+            fh.write('{}\n'.format(pgitdir).encode())
 
-                if add_symlinks and 'symlinks' in manifest[gitdir]:
-                    # Do the same for symlinks
-                    # XXX: Should make this configurable, perhaps
-                    for symlink in manifest[gitdir]['symlinks']:
-                        if trimtop and symlink.startswith(trimtop):
-                            symlink = symlink[len(trimtop):]
+            if add_symlinks and 'symlinks' in manifest[gitdir]:
+                # Do the same for symlinks
+                # XXX: Should make this configurable, perhaps
+                for symlink in manifest[gitdir]['symlinks']:
+                    if trimtop and symlink.startswith(trimtop):
+                        symlink = symlink[len(trimtop):]
 
-                        symlink = symlink.lstrip('/')
-                        fh.write('%s\n' % symlink)
+                    symlink = symlink.lstrip('/')
+                    fh.write('{}\n'.format(symlink).encode())
 
+        os.fsync(fd)
         fh.close()
         # set mode to current umask
         curmask = os.umask(0)
