@@ -1088,7 +1088,7 @@ def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=
     else:
         loglevel = logging.INFO
 
-    logger = grokmirror.init_logger('pull', logfile, loglevel, verbose)
+    logger = grokmirror.init_logger('fsck', logfile, loglevel, verbose)
 
     rh = io.StringIO()
     ch = logging.StreamHandler(stream=rh)
