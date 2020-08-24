@@ -57,6 +57,10 @@ def check_reclone_error(fullpath, config, errors):
     if reclone is None:
         return
 
+    set_repo_reclone(fullpath, reclone)
+
+
+def set_repo_reclone(fullpath, reason):
     rfile = os.path.join(fullpath, 'grokmirror.reclone')
     # Have we already requested a reclone?
     if os.path.exists(rfile):
@@ -64,7 +68,7 @@ def check_reclone_error(fullpath, config, errors):
         return
 
     with open(rfile, 'w') as rfh:
-        rfh.write('Requested by grok-fsck due to error: %s' % reclone)
+        rfh.write('Requested by grok-fsck due to error: %s' % reason)
 
 
 def run_git_prune(fullpath, config):
@@ -615,6 +619,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
                     logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
+
+        elif not os.path.isdir(altdir):
+            logger.info('  reclone: %s (alternates repo gone)', gitdir)
+            set_repo_reclone(fullpath, 'Alternates repository gone')
+            continue
 
         elif altdir.find(obstdir) != 0:
             # We have an alternates repo, but it's not an objstore repo
