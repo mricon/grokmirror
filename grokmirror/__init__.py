@@ -104,6 +104,18 @@ def git_newer_than(minver):
     return version.parse(ver) >= version.parse(minver)
 
 
+def run_shell_command(cmdargs, stdin=None):
+    logger.debug('Running: %s', ' '.join(cmdargs))
+
+    child = subprocess.Popen(cmdargs, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = child.communicate(input=stdin)
+
+    output = output.decode().strip()
+    error = error.decode().strip()
+
+    return child.returncode, output, error
+
+
 def run_git_command(fullpath, args, stdin=None):
     if 'GITBIN' in os.environ:
         _git = os.environ['GITBIN']
@@ -119,15 +131,7 @@ def run_git_command(fullpath, args, stdin=None):
     else:
         cmdargs = [_git, '--no-pager'] + args
 
-    logger.debug('Running: %s', ' '.join(cmdargs))
-
-    child = subprocess.Popen(cmdargs, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = child.communicate(input=stdin)
-
-    output = output.decode().strip()
-    error = error.decode().strip()
-
-    return child.returncode, output, error
+    return run_shell_command(cmdargs, stdin)
 
 
 def _lockname(fullpath):

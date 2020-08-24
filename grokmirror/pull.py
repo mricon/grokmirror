@@ -619,88 +619,116 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
     if config_last_modified != config.last_modified:
         nomtime = True
 
-    r_mani_url = config['remote'].get('manifest')
-    logger.info(' manifest: fetching %s', r_mani_url)
-    if r_mani_url.find('file:///') == 0:
-        r_mani_url = r_mani_url.replace('file://', '')
-        if not os.path.exists(r_mani_url):
-            logger.critical('Remote manifest not found in %s! Quitting!', r_mani_url)
-            raise IOError('Remote manifest not found in %s' % r_mani_url)
+    r_mani_cmd = config['remote'].get('manifest_command')
+    if r_mani_cmd:
+        if not os.access(r_mani_cmd, os.X_OK):
+            logger.critical('Remote manifest command is not executable: %s', r_mani_cmd)
+            sys.exit(1)
+        cmdargs = [r_mani_cmd]
+        (ecode, output, error) = grokmirror.run_shell_command(cmdargs)
+        if ecode == 0:
+            try:
+                r_manifest = json.loads(output)
+            except json.JSONDecodeError as ex:
+                logger.warning('Failed to parse output from %s', r_mani_cmd)
+                logger.warning('Error was: %s', ex)
+                raise IOError('Failed to parse output from %s (%s)' % (r_mani_cmd, ex))
+        elif ecode == 127:
+            logger.info(' manifest: unchanged')
+            return list()
+        else:
+            logger.warning('Executing %s returned %s', r_mani_cmd, ecode)
+            raise IOError('Error executing %s' % r_mani_cmd)
 
-        fstat = os.stat(r_mani_url)
-        r_last_modified = fstat[8]
-        if r_last_fetched:
-            logger.debug('mtime on %s is: %s', r_mani_url, fstat[8])
-            if not nomtime and r_last_modified <= r_last_fetched:
+        if not len(r_manifest):
+            logger.warning(' manifest: empty, ignoring')
+            raise IOError('Empty manifest returned by %s' % r_mani_cmd)
+
+    else:
+        r_mani_url = config['remote'].get('manifest')
+        logger.info(' manifest: fetching %s', r_mani_url)
+        if r_mani_url.find('file:///') == 0:
+            r_mani_url = r_mani_url.replace('file://', '')
+            if not os.path.exists(r_mani_url):
+                logger.critical('Remote manifest not found in %s! Quitting!', r_mani_url)
+                raise IOError('Remote manifest not found in %s' % r_mani_url)
+
+            fstat = os.stat(r_mani_url)
+            r_last_modified = fstat[8]
+            if r_last_fetched:
+                logger.debug('mtime on %s is: %s', r_mani_url, fstat[8])
+                if not nomtime and r_last_modified <= r_last_fetched:
+                    logger.info(' manifest: unchanged')
+                    return list()
+
+            logger.info('Reading new manifest from %s', r_mani_url)
+            r_manifest = grokmirror.read_manifest(r_mani_url)
+            # Don't accept empty manifests -- that indicates something is wrong
+            if not len(r_manifest):
+                logger.warning('Remote manifest empty or unparseable! Quitting.')
+                raise IOError('Empty manifest in %s' % r_mani_url)
+
+        else:
+            session = grokmirror.get_requests_session()
+
+            # Find out if we need to run at all first
+            headers = dict()
+            if r_last_fetched and not nomtime:
+                last_modified_h = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(r_last_fetched))
+                logger.debug('Our last-modified is: %s', last_modified_h)
+                headers['If-Modified-Since'] = last_modified_h
+
+            try:
+                # 30 seconds to connect, 5 minutes between reads
+                res = session.get(r_mani_url, headers=headers, timeout=(30, 300))
+            except requests.exceptions.RequestException as ex:
+                logger.warning('Could not fetch %s', r_mani_url)
+                logger.warning('Server returned: %s', ex)
+                raise IOError('Remote server returned an error: %s' % ex)
+
+            if res.status_code == 304:
+                # No change to the manifest, nothing to do
                 logger.info(' manifest: unchanged')
                 return list()
 
-        logger.info('Reading new manifest from %s', r_mani_url)
-        r_manifest = grokmirror.read_manifest(r_mani_url)
-        # Don't accept empty manifests -- that indicates something is wrong
-        if not len(r_manifest):
-            logger.warning('Remote manifest empty or unparseable! Quitting.')
-            raise IOError('Empty manifest in %s' % r_mani_url)
+            if res.status_code > 200:
+                logger.warning('Could not fetch %s', r_mani_url)
+                logger.warning('Server returned status: %s', res.status_code)
+                raise IOError('Remote server returned an error: %s' % res.status_code)
 
-    else:
-        session = grokmirror.get_requests_session()
+            r_last_modified = res.headers['Last-Modified']
+            r_last_modified = time.strptime(r_last_modified, '%a, %d %b %Y %H:%M:%S %Z')
+            r_last_modified = calendar.timegm(r_last_modified)
 
-        # Find out if we need to run at all first
-        headers = dict()
-        if r_last_fetched and not nomtime:
-            last_modified_h = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(r_last_fetched))
-            logger.debug('Our last-modified is: %s', last_modified_h)
-            headers['If-Modified-Since'] = last_modified_h
+            # We don't use read_manifest for the remote manifest, as it can be
+            # anything, really. For now, blindly open it with gzipfile if it ends
+            # with .gz. XXX: some http servers will auto-deflate such files.
+            try:
+                if r_mani_url.rfind('.gz') > 0:
+                    import io
+                    fh = gzip.GzipFile(fileobj=io.BytesIO(res.content))
+                    jdata = fh.read().decode()
+                else:
+                    jdata = res.content
 
-        try:
-            # 30 seconds to connect, 5 minutes between reads
-            res = session.get(r_mani_url, headers=headers, timeout=(30, 300))
-        except requests.exceptions.RequestException as ex:
-            logger.warning('Could not fetch %s', r_mani_url)
-            logger.warning('Server returned: %s', ex)
-            raise IOError('Remote server returned an error: %s' % ex)
+                res.close()
+                # Don't hold session open, since we don't refetch manifest very frequently
+                session.close()
+                r_manifest = json.loads(jdata)
 
-        if res.status_code == 304:
-            # No change to the manifest, nothing to do
-            logger.info(' manifest: unchanged')
-            return list()
+            except Exception as ex:
+                logger.warning('Failed to parse %s', r_mani_url)
+                logger.warning('Error was: %s', ex)
+                raise IOError('Failed to parse %s (%s)' % (r_mani_url, ex))
 
-        if res.status_code > 200:
-            logger.warning('Could not fetch %s', r_mani_url)
-            logger.warning('Server returned status: %s', res.status_code)
-            raise IOError('Remote server returned an error: %s' % res.status_code)
-
-        r_last_modified = res.headers['Last-Modified']
-        r_last_modified = time.strptime(r_last_modified, '%a, %d %b %Y %H:%M:%S %Z')
-        r_last_modified = calendar.timegm(r_last_modified)
-
-        # We don't use read_manifest for the remote manifest, as it can be
-        # anything, really. For now, blindly open it with gzipfile if it ends
-        # with .gz. XXX: some http servers will auto-deflate such files.
-        try:
-            if r_mani_url.rfind('.gz') > 0:
-                import io
-                fh = gzip.GzipFile(fileobj=io.BytesIO(res.content))
-                jdata = fh.read().decode()
-            else:
-                jdata = res.content
-
-            res.close()
-            r_manifest = json.loads(jdata)
-
-        except Exception as ex:
-            logger.warning('Failed to parse %s', r_mani_url)
-            logger.warning('Error was: %s', ex)
-            raise IOError('Failed to parse %s (%s)' % (r_mani_url, ex))
-
-    # Record for the next run
-    with open(r_mani_status_path, 'w') as fh:
-        r_mani_status = {
-            'source': r_mani_url,
-            'last-fetched': r_last_modified,
-            'config-last-modified': config.last_modified,
-        }
-        json.dump(r_mani_status, fh)
+        # Record for the next run
+        with open(r_mani_status_path, 'w') as fh:
+            r_mani_status = {
+                'source': r_mani_url,
+                'last-fetched': r_last_modified,
+                'config-last-modified': config.last_modified,
+            }
+            json.dump(r_mani_status, fh)
 
     l_manifest = grokmirror.read_manifest(l_mani_path)
     r_culled = cull_manifest(r_manifest, config)
