@@ -621,7 +621,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
         elif not os.path.isdir(altdir):
-            logger.info('  reclone: %s (alternates repo gone)', gitdir)
+            logger.critical('  reclone: %s (alternates repo gone)', gitdir)
             set_repo_reclone(fullpath, 'Alternates repository gone')
             continue
 
