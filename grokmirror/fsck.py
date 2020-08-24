@@ -1079,7 +1079,7 @@ def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=
 
     obstdir = config['core'].get('objstore', None)
     if obstdir is None:
-        obstdir = os.path.join(config['core'].get('toplevel'), '_alternates')
+        obstdir = os.path.join(config['core'].get('toplevel'), 'objstore')
         config['core']['objstore'] = obstdir
 
     logfile = config['core'].get('log', None)

@@ -896,7 +896,7 @@ def load_config_file(cfgfile):
 
     obstdir = config['core'].get('objstore', None)
     if obstdir is None:
-        obstdir = os.path.join(toplevel, '_alternates')
+        obstdir = os.path.join(toplevel, 'objstore')
         config['core']['objstore'] = obstdir
 
     fstat = os.stat(cfgfile)

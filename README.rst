@@ -82,7 +82,7 @@ and its fork:
 Grok-fsck will set up an object storage repository and fetch all refs from
 both repositories:
 
-  _alternates/[random-guid-name].git
+  objstore/[random-guid-name].git
      refs/virtual/[sha1-of-torvalds/linux.git:12]/heads/master
      refs/virtual/[sha1-of-torvalds/linux.git:12]/tags/v5.0-rc3
      ...
@@ -92,7 +92,7 @@ both repositories:
      ...
 
 Then both torvalds/linux.git and maintainer/linux.git with be configured
-to use _alternates/[random-guid-name].git via objects/info/alternates
+to use objstore/[random-guid-name].git via objects/info/alternates
 and repacked to just contain metadata and no objects.
 
 The alternates repository will be repacked with "delta islands" enabled,

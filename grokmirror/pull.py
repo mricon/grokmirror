@@ -564,9 +564,9 @@ def write_projects_list(config, manifest):
     add_symlinks = config['pull'].getboolean('projectslist_symlinks', False)
 
     (dirname, basename) = os.path.split(plpath)
+    (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
 
     try:
-        (fd, tmpfile) = tempfile.mkstemp(prefix=basename, dir=dirname)
         fh = os.fdopen(fd, 'wb', 0)
         for gitdir in manifest:
             if trimtop and gitdir.startswith(trimtop):
