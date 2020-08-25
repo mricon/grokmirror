@@ -9,10 +9,12 @@ GL_COMMAND=get-grok-manifest
 if [[ -s $STATEFILE ]]; then
     LASTUPD=$(cat $STATEFILE)
 fi
+NOWSTAMP=$(date +'%s')
+
 ssh $PRIMARY $GL_COMMAND $LASTUPD
 ECODE=$?
 
 if [[ $ECODE == 0 ]]; then
-    date +'%s' > $STATEFILE
+    echo $NOWSTAMP > $STATEFILE
 fi
 exit $ECODE
