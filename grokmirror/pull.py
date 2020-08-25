@@ -624,6 +624,7 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         if not os.access(r_mani_cmd, os.X_OK):
             logger.critical('Remote manifest command is not executable: %s', r_mani_cmd)
             sys.exit(1)
+        logger.info(' manifest: executing %s', r_mani_cmd)
         cmdargs = [r_mani_cmd]
         (ecode, output, error) = grokmirror.run_shell_command(cmdargs)
         if ecode == 0:
@@ -875,6 +876,7 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         actions.append((gitdir, 'init'))
 
     if config['pull'].getboolean('purge', False):
+        nopurge = config['pull'].get('nopurge', '').split('\n')
         to_purge = set()
         found_repos = 0
         for founddir in grokmirror.find_all_gitdirs(toplevel, exclude_objstore=True):
@@ -882,7 +884,13 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
             found_repos += 1
 
             if gitdir not in r_culled and gitdir not in all_symlinks:
-                to_purge.add(gitdir)
+                exclude = False
+                for entry in nopurge:
+                    if fnmatch.fnmatch(gitdir, entry):
+                        exclude = True
+                        break
+                if not exclude:
+                    to_purge.add(gitdir)
 
         if len(to_purge):
             # Purge-protection engage
