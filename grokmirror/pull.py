@@ -308,6 +308,10 @@ def pull_worker(config, q_pull, q_spa, q_done):
             my_fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
 
             if r_fp != my_fp:
+                # Make sure we have an "origin" remote
+                if action == 'pull' and 'origin' not in grokmirror.list_repo_remotes(fullpath):
+                    logger.info(' reorigin: %s', gitdir)
+                    fix_remotes(toplevel, gitdir, site, config)
                 logger.info('    fetch: %s', gitdir)
                 retries = 1
                 while True:
@@ -1029,6 +1033,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                 raise IOError('File exists but is not a socket: %s' % sockfile)
 
         sw = mp.Process(target=socket_worker, args=(config, q_todo, sockfile))
+        sw.daemon = True
         sw.start()
 
     pws = list()
@@ -1074,6 +1079,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                 else:
                     pauseonload = True
                 dw = mp.Process(target=spa_worker, args=(config, q_spa, pauseonload))
+                dw.daemon = True
                 dw.start()
                 dws.append(dw)
 
@@ -1151,6 +1157,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
             if len(pws) < pull_threads:
                 pw = mp.Process(target=pull_worker, args=(config, q_pull, q_spa, q_done))
+                pw.daemon = True
                 pw.start()
                 pws.append(pw)
                 logger.info('   worker: started (%s running)', len(pws))
