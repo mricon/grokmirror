@@ -526,7 +526,7 @@ def run_post_update_hook(toplevel, gitdir, hookscript):
 
 def pull_repo(toplevel, gitdir):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-    args = ['remote', 'update', '--prune']
+    args = ['remote', 'update', 'origin', '--prune']
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
