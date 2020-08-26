@@ -55,19 +55,19 @@ class SignalHandler:
     def _handler(self, signum, frame):
         self.killed = True
         logger.debug('Received signum=%s, frame=%s', signum, frame)
-        if self.sw:
-            self.sw.terminate()
-            self.sw.join()
+        # if self.sw:
+        #    self.sw.terminate()
+        #    self.sw.join()
 
-        for dw in self.dws:
-            if dw and dw.is_alive():
-                dw.terminate()
-                dw.join()
+        # for dw in self.dws:
+        #    if dw and dw.is_alive():
+        #        dw.terminate()
+        #        dw.join()
 
-        for pw in self.pws:
-            if pw and pw.is_alive():
-                pw.terminate()
-                pw.join()
+        # for pw in self.pws:
+        #    if pw and pw.is_alive():
+        #        pw.terminate()
+        #        pw.join()
 
         if len(self.done):
             update_manifest(self.config, self.done)
