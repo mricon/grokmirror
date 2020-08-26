@@ -549,6 +549,8 @@ def pull_repo(toplevel, gitdir):
                 debug.append(line)
             elif line.find('remote: warning:') == 0:
                 debug.append(line)
+            elif line.find('ControlSocket') >= 0:
+                debug.append(line)
             elif not success:
                 warn.append(line)
             else:
@@ -610,7 +612,7 @@ def write_projects_list(config, manifest):
     logger.info(' projlist: wrote %s', plpath)
 
 
-def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=False):
+def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
     # l_ = local, r_ = remote
     l_mani_path = config['core'].get('manifest')
     r_mani_status_path = os.path.join(os.path.dirname(l_mani_path), '.%s.remote' % os.path.basename(l_mani_path))
@@ -768,7 +770,6 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
 
     seen = set()
     to_migrate = set()
-    actions = list()
     # Used to track symlinks so we can properly avoid purging them
     all_symlinks = set()
 
@@ -789,14 +790,14 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
             rfile = os.path.join(fullpath, 'grokmirror.reclone')
             if os.path.exists(rfile):
                 logger.debug('Reclone requested for %s:', gitdir)
-                actions.append((gitdir, 'reclone'))
+                q_mani.put((gitdir, repoinfo, 'reclone'))
                 with open(rfile, 'r') as rfh:
                     reason = rfh.read()
                     logger.debug('  %s', reason)
                 continue
 
             if gitdir not in l_manifest:
-                actions.append((gitdir, 'fix_remotes'))
+                q_mani.put((gitdir, repoinfo, 'fix_remotes'))
                 continue
 
             r_desc = r_culled[gitdir].get('description')
@@ -813,7 +814,7 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
                 r_owner = config['pull'].get('default_owner', 'Grokmirror')
 
             if r_desc != l_desc or r_owner != l_owner or r_head != l_head:
-                actions.append((gitdir, 'fix_params'))
+                q_mani.put((gitdir, repoinfo, 'fix_params'))
 
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
 
@@ -822,18 +823,18 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
                 continue
 
             logger.debug('No fingerprint match, will pull %s', gitdir)
-            actions.append((gitdir, 'pull'))
+            q_mani.put((gitdir, repoinfo, 'pull'))
             continue
 
         if not forkgroup:
             # no-sibling repo
-            actions.append((gitdir, 'init'))
+            q_mani.put((gitdir, repoinfo, 'init'))
             continue
 
         obstrepo = os.path.join(obstdir, '%s.git' % forkgroup)
         if os.path.isdir(obstrepo):
             # Init with an existing obstrepo, easy case
-            actions.append((gitdir, 'init'))
+            q_mani.put((gitdir, repoinfo, 'init'))
             continue
 
         # Do we have any existing siblings that were cloned without obstrepo?
@@ -865,7 +866,7 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
                     s_repoinfo['forkgroup'] = forkgroup
                     s_repoinfo['private'] = False
                     # Stick it into queue before the new clone
-                    actions.append((s_gitdir, 'objstore_migrate'))
+                    q_mani.put((s_gitdir, s_repoinfo, 'objstore_migrate'))
                     seen.add(s_gitdir)
                     to_migrate.add(s_gitdir)
                 break
@@ -873,17 +874,17 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
                 public_siblings.add(s_gitdir)
 
         if found_existing:
-            actions.append((gitdir, 'init'))
+            q_mani.put((gitdir, repoinfo, 'init'))
             continue
 
         if repoinfo['private'] and len(public_siblings):
             # Clone public siblings first
             for s_gitdir in public_siblings:
                 if s_gitdir not in seen:
-                    actions.append((s_gitdir, 'init'))
+                    q_mani.put((s_gitdir, r_culled[s_gitdir], 'init'))
                     seen.add(s_gitdir)
         # Finally, clone ourselves.
-        actions.append((gitdir, 'init'))
+        q_mani.put((gitdir, repoinfo, 'init'))
 
     if config['pull'].getboolean('purge', False):
         nopurge = config['pull'].get('nopurge', '').split('\n')
@@ -920,31 +921,14 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
                 logger.critical('Set purgeprotect to a higher percentage, or override with --force-purge.')
             else:
                 for gitdir in to_purge:
-                    actions.append((gitdir, 'purge'))
+                    q_mani.put((gitdir, None, 'purge'))
         else:
             logger.debug('No repositories need purging')
 
-    new_actions = list()
-    for gitdir, action in actions:
-        if (gitdir, action) in active_actions:
-            logger.debug('already in the queue: %s, %s', gitdir, action)
-            continue
-        if action == 'pull' and (gitdir, 'init') in active_actions:
-            logger.debug('already in the queue as init: %s, %s', gitdir, action)
-            continue
-        if action != 'purge':
-            repoinfo = r_culled[gitdir]
-        else:
-            repoinfo = None
-        new_actions.append((gitdir, repoinfo, action))
-        logger.debug('queued: %s, %s', gitdir, action)
-
-    if new_actions:
-        logger.info(' manifest: %s new updates', len(new_actions))
-    else:
+    if q_mani.empty():
         logger.info(' manifest: no new updates')
-
-    return new_actions
+    else:
+        logger.info(' manifest: %s new updates', q_mani.qsize())
 
 
 def update_manifest(config, entries):
@@ -1018,11 +1002,16 @@ def showstats(q_todo, q_pull, q_spa, good, bad, pws, dws):
     logger.info('      ---:  %s', ', '.join(stats))
 
 
+def manifest_worker(config, q_mani):
+    fill_todo_from_manifest(config, q_mani)
+
+
 def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     obstdir = os.path.realpath(config['core'].get('objstore'))
     refresh = config['pull'].getint('refresh', 300)
 
+    q_mani = mp.Queue()
     q_todo = mp.Queue()
     q_pull = mp.Queue()
     q_done = mp.Queue()
@@ -1044,14 +1033,11 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
     pws = list()
     dws = list()
+    mws = list()
     actions = set()
-    new_actions = fill_todo_from_manifest(config, actions, nomtime=nomtime, forcepurge=forcepurge)
-    if not len(new_actions) and runonce:
+    fill_todo_from_manifest(config, q_mani, nomtime=nomtime, forcepurge=forcepurge)
+    if q_mani.empty() and runonce:
         return 0
-
-    for (gitdir, repoinfo, action) in new_actions:
-        actions.add((gitdir, action))
-        q_todo.put((gitdir, repoinfo, action))
 
     pull_threads = config['pull'].getint('pull_threads', 0)
     if pull_threads < 1:
@@ -1079,6 +1065,10 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                     dws.remove(dw)
                     showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
 
+            for mw in mws:
+                if mw and not mw.is_alive():
+                    mws.remove(mw)
+
             if not q_spa.empty() and not len(dws):
                 if runonce:
                     pauseonload = False
@@ -1091,37 +1081,58 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
             # Any new results?
             try:
-                gitdir, repoinfo, q_action, success = q_done.get_nowait()
-                try:
-                    actions.remove((gitdir, q_action))
-                except KeyError:
-                    pass
+                while True:
+                    gitdir, repoinfo, q_action, success = q_done.get_nowait()
+                    try:
+                        actions.remove((gitdir, q_action))
+                    except KeyError:
+                        pass
 
-                forkgroup = repoinfo.get('forkgroup')
-                if forkgroup and forkgroup in busy:
-                    busy.remove(forkgroup)
-                done.append((gitdir, repoinfo, q_action, success))
-                if success:
-                    good += 1
-                else:
-                    bad += 1
-                logger.info('     done: %s', gitdir)
-                showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
-                if len(done) >= 100:
-                    # Write manifest every 100 repos
-                    update_manifest(config, done)
+                    forkgroup = repoinfo.get('forkgroup')
+                    if forkgroup and forkgroup in busy:
+                        busy.remove(forkgroup)
+                    done.append((gitdir, repoinfo, q_action, success))
+                    if success:
+                        good += 1
+                    else:
+                        bad += 1
+                    logger.info('     done: %s', gitdir)
+                    showstats(q_todo, q_pull, q_spa, good, bad, pws, dws)
+                    if len(done) >= 100:
+                        # Write manifest every 100 repos
+                        update_manifest(config, done)
 
             except queue.Empty:
                 pass
 
-            if not runonce and time.time() - lastrun >= refresh:
-                new_actions = fill_todo_from_manifest(config, actions, nomtime=False, forcepurge=forcepurge)
-                for (gitdir, repoinfo, action) in new_actions:
+            # Anything new in the manifest queue?
+            try:
+                while True:
+                    gitdir, repoinfo, action = q_mani.get_nowait()
+                    if (gitdir, action) in actions:
+                        logger.debug('already in the queue: %s, %s', gitdir, action)
+                        continue
+                    if action == 'pull' and (gitdir, 'init') in actions:
+                        logger.debug('already in the queue as init: %s, %s', gitdir, action)
+                        continue
+
                     actions.add((gitdir, action))
                     q_todo.put((gitdir, repoinfo, action))
+                    logger.debug('queued: %s, %s', gitdir, action)
+            except queue.Empty:
+                if not saidsleeping and not runonce:
+                    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
+                    saidsleeping = True
+                pass
+
+            if not runonce and not len(mws) and q_todo.empty() and time.time() - lastrun >= refresh:
+                mw = mp.Process(target=manifest_worker, args=(config, q_mani))
+                mw.daemon = True
+                mw.start()
                 lastrun = time.time()
                 saidsleeping = False
 
+            # Finally, deal with q_todo
             try:
                 gitdir, repoinfo, q_action = q_todo.get_nowait()
             except queue.Empty:
@@ -1131,9 +1142,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                         if runonce:
                             return 0
                     else:
-                        if not saidsleeping and not runonce:
-                            logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
-                            saidsleeping = True
                         time.sleep(1)
                     continue
                 else:
