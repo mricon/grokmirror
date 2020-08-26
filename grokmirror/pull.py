@@ -549,8 +549,10 @@ def pull_repo(toplevel, gitdir):
                 debug.append(line)
             elif line.find('remote: warning:') == 0:
                 debug.append(line)
-            else:
+            elif not success:
                 warn.append(line)
+            else:
+                debug.append(line)
         if debug:
             logger.debug('Stderr (%s): %s', gitdir, '\n'.join(debug))
         if warn:
