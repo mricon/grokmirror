@@ -4,7 +4,8 @@ Documentation=https://github.com/mricon/grokmirror
 
 [Service]
 Type=oneshot
-Environment="RUNAS_USER=mirror RUNAS_GROUP=mirror"
+Environment="RUNAS_USER=mirror"
+Environment="RUNAS_GROUP=mirror"
 EnvironmentFile=-/etc/sysconfig/grokmirror.default
 EnvironmentFile=-/etc/sysconfig/grokmirror.%i
 ExecStart=/usr/bin/grok-fsck --user ${RUNAS_USER} --group ${RUNAS_GROUP} -c /etc/grokmirror/%i.conf
