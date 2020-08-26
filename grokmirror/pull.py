@@ -103,7 +103,7 @@ class Handler(StreamRequestHandler):
                     # Set fingerprint to None to force a run
                     repoinfo['fingerprint'] = None
                     repoinfo['modified'] = int(time.time())
-                    self.server.q_todo.put((gitdir, repoinfo, 'pull'))
+                    self.server.q_mani.put((gitdir, repoinfo, 'pull'))
                 elif gitdir:
                     logger.info(' listener: %s (not known, ignored)', gitdir)
                     return
@@ -973,13 +973,13 @@ def update_manifest(config, entries):
     grokmirror.manifest_unlock(manifile)
 
 
-def socket_worker(config, q_todo, sockfile):
+def socket_worker(config, q_mani, sockfile):
     logger.info(' listener: listening on socket %s', sockfile)
     curmask = os.umask(0)
     with ThreadedUnixStreamServer(sockfile, Handler) as server:
         os.umask(curmask)
         # Stick some objects into the server
-        server.q_todo = q_todo
+        server.q_mani = q_mani
         server.config = config
         server.serve_forever()
 
@@ -1027,7 +1027,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
             else:
                 raise IOError('File exists but is not a socket: %s' % sockfile)
 
-        sw = mp.Process(target=socket_worker, args=(config, q_todo, sockfile))
+        sw = mp.Process(target=socket_worker, args=(config, q_mani, sockfile))
         sw.daemon = True
         sw.start()
 
@@ -1148,9 +1148,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                     time.sleep(0.1)
                     continue
 
-            if (gitdir, q_action) not in actions:
-                # Probably fed straight to the queue by the socket listener
-                actions.add((gitdir, q_action))
             if repoinfo is None:
                 repoinfo = dict()
 
