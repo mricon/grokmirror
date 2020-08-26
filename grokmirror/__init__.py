@@ -990,16 +990,6 @@ def init_logger(subcommand, logfile, loglevel, verbose):
 
 
 def setuidgid(user, group):
-    if user is not None:
-        import pwd
-        try:
-            os.setuid(pwd.getpwnam(user).pw_uid)
-        except KeyError:
-            sys.stderr.write('No such user: %s\n' % user)
-            sys.exit(1)
-        except PermissionError as ex:
-            sys.stderr.write('Could not setuid to %s: %s\n' % (user, ex))
-            sys.exit(1)
     if group is not None:
         import grp
         try:
@@ -1009,4 +999,14 @@ def setuidgid(user, group):
             sys.exit(1)
         except PermissionError as ex:
             sys.stderr.write('Could not setgid to %s: %s\n' % (group, ex))
+            sys.exit(1)
+    if user is not None:
+        import pwd
+        try:
+            os.setuid(pwd.getpwnam(user).pw_uid)
+        except KeyError:
+            sys.stderr.write('No such user: %s\n' % user)
+            sys.exit(1)
+        except PermissionError as ex:
+            sys.stderr.write('Could not setuid to %s: %s\n' % (user, ex))
             sys.exit(1)
