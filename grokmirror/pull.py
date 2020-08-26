@@ -641,9 +641,13 @@ def fill_todo_from_manifest(config, active_actions, nomtime=False, forcepurge=Fa
         elif ecode == 127:
             logger.info(' manifest: unchanged')
             return list()
+        elif ecode == 1:
+            logger.warning('Executing %s failed, exiting', r_mani_cmd, ecode)
+            raise IOError('Failed executing %s' % r_mani_cmd)
         else:
-            logger.warning('Executing %s returned %s', r_mani_cmd, ecode)
-            raise IOError('Error executing %s' % r_mani_cmd)
+            # Non-fatal errors for all other exit codes
+            logger.warning(' manifest: executing %s returned %s', r_mani_cmd, ecode)
+            return list()
 
         if not len(r_manifest):
             logger.warning(' manifest: empty, ignoring')
