@@ -4,8 +4,9 @@ Documentation=https://github.com/mricon/grokmirror
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/grok-fsck -c /etc/grokmirror/%i.conf
+Environment="RUNAS_USER=mirror RUNAS_GROUP=mirror"
+EnvironmentFile=-/etc/sysconfig/grokmirror.default
+EnvironmentFile=-/etc/sysconfig/grokmirror.%i
+ExecStart=/usr/bin/grok-fsck --user ${RUNAS_USER} --group ${RUNAS_GROUP} -c /etc/grokmirror/%i.conf
 IOSchedulingClass=idle
 CPUSchedulingPolicy=idle
-User=mirror
-Group=mirror

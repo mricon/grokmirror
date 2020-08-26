@@ -4,11 +4,12 @@ After=network.target
 Documentation=https://github.com/mricon/grokmirror
 
 [Service]
-ExecStart=/usr/bin/grok-pull -o -c /etc/grokmirror/%i.conf
+Environment="RUNAS_USER=mirror RUNAS_GROUP=mirror"
+EnvironmentFile=-/etc/sysconfig/grokmirror.default
+EnvironmentFile=-/etc/sysconfig/grokmirror.%i
+ExecStart=/usr/bin/grok-pull --user ${RUNAS_USER} --group ${RUNAS_GROUP} -o -c /etc/grokmirror/%i.conf
 Type=simple
 Restart=on-failure
-User=mirror
-Group=mirror
 
 [Install]
 WantedBy=multi-user.target

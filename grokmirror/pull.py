@@ -1235,7 +1235,7 @@ def parse_args():
     op.add_option('-p', '--purge', dest='purge',
                   action='store_true', default=False,
                   help='Remove any git trees that are no longer in manifest.')
-    op.add_option('', '--force-purge', dest='forcepurge',
+    op.add_option('--force-purge', dest='forcepurge',
                   action='store_true', default=False,
                   help='Force purge despite significant repo deletions.')
     op.add_option('-o', '--continuous', dest='runonce',
@@ -1243,8 +1243,13 @@ def parse_args():
                   help='Run continuously (no effect if refresh is not set in config).')
     op.add_option('-c', '--config', dest='config',
                   help='Location of the configuration file')
+    op.add_option('--user', dest='runas_user',
+                  help='Run as this user (if executed as root).')
+    op.add_option('--group', dest='runas_group',
+                  help='Run as this group (if executed as root).')
 
     opts, args = op.parse_args()
+    grokmirror.setuidgid(opts.runas_user, opts.runas_group)
 
     if not opts.config:
         op.error('You must provide the path to the config file')
