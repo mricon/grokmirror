@@ -745,7 +745,12 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         # If we're not already repacking the repo, run a prune if we find garbage in it
         if obj_info['garbage'] != '0' and not repack_level and is_safe_to_prune(fullpath, config):
             logger.info('  garbage: %s (%s files, %s KiB)', gitdir, obj_info['garbage'], obj_info['size-garbage'])
-            run_git_prune(fullpath, config)
+            try:
+                grokmirror.lock_repo(fullpath, nonblocking=True)
+                run_git_prune(fullpath, config)
+                grokmirror.unlock_repo(fullpath)
+            except IOError:
+                pass
 
         if repack_level and (cfg_precious == 'always' and check_precious_objects(fullpath)):
             # if we have preciousObjects, then we only repack based on the same
