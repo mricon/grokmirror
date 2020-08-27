@@ -72,10 +72,11 @@ def set_repo_reclone(fullpath, reason):
 
 
 def run_git_prune(fullpath, config):
+    # WARNING: We assume you've already verified that it's safe to do so
     prune_ok = True
-    do_prune = config['fsck'].getboolean('prune', True)
-    if not do_prune:
-        return prune_ok
+    isprecious = grokmirror.is_precious(fullpath)
+    if isprecious:
+        set_precious_objects(fullpath, False)
 
     # We set expire to yesterday in order to avoid race conditions
     # in repositories that are actively being accessed at the time of
@@ -108,7 +109,33 @@ def run_git_prune(fullpath, config):
                 logger.critical("\t%s", entry)
             check_reclone_error(fullpath, config, warn)
 
+    if isprecious:
+        set_precious_objects(fullpath, True)
+
     return prune_ok
+
+
+def is_safe_to_prune(fullpath, config):
+    if config['fsck'].get('prune', 'yes') != 'yes':
+        logger.debug('Pruning disabled in config file')
+        return False
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    obstdir = os.path.realpath(config['core'].get('objstore'))
+    gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
+    if grokmirror.is_obstrepo(fullpath, obstdir):
+        # We only prune if all repos pointing to us are public
+        urls = set(grokmirror.list_repo_remotes(fullpath, withurl=True))
+        mine = set([x[1] for x in urls])
+        amap = grokmirror.get_altrepo_map(toplevel)
+        if mine != amap[fullpath]:
+            logger.debug('Cannot prune %s because it is used by non-public repos', gitdir)
+            return False
+    elif grokmirror.is_alt_repo(toplevel, gitdir):
+        logger.debug('Cannot prune %s because it is used as alternates by other repos', gitdir)
+        return False
+
+    logger.debug('%s should be safe to prune', gitdir)
+    return True
 
 
 def run_git_repack(fullpath, config, level=1, prune=True):
@@ -119,9 +146,9 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
     ierrors = config['fsck'].get('ignore_errors', '').split('\n')
 
-    if config['fsck'].get('prune', 'yes') != 'yes':
-        logger.debug('Pruning disabled in config file')
-        prune = False
+    if prune:
+        # Make sure it's safe to do so
+        prune = is_safe_to_prune(fullpath, config)
 
     if config['fsck'].get('precious', '') == 'always':
         always_precious = True
@@ -147,19 +174,10 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     if grokmirror.is_obstrepo(fullpath, obstdir):
         set_precious_after = True
         repack_flags.append('-a')
-
-        # We only prune if all repos pointing to us are public
-        urls = set(grokmirror.list_repo_remotes(fullpath, withurl=True))
-        mine = set([x[1] for x in urls])
-        amap = grokmirror.get_altrepo_map(toplevel)
-        if mine != amap[fullpath]:
-            logger.debug('Cannot prune %s because it is used by non-public repos', fullpath)
-            prune = False
-            if not always_precious:
-                repack_flags.append('-k')
+        if not prune and not always_precious:
+            repack_flags.append('-k')
 
     elif grokmirror.is_alt_repo(toplevel, gitdir):
-        prune = False
         set_precious_after = True
         if grokmirror.get_altrepo(fullpath):
             gen_commitgraph = False
@@ -274,7 +292,6 @@ def run_git_repack(fullpath, config, level=1, prune=True):
             check_reclone_error(fullpath, config, warn)
 
     if prune:
-        # run prune now
         repack_ok = run_git_prune(fullpath, config)
 
     if set_precious_after:
@@ -708,13 +725,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             logger.warning('Unable to count objects in %s, skipping' % fullpath)
             continue
 
-        # emit a warning if we find garbage in a repo
-        # we do it here so we don't spam people nightly on every cron run,
-        # but only do it when a repo needs actual work done on it
-        if obj_info['garbage'] != '0':
-            logger.warning('%s:\n\tcontains %s garbage files (size-garbage: %s KiB)',
-                           fullpath, obj_info['garbage'], obj_info['size-garbage'])
-
         schedcheck = datetime.datetime.strptime(status[fullpath]['nextcheck'], '%Y-%m-%d')
         nextcheck = today + datetime.timedelta(days=checkdelay)
 
@@ -731,6 +741,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         else:
             logger.debug('Checking repack level of %s', fullpath)
             repack_level = get_repack_level(obj_info)
+
+        # If we're not already repacking the repo, run a prune if we find garbage in it
+        if obj_info['garbage'] != '0' and not repack_level and is_safe_to_prune(fullpath, config):
+            logger.info('  garbage: %s (%s files, %s KiB)', gitdir, obj_info['garbage'], obj_info['size-garbage'])
+            run_git_prune(fullpath, config)
 
         if repack_level and (cfg_precious == 'always' and check_precious_objects(fullpath)):
             # if we have preciousObjects, then we only repack based on the same
