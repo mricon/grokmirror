@@ -237,9 +237,6 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     if gen_commitgraph and config['fsck'].get('commitgraph', 'yes') == 'yes':
         grokmirror.set_git_config(fullpath, 'core.commitgraph', 'true')
         run_git_commit_graph(fullpath)
-    else:
-        # make sure core.commitgraph is off for this repo
-        grokmirror.set_git_config(fullpath, 'core.commitgraph', 'false')
 
     # repacking refs requires a separate command, so run it now
     args = ['pack-refs']
