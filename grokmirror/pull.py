@@ -1038,6 +1038,8 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     fill_todo_from_manifest(config, q_mani, nomtime=nomtime, forcepurge=forcepurge)
     if q_mani.empty() and runonce:
         return 0
+    lastrun = time.time()
+    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
 
     pull_threads = config['pull'].getint('pull_threads', 0)
     if pull_threads < 1:
@@ -1050,7 +1052,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     good = 0
     bad = 0
     loopmark = None
-    saidsleeping = False
     lastrun = time.time()
     with SignalHandler(config, sw, dws, pws, done):
         while True:
@@ -1068,6 +1069,8 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
             for mw in mws:
                 if mw and not mw.is_alive():
                     mws.remove(mw)
+                    lastrun = time.time()
+                    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
 
             if not q_spa.empty() and not len(dws):
                 if runonce:
@@ -1120,19 +1123,15 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                     q_todo.put((gitdir, repoinfo, action))
                     logger.debug('queued: %s, %s', gitdir, action)
             except queue.Empty:
-                if not saidsleeping and not runonce:
-                    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
-                    saidsleeping = True
                 pass
 
-            if not runonce and not len(mws) and q_todo.empty() and time.time() - lastrun >= refresh:
+            if not runonce and not len(mws) and q_todo.empty() and q_pull.empty() and time.time() - lastrun >= refresh:
                 if done:
                     update_manifest(config, done)
                 mw = mp.Process(target=manifest_worker, args=(config, q_mani))
                 mw.daemon = True
                 mw.start()
-                lastrun = time.time()
-                saidsleeping = False
+                mws.append(mw)
 
             # Finally, deal with q_todo
             try:
