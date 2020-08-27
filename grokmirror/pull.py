@@ -241,6 +241,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
     obstdir = os.path.realpath(config['core'].get('objstore'))
     maxretries = config['pull'].getint('retries', 3)
     site = config['remote'].get('site')
+    remotename = config['pull'].get('remotename', '_grokmirror')
 
     while True:
         try:
@@ -308,14 +309,14 @@ def pull_worker(config, q_pull, q_spa, q_done):
             my_fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
 
             if r_fp != my_fp:
-                # Make sure we have an "origin" remote
-                if action == 'pull' and 'origin' not in grokmirror.list_repo_remotes(fullpath):
+                # Make sure we have the remote set up
+                if action == 'pull' and remotename not in grokmirror.list_repo_remotes(fullpath):
                     logger.info(' reorigin: %s', gitdir)
                     fix_remotes(toplevel, gitdir, site, config)
                 logger.info('    fetch: %s', gitdir)
                 retries = 1
                 while True:
-                    success = pull_repo(toplevel, gitdir)
+                    success = pull_repo(toplevel, gitdir, remotename)
                     if success:
                         break
                     retries += 1
@@ -425,22 +426,21 @@ def cull_manifest(manifest, config):
 
 
 def fix_remotes(toplevel, gitdir, site, config):
-    # Remove all existing remotes and set new origin
+    remotename = config['pull'].get('remotename', '_grokmirror')
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-    ecode, out, err = grokmirror.run_git_command(fullpath, ['remote'])
-    if len(out):
-        for remote in out.split('\n'):
-            logger.debug('\tremoving remote: %s', remote)
-            ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'remove', remote])
-            if ecode > 0:
-                logger.critical('FATAL: Could not remove remote %s from %s', remote, fullpath)
-                return False
+    # Set our remote
+    if remotename in grokmirror.list_repo_remotes(fullpath):
+        logger.debug('\tremoving remote: %s', remotename)
+        ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'remove', remotename])
+        if ecode > 0:
+            logger.critical('FATAL: Could not remove remote %s from %s', remotename, fullpath)
+            return False
 
-    # set my origin
-    origin = os.path.join(site, gitdir.lstrip('/'))
-    ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'add', '--mirror=fetch', 'origin', origin])
+    # set my remote URL
+    url = os.path.join(site, gitdir.lstrip('/'))
+    ecode, out, err = grokmirror.run_git_command(fullpath, ['remote', 'add', '--mirror=fetch', remotename, url])
     if ecode > 0:
-        logger.critical('FATAL: Could not set origin to %s in %s', origin, fullpath)
+        logger.critical('FATAL: Could not set %s to %s in %s', remotename, url, fullpath)
         return False
 
     ffonly = False
@@ -449,10 +449,10 @@ def fix_remotes(toplevel, gitdir, site, config):
             ffonly = True
             break
     if ffonly:
-        grokmirror.set_git_config(fullpath, 'remote.origin.fetch', 'refs/*:refs/*')
-        logger.debug('\tset new origin as %s (ff-only)', origin)
+        grokmirror.set_git_config(fullpath, 'remote.{}.fetch'.format(remotename), 'refs/*:refs/*')
+        logger.debug('\tset %s as %s (ff-only)', remotename, url)
     else:
-        logger.debug('\tset new origin as %s', origin)
+        logger.debug('\tset %s as %s', remotename, url)
     return True
 
 
@@ -528,9 +528,9 @@ def run_post_update_hook(toplevel, gitdir, hookscript):
         logger.info('Hook Stdout (%s): %s', gitdir, output)
 
 
-def pull_repo(toplevel, gitdir):
+def pull_repo(toplevel, gitdir, remotename):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-    args = ['remote', 'update', 'origin', '--prune']
+    args = ['remote', 'update', remotename, '--prune']
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
