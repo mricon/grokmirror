@@ -167,14 +167,14 @@ def parse_args():
     op.add_option('-u', '--post-update-hook', dest='posthook',
                   default='',
                   help='Run this hook after each repository is updated. Passes '
-                       'full path to the repository as the sole argument.')
+                       'full path to the repository as the sole argument')
     op.add_option('-l', '--logfile', dest='logfile',
                   default=None,
                   help='Put debug logs into this file')
     op.add_option('--user', dest='runas_user',
-                  help='Run as this user (if executed as root).')
+                  help='Run as this user (if executed as root)')
     op.add_option('--group', dest='runas_group',
-                  help='Run as this group (if executed as root).')
+                  help='Run as this group (if executed as root)')
 
     opts, args = op.parse_args()
     grokmirror.setuidgid(opts.runas_user, opts.runas_group)

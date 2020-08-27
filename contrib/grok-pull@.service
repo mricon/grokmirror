@@ -6,9 +6,10 @@ Documentation=https://github.com/mricon/grokmirror
 [Service]
 Environment="RUNAS_USER=mirror"
 Environment="RUNAS_GROUP=mirror"
+Environment="EXTRA_OPTS="
 EnvironmentFile=-/etc/sysconfig/grokmirror.default
 EnvironmentFile=-/etc/sysconfig/grokmirror.%i
-ExecStart=/usr/bin/grok-pull --user ${RUNAS_USER} --group ${RUNAS_GROUP} -o -c /etc/grokmirror/%i.conf
+ExecStart=/usr/bin/grok-pull --user ${RUNAS_USER} --group ${RUNAS_GROUP} -o -c /etc/grokmirror/%i.conf ${EXTRA_OPTS}
 Type=simple
 Restart=on-failure
 

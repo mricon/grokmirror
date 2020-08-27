@@ -235,7 +235,11 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         return False
 
     if gen_commitgraph and config['fsck'].get('commitgraph', 'yes') == 'yes':
+        grokmirror.set_git_config(fullpath, 'core.commitgraph', 'true')
         run_git_commit_graph(fullpath)
+    else:
+        # make sure core.commitgraph is off for this repo
+        grokmirror.set_git_config(fullpath, 'core.commitgraph', 'false')
 
     # repacking refs requires a separate command, so run it now
     args = ['pack-refs']
@@ -322,8 +326,8 @@ def run_git_commit_graph(fullpath):
     # Does our version of git support commit-graph?
     if not grokmirror.git_newer_than('2.18.0'):
         logger.debug('Git version too old, not generating commit-graph')
-    logger.info('    graph: generating commit-graph --reachable')
-    args = ['commit-graph', 'write', '--reachable']
+    logger.info('    graph: generating commit-graph')
+    args = ['commit-graph', 'write']
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
     if retcode == 0:
         return True
@@ -386,7 +390,7 @@ def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_ob
 def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                 repack_all_quick=False, repack_all_full=False):
 
-    if conn_only or repack_all_quick or repack_all_full:
+    if repack_all_quick or repack_all_full:
         force = True
 
     statusfile = config['fsck'].get('statusfile')
@@ -727,11 +731,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         elif repack_all_quick and count_loose > 0:
             logger.debug('repack_level=1 due to repack_all_quick')
             repack_level = 1
-        elif conn_only:
-            # don't do any repacks if we're running forced connectivity checks, unless
-            # you specifically passed --repack-all-foo
-            logger.debug('repack_level=None due to --conn-only')
-            repack_level = None
         else:
             logger.debug('Checking repack level of %s', fullpath)
             repack_level = get_repack_level(obj_info)
@@ -1002,7 +1001,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     status[fullpath]['lastfullrepack'] = todayiso
                     status[fullpath]['lastcheck'] = todayiso
                     status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
-                    logger.info('    next: %s', status[fullpath]['nextcheck'])
+                    logger.info('     next: %s', status[fullpath]['nextcheck'])
             else:
                 logger.warning('Repacking %s was unsuccessful', fullpath)
                 grokmirror.unlock_repo(fullpath)
@@ -1053,15 +1052,15 @@ def parse_args():
                   help='Be verbose and tell us what you are doing')
     op.add_option('-f', '--force', dest='force',
                   action='store_true', default=False,
-                  help='Force immediate run on all repositories.')
+                  help='Force immediate run on all repositories')
     op.add_option('-c', '--config', dest='config',
                   help='Location of the configuration file')
     op.add_option('--repack-only', dest='repack_only',
                   action='store_true', default=False,
                   help='Only find and repack repositories that need optimizing')
-    op.add_option('--connectivity', dest='conn_only',
+    op.add_option('--connectivity-only', dest='conn_only',
                   action='store_true', default=False,
-                  help='(Assumes --force): Run git fsck on all repos, but only check connectivity')
+                  help='Only check connectivity when running fsck checks')
     op.add_option('--repack-all-quick', dest='repack_all_quick',
                   action='store_true', default=False,
                   help='(Assumes --force): Do a quick repack of all repos')
@@ -1069,9 +1068,9 @@ def parse_args():
                   action='store_true', default=False,
                   help='(Assumes --force): Do a full repack of all repos')
     op.add_option('--user', dest='runas_user',
-                  help='Run as this user (if executed as root).')
+                  help='Run as this user (if executed as root)')
     op.add_option('--group', dest='runas_group',
-                  help='Run as this group (if executed as root).')
+                  help='Run as this group (if executed as root)')
 
     opts, args = op.parse_args()
     grokmirror.setuidgid(opts.runas_user, opts.runas_group)
