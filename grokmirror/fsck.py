@@ -1084,13 +1084,8 @@ def parse_args():
     op.add_option('--repack-all-full', dest='repack_all_full',
                   action='store_true', default=False,
                   help='(Assumes --force): Do a full repack of all repos')
-    op.add_option('--user', dest='runas_user',
-                  help='Run as this user (if executed as root)')
-    op.add_option('--group', dest='runas_group',
-                  help='Run as this group (if executed as root)')
 
     opts, args = op.parse_args()
-    grokmirror.setuidgid(opts.runas_user, opts.runas_group)
 
     if opts.repack_all_quick and opts.repack_all_full:
         op.error('Pick either --repack-all-full or --repack-all-quick')

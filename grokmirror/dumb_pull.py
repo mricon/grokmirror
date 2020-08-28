@@ -171,13 +171,8 @@ def parse_args():
     op.add_option('-l', '--logfile', dest='logfile',
                   default=None,
                   help='Put debug logs into this file')
-    op.add_option('--user', dest='runas_user',
-                  help='Run as this user (if executed as root)')
-    op.add_option('--group', dest='runas_group',
-                  help='Run as this group (if executed as root)')
 
     opts, args = op.parse_args()
-    grokmirror.setuidgid(opts.runas_user, opts.runas_group)
 
     if not len(args):
         op.error('You must provide at least a path to the repos to pull')

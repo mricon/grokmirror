@@ -1258,13 +1258,8 @@ def parse_args():
                   help='Run continuously (no effect if refresh is not set in config)')
     op.add_option('-c', '--config', dest='config',
                   help='Location of the configuration file')
-    op.add_option('--user', dest='runas_user',
-                  help='Run as this user (if executed as root)')
-    op.add_option('--group', dest='runas_group',
-                  help='Run as this group (if executed as root)')
 
     opts, args = op.parse_args()
-    grokmirror.setuidgid(opts.runas_user, opts.runas_group)
 
     if not opts.config:
         op.error('You must provide the path to the config file')
