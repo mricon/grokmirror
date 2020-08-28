@@ -70,8 +70,8 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         reference = '/' + os.path.relpath(altrepo, toplevel)
 
     manifest[gitdir].update(repoinfo)
-    if reference:
-        manifest[gitdir]['reference'] = reference
+    # Always write a reference entry even if it's None, as grok-1.x clients expect it
+    manifest[gitdir]['reference'] = reference
 
 
 def set_symlinks(manifest, toplevel, symlinks):

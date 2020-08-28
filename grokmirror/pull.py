@@ -955,9 +955,12 @@ def update_manifest(config, entries):
         except KeyError:
             pass
         for key, val in dict(repoinfo).items():
-            # Clean up null values
-            if val is None:
+            # Clean up grok-2.0 null values
+            if key in ('head', 'forkgroup') and val is None:
                 repoinfo.pop(key)
+        # Make sure 'reference' is present to prevent grok-1.x breakage
+        if 'reference' not in repoinfo:
+            repoinfo['reference'] = None
         manifest[gitdir] = repoinfo
         changed = True
     if changed:
