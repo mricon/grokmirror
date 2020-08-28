@@ -213,6 +213,12 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     if not always_precious:
         repack_flags.append('-d')
 
+    # If we have a logs dir, then run reflog expire
+    if os.path.isdir(os.path.join(fullpath, 'logs')):
+        args = ['reflog', 'expire', '--all', '--stale-fix']
+        logger.info('   reflog: expiring reflogs')
+        grokmirror.run_git_command(fullpath, args)
+
     args = ['repack'] + repack_flags
     logger.info('   repack: repacking with "%s"', ' '.join(repack_flags))
 
