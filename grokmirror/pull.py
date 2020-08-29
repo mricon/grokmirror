@@ -1147,7 +1147,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
             try:
                 gitdir, repoinfo, q_action = q_todo.get_nowait()
             except queue.Empty:
-                if q_todo.empty() and q_mani.empty() and q_done.empty():
+                if q_mani.empty() and q_done.empty():
                     if not len(pws):
                         if done:
                             update_manifest(config, done)
