@@ -644,14 +644,14 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                 raise IOError('Failed to parse output from %s (%s)' % (r_mani_cmd, ex))
         elif ecode == 127:
             logger.info(' manifest: unchanged')
-            return list()
+            return
         elif ecode == 1:
             logger.warning('Executing %s failed, exiting', r_mani_cmd, ecode)
             raise IOError('Failed executing %s' % r_mani_cmd)
         else:
             # Non-fatal errors for all other exit codes
             logger.warning(' manifest: executing %s returned %s', r_mani_cmd, ecode)
-            return list()
+            return
 
         if not len(r_manifest):
             logger.warning(' manifest: empty, ignoring')
@@ -672,7 +672,7 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                 logger.debug('mtime on %s is: %s', r_mani_url, fstat[8])
                 if not nomtime and r_last_modified <= r_last_fetched:
                     logger.info(' manifest: unchanged')
-                    return list()
+                    return
 
             logger.info('Reading new manifest from %s', r_mani_url)
             r_manifest = grokmirror.read_manifest(r_mani_url)
@@ -702,7 +702,7 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
             if res.status_code == 304:
                 # No change to the manifest, nothing to do
                 logger.info(' manifest: unchanged')
-                return list()
+                return
 
             if res.status_code > 200:
                 logger.warning('Could not fetch %s', r_mani_url)
@@ -1000,13 +1000,18 @@ def showstats(q_todo, q_pull, q_spa, good, bad, pws, dws):
     if len(dws) or not q_spa.empty():
         stats.append('%s in spa' % (q_spa.qsize() + len(dws)))
     if bad:
-        stats.append('%s failed' % bad)
+        stats.append('%s errors' % bad)
 
     logger.info('      ---:  %s', ', '.join(stats))
 
 
-def manifest_worker(config, q_mani):
-    fill_todo_from_manifest(config, q_mani)
+def manifest_worker(config, q_mani, nomtime=False):
+    starttime = int(time.time())
+    fill_todo_from_manifest(config, q_mani, nomtime=nomtime)
+    refresh = config['pull'].getint('refresh', 300)
+    left = refresh - int(time.time() - starttime)
+    if left > 0:
+        logger.info(' manifest: sleeping %ss', left)
 
 
 def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
@@ -1038,11 +1043,15 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     dws = list()
     mws = list()
     actions = set()
-    fill_todo_from_manifest(config, q_mani, nomtime=nomtime, forcepurge=forcepurge)
-    if q_mani.empty() and runonce:
-        return 0
-    lastrun = time.time()
-    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
+    # Run in the main thread if we have runonce
+    if runonce:
+        fill_todo_from_manifest(config, q_mani, nomtime=nomtime, forcepurge=forcepurge)
+        if q_mani.empty():
+            return 0
+    else:
+        # force nomtime to True the first time
+        nomtime = True
+    lastrun = 0
 
     pull_threads = config['pull'].getint('pull_threads', 0)
     if pull_threads < 1:
@@ -1055,7 +1064,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     good = 0
     bad = 0
     loopmark = None
-    lastrun = time.time()
     with SignalHandler(config, sw, dws, pws, done):
         while True:
             for pw in pws:
@@ -1072,8 +1080,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
             for mw in mws:
                 if mw and not mw.is_alive():
                     mws.remove(mw)
-                    lastrun = time.time()
-                    logger.info(' manifest: sleeping (%ss)', int(lastrun - time.time() + refresh))
 
             if not q_spa.empty() and not len(dws):
                 if runonce:
@@ -1113,44 +1119,49 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
             # Anything new in the manifest queue?
             try:
-                while True:
-                    gitdir, repoinfo, action = q_mani.get_nowait()
-                    if (gitdir, action) in actions:
-                        logger.debug('already in the queue: %s, %s', gitdir, action)
-                        continue
-                    if action == 'pull' and (gitdir, 'init') in actions:
-                        logger.debug('already in the queue as init: %s, %s', gitdir, action)
-                        continue
+                gitdir, repoinfo, action = q_mani.get_nowait()
+                if (gitdir, action) in actions:
+                    logger.debug('already in the queue: %s, %s', gitdir, action)
+                    continue
+                if action == 'pull' and (gitdir, 'init') in actions:
+                    logger.debug('already in the queue as init: %s, %s', gitdir, action)
+                    continue
 
-                    actions.add((gitdir, action))
-                    q_todo.put((gitdir, repoinfo, action))
-                    logger.debug('queued: %s, %s', gitdir, action)
+                actions.add((gitdir, action))
+                q_todo.put((gitdir, repoinfo, action))
+                logger.debug('queued: %s, %s', gitdir, action)
             except queue.Empty:
                 pass
 
             if not runonce and not len(mws) and q_todo.empty() and q_pull.empty() and time.time() - lastrun >= refresh:
                 if done:
                     update_manifest(config, done)
-                mw = mp.Process(target=manifest_worker, args=(config, q_mani))
+                mw = mp.Process(target=manifest_worker, args=(config, q_mani, nomtime))
+                nomtime = False
                 mw.daemon = True
                 mw.start()
                 mws.append(mw)
+                lastrun = int(time.time())
 
             # Finally, deal with q_todo
             try:
                 gitdir, repoinfo, q_action = q_todo.get_nowait()
             except queue.Empty:
-                if not len(pws) and q_pull.empty() and q_done.empty():
-                    if done:
-                        update_manifest(config, done)
-                        if runonce:
-                            return 0
-                    else:
-                        time.sleep(1)
-                    continue
-                else:
-                    time.sleep(0.1)
-                    continue
+                if q_todo.empty() and q_mani.empty() and q_done.empty():
+                    if not len(pws):
+                        if done:
+                            update_manifest(config, done)
+                            if runonce:
+                                # Wait till spa is done
+                                while True:
+                                    if q_spa.empty():
+                                        for dw in dws:
+                                            dw.join()
+                                        return 0
+                                    time.sleep(1)
+                    # Don't run a hot loop waiting on results
+                    time.sleep(1)
+                continue
 
             if repoinfo is None:
                 repoinfo = dict()
