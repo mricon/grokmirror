@@ -744,9 +744,18 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         elif repack_all_quick and count_loose > 0:
             logger.debug('repack_level=1 due to repack_all_quick')
             repack_level = 1
-        else:
+        elif status[fullpath].get('fingerprint') != grokmirror.get_repo_fingerprint(toplevel, gitdir):
             logger.debug('Checking repack level of %s', fullpath)
             repack_level = get_repack_level(obj_info)
+        else:
+            repack_level = None
+
+        # trigger a level-1 repack if it's regular check time and the fingerprint has changed
+        if (not repack_level and schedcheck <= today
+                and status[fullpath].get('fingerprint') != grokmirror.get_repo_fingerprint(toplevel, gitdir)):
+            status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
+            logger.info('     aged: %s (forcing repack)', fullpath)
+            repack_level = 1
 
         # If we're not already repacking the repo, run a prune if we find garbage in it
         if obj_info['garbage'] != '0' and not repack_level and is_safe_to_prune(fullpath, config):
@@ -1035,6 +1044,9 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             status[fullpath]['lastcheck'] = todayiso
             status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
             logger.info('     next: %s', status[fullpath]['nextcheck'])
+
+        gitdir = '/' + os.path.relpath(fullpath, toplevel)
+        status[fullpath]['fingerprint'] = grokmirror.get_repo_fingerprint(toplevel, gitdir)
 
         # noinspection PyTypeChecker
         elapsed = int(time.time()-startt)
