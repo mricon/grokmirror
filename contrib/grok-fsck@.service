@@ -8,8 +8,7 @@ Environment="EXTRA_FSCK_OPTS="
 EnvironmentFile=-/etc/sysconfig/grokmirror.default
 EnvironmentFile=-/etc/sysconfig/grokmirror.%i
 ExecStart=/usr/bin/grok-fsck -c /etc/grokmirror/%i.conf ${EXTRA_FSCK_OPTS}
-IOSchedulingClass=idle
-CPUSchedulingPolicy=idle
+CPUSchedulingPolicy=batch
 # To override these users, create a drop-in systemd conf file in
 # /etc/systemd/system/grok-fsck@[foo].service.d/10-usergroup.conf:
 # [Service]
