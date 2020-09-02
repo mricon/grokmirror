@@ -87,9 +87,9 @@ def run_git_prune(fullpath, config):
 
     if error:
         # Put things we recognize as fairly benign into debug
-        debug = []
-        warn = []
-        ierrors = config['fsck'].get('ignore_errors', '').split('\n')
+        debug = list()
+        warn = list()
+        ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
         for line in error.split('\n'):
             ignored = False
             for estring in ierrors:
@@ -144,7 +144,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     obstdir = os.path.realpath(config['core'].get('objstore'))
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
-    ierrors = config['fsck'].get('ignore_errors', '').split('\n')
+    ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
 
     if prune:
         # Make sure it's safe to do so
@@ -318,9 +318,9 @@ def run_git_fsck(fullpath, config, conn_only=False):
 
     if output or error:
         # Put things we recognize as fairly benign into debug
-        debug = []
-        warn = []
-        ierrors = config['fsck'].get('ignore_errors', '').split('\n')
+        debug = list()
+        warn = list()
+        ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
         for line in output.split('\n') + error.split('\n'):
             if not len(line.strip()):
                 continue
