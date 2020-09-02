@@ -189,7 +189,7 @@ def spa_worker(config, q_spa, pauseonload):
         try:
             (gitdir, actions) = q_spa.get(timeout=1)
         except queue.Empty:
-            return
+            sys.exit(0)
 
         logger.debug('spa_worker: gitdir=%s, actions=%s', gitdir, actions)
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
@@ -247,7 +247,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
         try:
             (gitdir, repoinfo, action, q_action) = q_pull.get(timeout=1)
         except queue.Empty:
-            return
+            sys.exit(0)
 
         logger.debug('pull_worker: gitdir=%s, action=%s', gitdir, action)
         fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
