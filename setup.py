@@ -63,6 +63,7 @@ setup(
             "grok-pull=grokmirror.pull:command",
             "grok-fsck=grokmirror.fsck:command",
             "grok-manifest=grokmirror.manifest:command",
+            "grok-bundle=grokmirror.bundle:command",
         ]
     }
 )
