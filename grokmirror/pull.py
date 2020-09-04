@@ -819,6 +819,10 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                 q_mani.put((gitdir, repoinfo, 'fix_params'))
 
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
+            if my_fingerprint != l_manifest[gitdir].get('fingerprint'):
+                logger.debug('Fingerprint discrepancy, forcing a fetch')
+                q_mani.put((gitdir, repoinfo, 'pull'))
+                continue
 
             if my_fingerprint == r_culled[gitdir]['fingerprint']:
                 logger.debug('Fingerprints match, skipping %s', gitdir)
