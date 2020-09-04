@@ -7,7 +7,7 @@ Documentation=https://github.com/mricon/grokmirror
 Environment="EXTRA_PULL_OPTS="
 EnvironmentFile=-/etc/sysconfig/grokmirror.default
 EnvironmentFile=-/etc/sysconfig/grokmirror.%i
-ExecStart=/usr/bin/grok-pull -o -c /etc/grokmirror/%i.conf ${EXTRA_PULL_OPTS}
+ExecStart=/usr/bin/grok-pull -o -c /etc/grokmirror/%i.conf $EXTRA_PULL_OPTS
 Type=simple
 Restart=on-failure
 # To override these users, create a drop-in systemd conf file in
