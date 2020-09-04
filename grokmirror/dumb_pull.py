@@ -147,40 +147,39 @@ def run_post_update_hook(hookscript, gitdir):
 
 
 def parse_args():
-    from optparse import OptionParser
+    import argparse
+    # noinspection PyTypeChecker
+    op = argparse.ArgumentParser(prog='grok-dumb-pull',
+                                 description='Fetch remotes in repositories not managed by grokmirror',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    usage = '''usage: %prog [options] /path/to/repos
-    Bluntly fetch remotes in specified git repositories.
-    '''
+    op.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+                    default=False,
+                    help='Be verbose and tell us what you are doing')
+    op.add_argument('-s', '--svn', dest='svn', action='store_true',
+                    default=False,
+                    help='The remotes for these repositories are Subversion')
+    op.add_argument('-r', '--remote-names', dest='remotes', action='append',
+                    default=None,
+                    help='Only fetch remotes matching this name (accepts shell globbing)')
+    op.add_argument('-u', '--post-update-hook', dest='posthook',
+                    default='',
+                    help='Run this hook after each repository is updated.')
+    op.add_argument('-l', '--logfile', dest='logfile',
+                    default=None,
+                    help='Put debug logs into this file')
+    op.add_argument('--version', action='version', version=grokmirror.VERSION)
+    op.add_argument('paths', nargs='+', help='Full path(s) of the repos to pull')
 
-    op = OptionParser(usage=usage, version=grokmirror.VERSION)
-    op.add_option('-v', '--verbose', dest='verbose', action='store_true',
-                  default=False,
-                  help='Be verbose and tell us what you are doing')
-    op.add_option('-s', '--svn', dest='svn', action='store_true',
-                  default=False,
-                  help='The remotes for these repositories are Subversion')
-    op.add_option('-r', '--remote-names', dest='remotes', action='append',
-                  default=[],
-                  help='Only fetch remotes matching this name (accepts '
-                       'shell globbing, can be passed multiple times)')
-    op.add_option('-u', '--post-update-hook', dest='posthook',
-                  default='',
-                  help='Run this hook after each repository is updated. Passes '
-                       'full path to the repository as the sole argument')
-    op.add_option('-l', '--logfile', dest='logfile',
-                  default=None,
-                  help='Put debug logs into this file')
+    opts = op.parse_args()
 
-    opts, args = op.parse_args()
-
-    if not len(args):
+    if not len(opts.paths):
         op.error('You must provide at least a path to the repos to pull')
 
-    return opts, args
+    return opts
 
 
-def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='', logfile=None):
+def dumb_pull(paths, verbose=False, svn=False, remotes=None, posthook='', logfile=None):
     global logger
 
     loglevel = logging.INFO
@@ -190,7 +189,7 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='', logfile
         remotes = ['*']
 
     # Find all repositories we are to pull
-    for entry in args:
+    for entry in paths:
         if entry[-4:] == '.git':
             if not os.path.exists(entry):
                 logger.critical('%s does not exist', entry)
@@ -210,10 +209,10 @@ def dumb_pull(args, verbose=False, svn=False, remotes=None, posthook='', logfile
 
 
 def command():
-    opts, args = parse_args()
+    opts = parse_args()
 
     return dumb_pull(
-        args, verbose=opts.verbose, svn=opts.svn, remotes=opts.remotes,
+        opts.paths, verbose=opts.verbose, svn=opts.svn, remotes=opts.remotes,
         posthook=opts.posthook, logfile=opts.logfile)
 
 

@@ -132,6 +132,7 @@ def parse_args():
     op.add_argument('-i', '--include', nargs='*',
                     default='*',
                     help='List repositories to bundle (accepts shell globbing)')
+    op.add_argument('--version', action='version', version=grokmirror.VERSION)
 
     opts = op.parse_args()
 

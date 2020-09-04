@@ -1250,37 +1250,33 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
 
 def parse_args():
-    from optparse import OptionParser
+    import argparse
+    # noinspection PyTypeChecker
+    op = argparse.ArgumentParser(prog='grok-pull',
+                                 description='Create or update a git repository collection mirror',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    usage = '''usage: %prog -c repos.conf
-    Create a grok mirror using the repository configuration found in repos.conf
-    '''
+    op.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+                    default=False,
+                    help='Be verbose and tell us what you are doing')
+    op.add_argument('-n', '--no-mtime-check', dest='nomtime',
+                    action='store_true', default=False,
+                    help='Run without checking manifest mtime')
+    op.add_argument('-p', '--purge', dest='purge',
+                    action='store_true', default=False,
+                    help='Remove any git trees that are no longer in manifest')
+    op.add_argument('--force-purge', dest='forcepurge',
+                    action='store_true', default=False,
+                    help='Force purge despite significant repo deletions')
+    op.add_argument('-o', '--continuous', dest='runonce',
+                    action='store_false', default=True,
+                    help='Run continuously (no effect if refresh is not set in config)')
+    op.add_argument('-c', '--config', dest='config',
+                    required=True,
+                    help='Location of the configuration file')
+    op.add_argument('--version', action='version', version=grokmirror.VERSION)
 
-    op = OptionParser(usage=usage, version=grokmirror.VERSION)
-    op.add_option('-v', '--verbose', dest='verbose', action='store_true',
-                  default=False,
-                  help='Be verbose and tell us what you are doing')
-    op.add_option('-n', '--no-mtime-check', dest='nomtime',
-                  action='store_true', default=False,
-                  help='Run without checking manifest mtime')
-    op.add_option('-p', '--purge', dest='purge',
-                  action='store_true', default=False,
-                  help='Remove any git trees that are no longer in manifest')
-    op.add_option('--force-purge', dest='forcepurge',
-                  action='store_true', default=False,
-                  help='Force purge despite significant repo deletions')
-    op.add_option('-o', '--continuous', dest='runonce',
-                  action='store_false', default=True,
-                  help='Run continuously (no effect if refresh is not set in config)')
-    op.add_option('-c', '--config', dest='config',
-                  help='Location of the configuration file')
-
-    opts, args = op.parse_args()
-
-    if not opts.config:
-        op.error('You must provide the path to the config file')
-
-    return opts, args
+    return op.parse_args()
 
 
 def grok_pull(cfgfile, verbose=False, nomtime=False, purge=False, forcepurge=False, runonce=False):
@@ -1306,7 +1302,7 @@ def grok_pull(cfgfile, verbose=False, nomtime=False, purge=False, forcepurge=Fal
 
 
 def command():
-    opts, args = parse_args()
+    opts = parse_args()
 
     retval = grok_pull(
         opts.config, opts.verbose, opts.nomtime, opts.purge, opts.forcepurge, opts.runonce)

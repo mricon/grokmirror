@@ -1075,43 +1075,41 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
 
 def parse_args():
-    from optparse import OptionParser
+    import argparse
+    # noinspection PyTypeChecker
+    op = argparse.ArgumentParser(prog='grok-fsck',
+                                 description='Optimize and check mirrored repositories',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    usage = '''usage: %prog -c fsck.conf
-    Run a git-fsck check on grokmirror-managed repositories.
-    '''
+    op.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+                    default=False,
+                    help='Be verbose and tell us what you are doing')
+    op.add_argument('-f', '--force', dest='force',
+                    action='store_true', default=False,
+                    help='Force immediate run on all repositories')
+    op.add_argument('-c', '--config', dest='config',
+                    required=True,
+                    help='Location of the configuration file')
+    op.add_argument('--repack-only', dest='repack_only',
+                    action='store_true', default=False,
+                    help='Only find and repack repositories that need optimizing')
+    op.add_argument('--connectivity-only', dest='conn_only',
+                    action='store_true', default=False,
+                    help='Only check connectivity when running fsck checks')
+    op.add_argument('--repack-all-quick', dest='repack_all_quick',
+                    action='store_true', default=False,
+                    help='(Assumes --force): Do a quick repack of all repos')
+    op.add_argument('--repack-all-full', dest='repack_all_full',
+                    action='store_true', default=False,
+                    help='(Assumes --force): Do a full repack of all repos')
+    op.add_argument('--version', action='version', version=grokmirror.VERSION)
 
-    op = OptionParser(usage=usage, version=grokmirror.VERSION)
-    op.add_option('-v', '--verbose', dest='verbose', action='store_true',
-                  default=False,
-                  help='Be verbose and tell us what you are doing')
-    op.add_option('-f', '--force', dest='force',
-                  action='store_true', default=False,
-                  help='Force immediate run on all repositories')
-    op.add_option('-c', '--config', dest='config',
-                  help='Location of the configuration file')
-    op.add_option('--repack-only', dest='repack_only',
-                  action='store_true', default=False,
-                  help='Only find and repack repositories that need optimizing')
-    op.add_option('--connectivity-only', dest='conn_only',
-                  action='store_true', default=False,
-                  help='Only check connectivity when running fsck checks')
-    op.add_option('--repack-all-quick', dest='repack_all_quick',
-                  action='store_true', default=False,
-                  help='(Assumes --force): Do a quick repack of all repos')
-    op.add_option('--repack-all-full', dest='repack_all_full',
-                  action='store_true', default=False,
-                  help='(Assumes --force): Do a full repack of all repos')
-
-    opts, args = op.parse_args()
+    opts = op.parse_args()
 
     if opts.repack_all_quick and opts.repack_all_full:
         op.error('Pick either --repack-all-full or --repack-all-quick')
 
-    if not opts.config:
-        op.error('You must provide the path to the config file')
-
-    return opts, args
+    return opts
 
 
 def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=False,
@@ -1162,7 +1160,7 @@ def grok_fsck(cfgfile, verbose=False, force=False, repack_only=False, conn_only=
 
 
 def command():
-    opts, args = parse_args()
+    opts = parse_args()
 
     return grok_fsck(opts.config, opts.verbose, opts.force, opts.repack_only, opts.conn_only,
                      opts.repack_all_quick, opts.repack_all_full)
