@@ -623,6 +623,8 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
             sys.exit(1)
         logger.info(' manifest: executing %s', r_mani_cmd)
         cmdargs = [r_mani_cmd]
+        if nomtime:
+            cmdargs += ['--force']
         (ecode, output, error) = grokmirror.run_shell_command(cmdargs)
         if ecode == 0:
             try:
