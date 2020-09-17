@@ -1,0 +1,5 @@
+/usr/bin/grok-.*          -- gen_context(system_u:object_r:grokmirror_exec_t,s0)
+
+/var/lib/grokmirror(/.*)?    gen_context(system_u:object_r:grokmirror_var_lib_t,s0)
+/var/run/grokmirror(/.*)?    gen_context(system_u:object_r:grokmirror_var_run_t,s0)
+/var/log/grokmirror(/.*)?    gen_context(system_u:object_r:grokmirror_log_t,s0)

@@ -1,0 +1,123 @@
+##################
+# Author: Konstantin Ryabitsev <konstantin@linuxfoundation.org>
+#
+policy_module(grokmirror, 1.1)
+
+require {
+    type gitosis_var_lib_t;
+    type git_sys_content_t;
+    type net_conf_t;
+    type httpd_t;
+    type ssh_home_t;
+    type passwd_file_t;
+}
+
+##################
+# Declarations
+
+type grokmirror_t;
+type grokmirror_exec_t;
+init_daemon_domain(grokmirror_t, grokmirror_exec_t)
+
+type grokmirror_var_lib_t;
+files_type(grokmirror_var_lib_t)
+
+type grokmirror_log_t;
+logging_log_file(grokmirror_log_t)
+
+type grokmirror_var_run_t;
+files_pid_file(grokmirror_var_run_t)
+
+type grokmirror_tmpfs_t;
+files_tmpfs_file(grokmirror_tmpfs_t)
+
+gen_tunable(grokmirror_connect_ssh, false)
+gen_tunable(grokmirror_connect_all_unreserved, false)
+
+# Uncomment to put these domains into permissive mode
+permissive grokmirror_t;
+
+##################
+# Daemons policy
+
+domain_use_interactive_fds(grokmirror_t)
+files_read_etc_files(grokmirror_t)
+miscfiles_read_localization(grokmirror_t)
+
+# Logging
+append_files_pattern(grokmirror_t, grokmirror_log_t, grokmirror_log_t)
+create_files_pattern(grokmirror_t, grokmirror_log_t, grokmirror_log_t)
+setattr_files_pattern(grokmirror_t, grokmirror_log_t, grokmirror_log_t)
+logging_log_filetrans(grokmirror_t, grokmirror_log_t, { file dir })
+logging_send_syslog_msg(grokmirror_t)
+
+# Allow reading anything grokmirror_var_lib_t
+list_dirs_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+read_files_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+
+# Allow managing git repositories
+manage_files_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
+manage_lnk_files_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
+manage_dirs_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
+manage_sock_files_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
+
+manage_files_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
+manage_lnk_files_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
+manage_dirs_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
+
+# Allow executing bin (for git, mostly)
+corecmd_exec_bin(grokmirror_t)
+libs_exec_ldconfig(grokmirror_t)
+
+# Allow managing httpd content in case the manifest is stored there
+apache_manage_sys_content(grokmirror_t)
+
+# git wants to access system state and other bits
+kernel_dontaudit_read_system_state(grokmirror_t)
+
+# Allow connecting to http, git
+corenet_tcp_connect_http_port(grokmirror_t)
+corenet_tcp_connect_git_port(grokmirror_t)
+corenet_tcp_bind_generic_node(grokmirror_t)
+corenet_tcp_sendrecv_generic_node(grokmirror_t)
+
+# git needs to dns-resolve
+sysnet_dns_name_resolve(grokmirror_t)
+
+# Allow reading .netrc files
+read_files_pattern(grokmirror_t, net_conf_t, net_conf_t)
+
+# Post-hooks can use grep, which requires execmem
+allow grokmirror_t self:process execmem;
+
+fs_getattr_tmpfs(grokmirror_t)
+manage_files_pattern(grokmirror_t, grokmirror_tmpfs_t, grokmirror_tmpfs_t)
+fs_tmpfs_filetrans(grokmirror_t, grokmirror_tmpfs_t, file)
+
+# Listener socket file
+manage_dirs_pattern(grokmirror_t, grokmirror_var_run_t, grokmirror_var_run_t)
+manage_files_pattern(grokmirror_t, grokmirror_var_run_t, grokmirror_var_run_t)
+manage_sock_files_pattern(grokmirror_t, grokmirror_var_run_t, grokmirror_var_run_t)
+files_pid_filetrans(grokmirror_t, grokmirror_var_run_t, { dir file sock_file })
+
+# allow httpd to write to the listener socket
+allow httpd_t grokmirror_t:unix_stream_socket connectto;
+
+tunable_policy(`grokmirror_connect_all_unreserved',`
+    corenet_sendrecv_all_client_packets(grokmirror_t)
+    corenet_tcp_connect_all_unreserved_ports(grokmirror_t)
+')
+
+tunable_policy(`grokmirror_connect_ssh',`
+    corenet_sendrecv_ssh_client_packets(grokmirror_t)
+    corenet_tcp_connect_ssh_port(grokmirror_t)
+    corenet_tcp_sendrecv_ssh_port(grokmirror_t)
+
+    ssh_exec(grokmirror_t)
+    ssh_read_user_home_files(grokmirror_t)
+
+    # for the controlmaster socket
+    manage_sock_files_pattern(grokmirror_t, ssh_home_t, ssh_home_t)
+    allow grokmirror_t self:unix_stream_socket connectto;
+    allow grokmirror_t passwd_file_t:file { getattr open read };
+')
