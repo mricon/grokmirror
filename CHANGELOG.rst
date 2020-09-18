@@ -1,17 +1,29 @@
-v2.0.0 (2020-08-14)
+v2.0.0 (2020-09-18)
 -------------------
-- Major rewrite to improve shared object storage. See UPGRADING.rst for
-  upgrade strategy. Below are major highlights.
+Major rewrite to improve shared object storage and replication for VERY
+LARGE repository collections (codeaurora.org is ~30,000 repositories,
+which are mostly various forks of Android).
+
+See UPGRADING.rst for the upgrade strategy.
+
+Below are some major highlights.
+
 - Drop support for python < 3.6
 - Introduce "object storage" repositories that benefit from git-pack
-  delta islands
+  delta islands and improve overall disk storage footprint (depending on
+  the number of forks).
 - Make grok-pull operate in daemon mode (with -o) (see contrib for
-  systemd unit files)
+  systemd unit files). This is more efficient than the cron mode when
+  run very frequently.
 - Provide a socket listener for pubsub push updates (see contrib for
-  Google pubsubv1.py)
-- Merge fsck.conf and repos.conf into a single config file
-- Grok-manifest will now record where HEAD is pointing so replicas can
-  properly track these changes.
+  Google pubsubv1.py).
+- Merge fsck.conf and repos.conf into a single config file. This
+  requires creating a new configuration file after the upgrade. See
+  UPGRADING.rst for details.
+- Record and propagate HEAD position using the manifest file.
+- Add grok-bundle command to create clone.bundle files for CDN-offloaded
+  cloning (mostly used by Android's repo command).
+- Add SELinux policy for EL7 (see contrib).
 
 
 v1.2.2 (2019-10-23)
