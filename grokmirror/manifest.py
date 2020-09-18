@@ -41,7 +41,7 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
     repoinfo = grokmirror.get_repo_defs(toplevel, gitdir, usenow=usenow)
 
     if gitdir not in manifest:
-        # We didn't normalize paths to be always with a leading '/', so
+        # In grokmirror-1.x we didn't normalize paths to be always with a leading '/', so
         # check the manifest for both and make sure we only save the path with a leading /
         if gitdir.lstrip('/') in manifest:
             manifest[gitdir] = manifest.pop(gitdir.lstrip('/'))
@@ -209,7 +209,7 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
     toplevel = os.path.realpath(toplevel)
 
     # If manifest is empty, don't use current timestamp
-    if not len(manifest.keys()):
+    if not len(manifest):
         usenow = False
 
     if remove and len(paths):

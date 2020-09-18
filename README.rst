@@ -5,7 +5,7 @@ Framework to smartly mirror git repositories
 --------------------------------------------
 
 :Author:    konstantin@linuxfoundation.org
-:Date:      2020-08-14
+:Date:      2020-09-18
 :Copyright: The Linux Foundation and contributors
 :License:   GPLv3+
 :Version:   2.0.0
@@ -167,7 +167,9 @@ Make sure the user "mirror" (or whichever user you specified) is able to
 write to the toplevel and log locations specified in grokmirror.conf.
 
 You can either run grok-pull manually, from cron, or as a
-systemd-managed daemon (see contrib).
+systemd-managed daemon (see contrib). If you do it more frequently than
+once every few hours, you should definitely run it as a daemon in order
+to improve performance.
 
 GROK-FSCK
 ---------
