@@ -60,6 +60,22 @@ def check_reclone_error(fullpath, config, errors):
     set_repo_reclone(fullpath, reclone)
 
 
+def get_repo_size(fullpath):
+    oi = grokmirror.get_repo_obj_info(fullpath)
+    kbsize = int(oi['size']) + int(oi['size-pack']) + int(oi['size-garbage'])
+    logger.debug('%s size: %s kb', fullpath, kbsize)
+    return kbsize
+
+
+def get_human_size(kbsize):
+    num = kbsize
+    for unit in ['Ki', 'Mi', 'Gi']:
+        if abs(num) < 1024.0:
+            return "%3.2f %sB" % (num, unit)
+        num /= 1024.0
+    return "%.2f%s TiB" % num
+
+
 def set_repo_reclone(fullpath, reason):
     rfile = os.path.join(fullpath, 'grokmirror.reclone')
     # Have we already requested a reclone?
@@ -535,6 +551,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     total_checked = 0
     total_elapsed = 0
+    space_saved = 0
 
     cfg_repack = config['fsck'].getboolean('repack', True)
     # Can be "always", which is why we don't getboolean
@@ -550,6 +567,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     analyzed = 0
     logger.info('Analyzing %s (%s repos)', toplevel, len(status))
     for fullpath in list(status):
+        start_size = get_repo_size(fullpath)
         analyzed += 1
         # We do obstrepos separately below, as logic is different
         if grokmirror.is_obstrepo(fullpath, obstdir):
@@ -600,6 +618,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
                 run_git_repack(fullpath, config, level=1, prune=m_prune)
+                space_saved += start_size - get_repo_size(fullpath)
             else:
                 # Do we have any toplevel siblings?
                 obstrepo = None
@@ -641,6 +660,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                         logger.info('    fetch: fetching %s', gitdir)
                         grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
+                    space_saved += start_size - get_repo_size(fullpath)
                     logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
@@ -664,7 +684,9 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     fetched_obstrepos.add(altdir)
                     if success:
                         set_precious_objects(altdir, enabled=False)
+                        pre_size = get_repo_size(altdir)
                         run_git_repack(altdir, config, level=1, prune=False)
+                        space_saved += pre_size - get_repo_size(altdir)
                         logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process),
                                     len(status))
                     else:
@@ -685,7 +707,9 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     set_precious_objects(altdir, enabled=False)
                     # Don't prune, because there may be objects others are still borrowing
                     # It can only be pruned once the full migration is completed
+                    pre_size = get_repo_size(altdir)
                     run_git_repack(altdir, config, level=1, prune=False)
+                    space_saved += pre_size - get_repo_size(altdir)
                     logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                 else:
                     logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
@@ -702,6 +726,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     set_precious_objects(fullpath, enabled=False)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
+                    space_saved += start_size - get_repo_size(fullpath)
                     logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                 else:
                     logger.info('    fetch: not fetching %s (private)', gitdir)
@@ -1016,6 +1041,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     for fullpath, action, repack_level in to_process:
         logger.info('%s:', fullpath)
+        start_size = get_repo_size(fullpath)
         checkdelay = frequency if not force else random.randint(1, frequency)
         nextcheck = today + datetime.timedelta(days=checkdelay)
 
@@ -1056,7 +1082,12 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         grokmirror.unlock_repo(fullpath)
         total_checked += 1
         total_elapsed += elapsed
-        logger.info('     done: %ss', elapsed)
+        saved = start_size - get_repo_size(fullpath)
+        space_saved += saved
+        if saved > 0:
+            logger.info('     done: %ss, %s saved', elapsed, get_human_size(saved))
+        else:
+            logger.info('     done: %ss', elapsed)
         logger.info('      ---: %s done, %s queued', total_checked, len(to_process)-total_checked)
 
         # Write status file after each check, so if the process dies, we won't
@@ -1065,7 +1096,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         with open(statusfile, 'w') as stfh:
             stfh.write(json.dumps(status, indent=2))
 
-    logger.info('Processed %s repos in %0.2fs', total_checked, total_elapsed)
+    logger.info('Processed %s repos in %0.2fs, %s saved', total_checked, total_elapsed, get_human_size(space_saved))
 
     with open(statusfile, 'w') as stfh:
         stfh.write(json.dumps(status, indent=2))
