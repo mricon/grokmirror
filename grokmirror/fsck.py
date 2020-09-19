@@ -329,6 +329,12 @@ def run_git_repack(fullpath, config, level=1, prune=True):
 
 def run_git_fsck(fullpath, config, conn_only=False):
     args = ['fsck', '--no-progress', '--no-dangling', '--no-reflogs']
+    obstdir = os.path.realpath(config['core'].get('objstore'))
+    # If it's got an obstrepo, always run as connectivity-only
+    altrepo = grokmirror.get_altrepo(fullpath)
+    if altrepo and grokmirror.is_obstrepo(altrepo, obstdir):
+        logger.debug('Repo uses objstore, forcing connectivity-only')
+        conn_only = True
     if conn_only:
         args.append('--connectivity-only')
         logger.info('     fsck: running with --connectivity-only')
