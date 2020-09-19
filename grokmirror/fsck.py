@@ -62,7 +62,12 @@ def check_reclone_error(fullpath, config, errors):
 
 def get_repo_size(fullpath):
     oi = grokmirror.get_repo_obj_info(fullpath)
-    kbsize = int(oi['size']) + int(oi['size-pack']) + int(oi['size-garbage'])
+    kbsize = 0
+    for field in ['size', 'size-pack', 'size-garbage']:
+        try:
+            kbsize += int(oi[field])
+        except (KeyError, ValueError):
+            pass
     logger.debug('%s size: %s kb', fullpath, kbsize)
     return kbsize
 
