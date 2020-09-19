@@ -12,6 +12,8 @@ Below are some major highlights.
 - Introduce "object storage" repositories that benefit from git-pack
   delta islands and improve overall disk storage footprint (depending on
   the number of forks).
+- Drop dependency on GitPython, use git calls directly for all operations
+- Remove progress bars to slim down dependencies (drops enlighten)
 - Make grok-pull operate in daemon mode (with -o) (see contrib for
   systemd unit files). This is more efficient than the cron mode when
   run very frequently.
