@@ -1,7 +1,7 @@
 ##################
 # Author: Konstantin Ryabitsev <konstantin@linuxfoundation.org>
 #
-policy_module(grokmirror, 1.1)
+policy_module(grokmirror, 1.1.1)
 
 require {
     type gitosis_var_lib_t;
@@ -10,6 +10,7 @@ require {
     type httpd_t;
     type ssh_home_t;
     type passwd_file_t;
+    type postfix_etc_t;
 }
 
 ##################
@@ -51,9 +52,11 @@ setattr_files_pattern(grokmirror_t, grokmirror_log_t, grokmirror_log_t)
 logging_log_filetrans(grokmirror_t, grokmirror_log_t, { file dir })
 logging_send_syslog_msg(grokmirror_t)
 
-# Allow reading anything grokmirror_var_lib_t
-list_dirs_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
-read_files_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+# Allow managing anything grokmirror_var_lib_t
+manage_dirs_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+manage_files_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+manage_lnk_files_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
+manage_sock_files_pattern(grokmirror_t, grokmirror_var_lib_t, grokmirror_var_lib_t)
 
 # Allow managing git repositories
 manage_files_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
@@ -64,6 +67,7 @@ manage_sock_files_pattern(grokmirror_t, gitosis_var_lib_t, gitosis_var_lib_t)
 manage_files_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
 manage_lnk_files_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
 manage_dirs_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
+manage_sock_files_pattern(grokmirror_t, git_sys_content_t, git_sys_content_t)
 
 # Allow executing bin (for git, mostly)
 corecmd_exec_bin(grokmirror_t)
@@ -102,6 +106,10 @@ files_pid_filetrans(grokmirror_t, grokmirror_var_run_t, { dir file sock_file })
 
 # allow httpd to write to the listener socket
 allow httpd_t grokmirror_t:unix_stream_socket connectto;
+
+# Some bogus dontaudits
+# ssh tries to open /etc/mailname, which the postfix module labels oddly
+dontaudit grokmirror_t postfix_etc_t:file { getattr open read };
 
 tunable_policy(`grokmirror_connect_all_unreserved',`
     corenet_sendrecv_all_client_packets(grokmirror_t)
