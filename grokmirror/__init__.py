@@ -38,9 +38,9 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 
-VERSION = '2.0-dev'
+VERSION = '2.0.0'
 MANIFEST_LOCKH = None
-REPO_LOCKH = {}
+REPO_LOCKH = dict()
 GITBIN = '/usr/bin/git'
 
 # default logger. Will be overridden.
@@ -815,7 +815,7 @@ def read_manifest(manifile, wait=False):
 
     if not os.path.exists(manifile):
         logger.info(' manifest: no local manifest, assuming initial run')
-        return {}
+        return dict()
 
     if manifile.find('.gz') > 0:
         fh = gzip.open(manifile, 'rb')
