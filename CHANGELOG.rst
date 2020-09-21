@@ -1,4 +1,4 @@
-v2.0.0 (2020-09-18)
+v2.0.0 (2020-09-21)
 -------------------
 Major rewrite to improve shared object storage and replication for VERY
 LARGE repository collections (codeaurora.org is ~30,000 repositories,
