@@ -728,19 +728,27 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
             if obstrepo:
                 obst_changes = True
-                # It should be safe now to repoint the alternates without doing a repack first
-                grokmirror.set_altrepo(fullpath, obstrepo)
                 if not is_private:
                     # Fetch into the obstrepo
                     grokmirror.add_repo_to_objstore(obstrepo, fullpath)
                     logger.info('    fetch: fetching %s', gitdir)
-                    grokmirror.fetch_objstore_repo(obstrepo, fullpath)
-                    set_precious_objects(fullpath, enabled=False)
-                    run_git_repack(fullpath, config, level=1, prune=m_prune)
-                    space_saved += start_size - get_repo_size(fullpath)
-                    logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
+                    if grokmirror.fetch_objstore_repo(obstrepo, fullpath):
+                        grokmirror.set_altrepo(fullpath, obstrepo)
+                        set_precious_objects(fullpath, enabled=False)
+                        run_git_repack(fullpath, config, level=1, prune=m_prune)
+                        space_saved += start_size - get_repo_size(fullpath)
+                        logger.info('      ---: %s analyzed, %s queued, %s total',
+                                    analyzed, len(to_process), len(status))
                 else:
-                    logger.info('    fetch: not fetching %s (private)', gitdir)
+                    # Grab all the objects from the previous parent, since we can't simply
+                    # fetch ourselves into the obstrepo (we're private).
+                    args = ['repack', '-a']
+                    logger.info('    fetch: restoring private repo %s', gitdir)
+                    if grokmirror.run_git_command(fullpath, args):
+                        grokmirror.set_altrepo(fullpath, obstrepo)
+                        set_precious_objects(fullpath, enabled=False)
+                        # Now repack ourselves to get rid of any public objects
+                        run_git_repack(fullpath, config, level=1, prune=m_prune)
 
                 obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
