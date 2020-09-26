@@ -560,7 +560,7 @@ def find_siblings(fullpath, my_roots, known_roots, exact=False):
         # Of course we're going to match ourselves
         if fullpath == gitpath or not my_roots or not gitroots:
             continue
-        if exact and gitroots == my_roots:
+        if exact and (gitroots.issubset(my_roots) or my_roots.issubset(gitroots)):
             siblings.add(gitpath)
         elif not exact and len(gitroots.intersection(my_roots)):
             siblings.add(gitpath)
