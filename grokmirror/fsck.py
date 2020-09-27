@@ -36,6 +36,135 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 logger = logging.getLogger(__name__)
 
 
+def get_blob_set(fullpath):
+    bset = set()
+    size = 0
+    blobcache = os.path.join(fullpath, 'grokmirror.blobs')
+    if os.path.exists(blobcache):
+        # Did it age out? Hardcode to 30 days.
+        expage = time.time() - 86400*30
+        st = os.stat(blobcache)
+        if st.st_mtime < expage:
+            os.unlink(blobcache)
+    try:
+        with open(blobcache) as fh:
+            while True:
+                line = fh.readline()
+                if not len(line):
+                    break
+                if line[0] == '#':
+                    continue
+                chunks = line.strip().split()
+                bhash = chunks[0]
+                bsize = int(chunks[1])
+                size += bsize
+                bset.add((bhash, bsize))
+        return bset, size
+    except FileNotFoundError:
+        pass
+
+    # This only makes sense for repos not using alternates, so make sure you check first
+    logger.info(' bloblist: %s', fullpath)
+    gitargs = ['cat-file', '--batch-all-objects', '--batch-check', '--unordered']
+    retcode, output, error = grokmirror.run_git_command(fullpath, gitargs)
+    if retcode == 0:
+        with open(blobcache, 'w') as fh:
+            fh.write('# Blobs and sizes used for sibling calculation\n')
+            for line in output.split('\n'):
+                if line.find(' blob ') < 0:
+                    continue
+                chunks = line.strip().split()
+                fh.write(f'{chunks[0]} {chunks[2]}\n')
+                bhash = chunks[0]
+                bsize = int(chunks[2])
+                size += bsize
+                bset.add((bhash, bsize))
+
+    return bset, size
+
+
+def check_sibling_repos_by_blobs(bset1, bsize1, bset2, bsize2, ratio):
+    iset = bset1.intersection(bset2)
+    if not len(iset):
+        return False
+    isize = 0
+    for bhash, bsize in iset:
+        isize += bsize
+    # Both repos should share at least ratio % of blobs in them
+    ratio1 = int(isize / bsize1 * 100)
+    logger.debug('isize=%s, bsize1=%s, ratio1=%s', isize, bsize1, ratio1)
+    ratio2 = int(isize / bsize2 * 100)
+    logger.debug('isize=%s, bsize2=%s ratio2=%s', isize, bsize2, ratio1)
+    if ratio1 >= ratio and ratio2 >= ratio:
+        return True
+
+    return False
+
+
+def find_siblings_by_blobs(obstrepo, obstdir, ratio=75):
+    siblings = set()
+    oset, osize = get_blob_set(obstrepo)
+    for srepo in grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False):
+        if srepo == obstrepo:
+            continue
+        logger.debug('Comparing blobs between %s and %s', obstrepo, srepo)
+        sset, ssize = get_blob_set(srepo)
+        if check_sibling_repos_by_blobs(oset, osize, sset, ssize, ratio):
+            logger.info(' siblings: %s and %s', os.path.basename(obstrepo), os.path.basename(srepo))
+            siblings.add(srepo)
+
+    return siblings
+
+
+def merge_siblings(siblings, amap):
+    mdest = None
+    rcount = 0
+    # Who has the most remotes?
+    for sibling in set(siblings):
+        if sibling not in amap or not len(amap[sibling]):
+            # Orphaned sibling, ignore it -- it will get cleaned up
+            siblings.remove(sibling)
+            continue
+        s_remotes = grokmirror.list_repo_remotes(sibling)
+        if len(s_remotes) > rcount:
+            mdest = sibling
+            rcount = len(s_remotes)
+
+    # Migrate all siblings into the repo with most remotes
+    siblings.remove(mdest)
+    for sibling in siblings:
+        logger.info('%s: merging into %s', os.path.basename(sibling), os.path.basename(mdest))
+        s_remotes = grokmirror.list_repo_remotes(sibling, withurl=True)
+        for virtref, childpath in s_remotes:
+            if childpath not in amap[sibling]:
+                # The child repo isn't even using us
+                args = ['remote', 'remove', virtref]
+                grokmirror.run_git_command(sibling, args)
+                continue
+            logger.info('   moving: %s', childpath)
+
+            success = grokmirror.add_repo_to_objstore(mdest, childpath)
+            if not success:
+                logger.critical('Could not add %s to %s', childpath, mdest)
+                continue
+
+            logger.info('         : fetching into %s', os.path.basename(mdest))
+            success = grokmirror.fetch_objstore_repo(mdest, childpath)
+            if not success:
+                logger.critical('Failed to fetch %s from %s to %s', childpath, os.path.basename(sibling),
+                                os.path.basename(mdest))
+                continue
+            logger.info('         : repointing alternates')
+            grokmirror.set_altrepo(childpath, mdest)
+            amap[sibling].remove(childpath)
+            amap[mdest].add(childpath)
+            args = ['remote', 'remove', virtref]
+            grokmirror.run_git_command(sibling, args)
+            logger.info('         : done')
+
+    return mdest
+
+
 def check_reclone_error(fullpath, config, errors):
     reclone = None
     toplevel = os.path.realpath(config['core'].get('toplevel'))
@@ -614,7 +743,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         else:
             m_prune = True
 
-        if not altdir:
+        if not altdir and not os.path.exists(os.path.join(fullpath, 'grokmirror.do-not-objstore')):
             # Do we match any obstdir repos?
             obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots)
             if obstrepo:
@@ -639,7 +768,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     # Am I a private repo?
                     if is_private:
                         # Are there any non-private siblings?
-                        for top_sibling in grokmirror.find_siblings(fullpath, my_roots, top_roots):
+                        for top_sibling in top_siblings:
                             # Are you a private repo?
                             if grokmirror.is_private_repo(config, top_sibling):
                                 continue
@@ -857,60 +986,21 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         my_roots = grokmirror.get_repo_roots(obstrepo)
         if obstrepo in amap and len(amap[obstrepo]):
             # Is it redundant with any other objstore repos?
-            exact_merge = True
-            if config['fsck'].get('obstrepo_merge_strategy', 'exact') == 'loose':
-                exact_merge = False
-            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, exact=exact_merge)
+            strategy = config['fsck'].get('obstrepo_merge_strategy', 'exact')
+            if strategy == 'blobs':
+                siblings = find_siblings_by_blobs(obstrepo, obstdir, ratio=75)
+            else:
+                exact_merge = True
+                if strategy == 'loose':
+                    exact_merge = False
+                siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, exact=exact_merge)
             if len(siblings):
                 siblings.add(obstrepo)
-                mdest = None
-                rcount = 0
-                # Who has the most remotes?
-                for sibling in set(siblings):
-                    if sibling not in amap or not len(amap[sibling]):
-                        # Orphaned sibling, ignore it -- it will get cleaned up
-                        siblings.remove(sibling)
-                        continue
-                    s_remotes = grokmirror.list_repo_remotes(sibling)
-                    if len(s_remotes) > rcount:
-                        mdest = sibling
-                        rcount = len(s_remotes)
-
-                # Migrate all siblings into the repo with most remotes
-                siblings.remove(mdest)
-                for sibling in siblings:
-                    logger.info('%s: merging into %s', os.path.basename(sibling), os.path.basename(mdest))
-                    s_remotes = grokmirror.list_repo_remotes(sibling, withurl=True)
-                    for virtref, childpath in s_remotes:
-                        if childpath not in amap[sibling]:
-                            # The child repo isn't even using us
-                            args = ['remote', 'remove', virtref]
-                            grokmirror.run_git_command(sibling, args)
-                            continue
-                        logger.info('   moving: %s', childpath)
-
-                        success = grokmirror.add_repo_to_objstore(mdest, childpath)
-                        if not success:
-                            logger.critical('Could not add %s to %s', childpath, mdest)
-                            continue
-
-                        logger.info('         : fetching into %s', os.path.basename(mdest))
-                        success = grokmirror.fetch_objstore_repo(mdest, childpath)
-                        if not success:
-                            logger.critical('Failed to fetch %s from %s to %s', childpath, os.path.basename(sibling),
-                                            os.path.basename(mdest))
-                            continue
-                        logger.info('         : repointing alternates')
-                        grokmirror.set_altrepo(childpath, mdest)
-                        amap[sibling].remove(childpath)
-                        amap[mdest].add(childpath)
-                        args = ['remote', 'remove', virtref]
-                        grokmirror.run_git_command(sibling, args)
-                        logger.info('         : done')
-                        obst_changes = True
-                        if mdest in status:
-                            # Force full repack of merged obstrepos
-                            status[mdest]['nextcheck'] = todayiso
+                mdest = merge_siblings(siblings, amap)
+                obst_changes = True
+                if mdest in status:
+                    # Force full repack of merged obstrepos
+                    status[mdest]['nextcheck'] = todayiso
 
                 # Recalculate my roots
                 my_roots = grokmirror.get_repo_roots(obstrepo, force=True)

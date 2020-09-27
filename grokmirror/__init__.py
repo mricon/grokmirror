@@ -560,25 +560,27 @@ def find_siblings(fullpath, my_roots, known_roots, exact=False):
         # Of course we're going to match ourselves
         if fullpath == gitpath or not my_roots or not gitroots or not len(gitroots.intersection(my_roots)):
             continue
-        if gitroots.issubset(my_roots) or my_roots.issubset(gitroots):
+        if gitroots == my_roots:
             siblings.add(gitpath)
             continue
         if exact:
+            continue
+        if gitroots.issubset(my_roots) or my_roots.issubset(gitroots):
+            siblings.add(gitpath)
             continue
         sumdiff = len(gitroots.difference(my_roots)) + len(my_roots.difference(gitroots))
         # If we only differ by a single root, consider us siblings
         if sumdiff <= 2:
             siblings.add(gitpath)
             continue
-        # If we have more roots in common than we have different, consider us siblings
-        if len(gitroots.intersection(my_roots)) - sumdiff > 0:
-            siblings.add(gitpath)
 
     return siblings
 
 
-def find_best_obstrepo(mypath, obst_roots):
-    # We want to find a repo with best intersect len to total roots len ratio
+def find_best_obstrepo(mypath, obst_roots, minratio=0.2):
+    # We want to find a repo with best intersect len to total roots len ratio,
+    # but we'll ignore any repos where the ratio is too low, in order not to lump
+    # together repositories that have very weak common histories.
     myroots = get_repo_roots(mypath)
     if not myroots:
         return None
@@ -589,6 +591,8 @@ def find_best_obstrepo(mypath, obst_roots):
             continue
         icount = len(roots.intersection(myroots))
         ratio = icount / len(roots)
+        if ratio < minratio:
+            continue
         if ratio > bestratio:
             obstrepo = path
             bestratio = ratio
