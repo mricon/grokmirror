@@ -857,7 +857,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         my_roots = grokmirror.get_repo_roots(obstrepo)
         if obstrepo in amap and len(amap[obstrepo]):
             # Is it redundant with any other objstore repos?
-            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, exact=True)
+            exact_merge = True
+            if config['fsck'].get('obstrepo_merge_strategy', 'exact') == 'loose':
+                exact_merge = False
+            siblings = grokmirror.find_siblings(obstrepo, my_roots, obst_roots, exact=exact_merge)
             if len(siblings):
                 siblings.add(obstrepo)
                 mdest = None
@@ -908,6 +911,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                         if mdest in status:
                             # Force full repack of merged obstrepos
                             status[mdest]['nextcheck'] = todayiso
+
+                # Recalculate my roots
+                my_roots = grokmirror.get_repo_roots(obstrepo, force=True)
+                obst_roots[obstrepo] = my_roots
 
         # Not an else, because the previous step may have migrated things
         if obstrepo not in amap or not len(amap[obstrepo]):

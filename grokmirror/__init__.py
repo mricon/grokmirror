@@ -558,11 +558,20 @@ def find_siblings(fullpath, my_roots, known_roots, exact=False):
     siblings = set()
     for gitpath, gitroots in known_roots.items():
         # Of course we're going to match ourselves
-        if fullpath == gitpath or not my_roots or not gitroots:
+        if fullpath == gitpath or not my_roots or not gitroots or not len(gitroots.intersection(my_roots)):
             continue
-        if exact and (gitroots.issubset(my_roots) or my_roots.issubset(gitroots)):
+        if gitroots.issubset(my_roots) or my_roots.issubset(gitroots):
             siblings.add(gitpath)
-        elif not exact and len(gitroots.intersection(my_roots)):
+            continue
+        if exact:
+            continue
+        sumdiff = len(gitroots.difference(my_roots)) + len(my_roots.difference(gitroots))
+        # If we only differ by a single root, consider us siblings
+        if sumdiff <= 2:
+            siblings.add(gitpath)
+            continue
+        # If we have more roots in common than we have different, consider us siblings
+        if len(gitroots.intersection(my_roots)) - sumdiff > 0:
             siblings.add(gitpath)
 
     return siblings
