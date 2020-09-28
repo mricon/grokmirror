@@ -1105,7 +1105,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
             manifest[gitdir]['forkgroup'] = os.path.basename(obstrepo[:-4])
 
-        if obstrepo not in status or new_islandcore:
+        repack_requested = False
+        if os.path.exists(os.path.join(obstrepo, 'grokmirror.repack')):
+            repack_requested = True
+
+        if obstrepo not in status or new_islandcore or repack_requested:
             # We don't use obstrepo fingerprints, so we set it to None
             status[obstrepo] = {
                 'lastcheck': 'never',
@@ -1172,6 +1176,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             if run_git_repack(fullpath, config, repack_level):
                 status[fullpath]['lastrepack'] = todayiso
                 if repack_level > 1:
+                    try:
+                        os.unlink(os.path.join(fullpath, 'grokmirror.repack'))
+                    except FileNotFoundError:
+                        pass
+
                     status[fullpath]['lastfullrepack'] = todayiso
                     status[fullpath]['lastcheck'] = todayiso
                     status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
