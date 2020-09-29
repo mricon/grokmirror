@@ -36,6 +36,22 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 logger = logging.getLogger(__name__)
 
 
+def log_errors(fullpath, cmdargs, lines):
+    logger.critical('%s reports errors:', fullpath)
+    with open(os.path.join(fullpath, 'grokmirror.fsck.err'), 'w') as fh:
+        fh.write('# Date: %s\n' % datetime.datetime.today().strftime('%F'))
+        fh.write('# Cmd : git %s\n' % ' '.join(cmdargs))
+        count = 0
+        for line in lines:
+            fh.write('%s\n' % line)
+            logger.critical('\t%s', line)
+            count += 1
+            if count > 10:
+                logger.critical('\t [ %s more lines skipped ]', len(lines) - 10)
+                logger.critical('\t [ see %s/grokmirror.fsck.err ]', os.path.basename(fullpath))
+                break
+
+
 def get_blob_set(fullpath):
     bset = set()
     size = 0
@@ -253,10 +269,8 @@ def run_git_prune(fullpath, config):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Pruning %s returned critical errors:', fullpath)
             prune_ok = False
-            for entry in warn:
-                logger.critical("\t%s", entry)
+            log_errors(fullpath, args, warn)
             check_reclone_error(fullpath, config, warn)
 
     if isprecious:
@@ -396,10 +410,8 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Repacking %s returned critical errors:', fullpath)
             repack_ok = False
-            for entry in warn:
-                logger.critical("\t%s", entry)
+            log_errors(fullpath, args, warn)
             check_reclone_error(fullpath, config, warn)
 
     if not repack_ok:
@@ -440,11 +452,8 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('Repacking refs %s returned critical errors:', fullpath)
             repack_ok = False
-            for entry in warn:
-                logger.critical("\t%s", entry)
-
+            log_errors(fullpath, args, warn)
             check_reclone_error(fullpath, config, warn)
 
     if prune:
@@ -492,9 +501,7 @@ def run_git_fsck(fullpath, config, conn_only=False):
         if debug:
             logger.debug('Stderr: %s', '\n'.join(debug))
         if warn:
-            logger.critical('%s has critical errors:', fullpath)
-            for entry in warn:
-                logger.critical("\t%s", entry)
+            log_errors(fullpath, args, warn)
             check_reclone_error(fullpath, config, warn)
 
 
