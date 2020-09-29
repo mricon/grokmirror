@@ -298,7 +298,8 @@ def pull_worker(config, q_pull, q_spa, q_done):
                 grokmirror.setup_bare_repo(fullpath)
                 fix_remotes(toplevel, gitdir, site, config)
                 set_repo_params(fullpath, repoinfo)
-                grokmirror.set_altrepo(fullpath, altrepo)
+                if altrepo:
+                    grokmirror.set_altrepo(fullpath, altrepo)
                 action = 'pull'
             except (PermissionError, IOError) as ex:
                 logger.critical('Unable to remove %s: %s', fullpath, str(ex))
