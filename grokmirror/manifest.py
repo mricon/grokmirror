@@ -24,7 +24,7 @@ import grokmirror
 logger = logging.getLogger(__name__)
 
 
-def update_manifest(manifest, toplevel, fullpath, usenow):
+def update_manifest(manifest, toplevel, fullpath, usenow, ignorerefs):
     logger.debug('Examining %s', fullpath)
     if not grokmirror.is_bare_git_repo(fullpath):
         logger.critical('Error opening %s.', fullpath)
@@ -32,13 +32,11 @@ def update_manifest(manifest, toplevel, fullpath, usenow):
         sys.exit(1)
 
     gitdir = '/' + os.path.relpath(fullpath, toplevel)
+    repoinfo = grokmirror.get_repo_defs(toplevel, gitdir, usenow=usenow, ignorerefs=ignorerefs)
     # Ignore it if it's an empty git repository
-    fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
-    if not fp:
+    if not repoinfo['fingerprint']:
         logger.info(' manifest: ignored %s (no heads)', gitdir)
         return
-
-    repoinfo = grokmirror.get_repo_defs(toplevel, gitdir, usenow=usenow)
 
     if gitdir not in manifest:
         # In grokmirror-1.x we didn't normalize paths to be always with a leading '/', so
@@ -143,6 +141,8 @@ def parse_args():
     op.add_argument('-i', '--ignore-paths', dest='ignore', action='append',
                     default=None,
                     help='When finding git dirs, ignore these paths (accepts shell-style globbing)')
+    op.add_argument('-r', '--ignore-refs', dest='ignore_refs', action='append', default=None,
+                    help='Refs to exclude from fingerprint calculation (e.g. refs/meta/*)')
     op.add_argument('-w', '--wait-for-manifest', dest='wait',
                     action='store_true', default=False,
                     help='When running with arguments, wait if manifest is not there '
@@ -192,7 +192,8 @@ def parse_args():
 
 def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
                   check_export_ok=False, purge=False, remove=False,
-                  pretty=False, ignore=None, wait=False, verbose=False, fetchobst=False):
+                  pretty=False, ignore=None, wait=False, verbose=False, fetchobst=False,
+                  ignorerefs=None):
     global logger
     loglevel = logging.INFO
     logger = grokmirror.init_logger('manifest', logfile, loglevel, verbose)
@@ -264,7 +265,7 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
         if os.path.islink(gitdir):
             symlinks.append(gitdir)
         else:
-            update_manifest(manifest, toplevel, gitdir, usenow)
+            update_manifest(manifest, toplevel, gitdir, usenow, ignorerefs)
             if fetchobst:
                 # Do it after we're done with manifest, to avoid keeping it locked
                 tofetch.add(gitdir)
@@ -300,7 +301,7 @@ def command():
         usenow=opts.usenow, check_export_ok=opts.check_export_ok,
         purge=opts.purge, remove=opts.remove, pretty=opts.pretty,
         ignore=opts.ignore, wait=opts.wait, verbose=opts.verbose,
-        fetchobst=opts.fetchobst)
+        fetchobst=opts.fetchobst, ignorerefs=opts.ignore_refs)
 
 
 if __name__ == '__main__':

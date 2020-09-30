@@ -226,7 +226,7 @@ def get_repo_obj_info(fullpath):
     return obj_info
 
 
-def get_repo_defs(toplevel, gitdir, usenow=False):
+def get_repo_defs(toplevel, gitdir, usenow=False, ignorerefs=None):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     description = None
     try:
@@ -276,7 +276,7 @@ def get_repo_defs(toplevel, gitdir, usenow=False):
     # "state fingerprint" -- basically the output of "git show-ref | sha1sum".
     # git show-ref output is deterministic and should accurately list all refs
     # and their relation to heads/tags/etc.
-    fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True)
+    fingerprint = get_repo_fingerprint(toplevel, gitdir, force=True, ignorerefs=ignorerefs)
     # Record it in the repo for other use
     set_repo_fingerprint(toplevel, gitdir, fingerprint)
     repoinfo = {
@@ -661,7 +661,7 @@ def get_forkgroups(obstdir, toplevel):
     return forkgroups
 
 
-def get_repo_fingerprint(toplevel, gitdir, force=False):
+def get_repo_fingerprint(toplevel, gitdir, force=False, ignorerefs=None):
     fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
     if not os.path.exists(fullpath):
         logger.debug('Cannot fingerprint %s, as it does not exist', fullpath)
@@ -679,9 +679,24 @@ def get_repo_fingerprint(toplevel, gitdir, force=False):
             logger.debug('No heads in %s, nothing to fingerprint.', fullpath)
             return None
 
-        # We add the final "\n" to be compatible with cmdline output
-        # of git-show-ref
-        fingerprint = hashlib.sha1(out.encode() + b"\n").hexdigest()
+        if ignorerefs:
+            hasher = hashlib.sha1()
+            for line in out.split('\n'):
+                rhash, rname = line.split(maxsplit=1)
+                ignored = False
+                for ignoreref in ignorerefs:
+                    if fnmatch.fnmatch(rname, ignoreref):
+                        ignored = True
+                        break
+                if ignored:
+                    continue
+                hasher.update(line.encode() + b'\n')
+
+            fingerprint = hasher.hexdigest()
+        else:
+            # We add the final "\n" to be compatible with cmdline output
+            # of git-show-ref
+            fingerprint = hashlib.sha1(out.encode() + b'\n').hexdigest()
 
         # Save it for future use
         if not force:
