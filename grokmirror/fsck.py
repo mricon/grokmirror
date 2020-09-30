@@ -326,14 +326,14 @@ def run_git_repack(fullpath, config, level=1, prune=True):
 
     # Figure out what our repack flags should be.
     repack_flags = list()
-    extra_repack_flags = config['fsck'].get('extra_repack_flags', '')
-    if extra_repack_flags:
-        repack_flags += extra_repack_flags.split('\n')
+    rregular = config['fsck'].get('extra_repack_flags', '').split()
+    if len(rregular):
+        repack_flags += rregular
 
     full_repack_flags = ['-f', '--pack-kept-objects']
-    rfull = config['fsck'].get('extra_repack_flags_full', '')
+    rfull = config['fsck'].get('extra_repack_flags_full', '').split()
     if len(rfull):
-        full_repack_flags += rfull.split()
+        full_repack_flags += rfull
 
     if grokmirror.is_obstrepo(fullpath, obstdir):
         set_precious_after = True
