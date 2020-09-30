@@ -712,8 +712,14 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     fetched_obstrepos = set()
     obst_changes = False
     analyzed = 0
+    queued = 0
     logger.info('Analyzing %s (%s repos)', toplevel, len(status))
+    stattime = time.time()
     for fullpath in list(status):
+        # Give me a status every 5 seconds
+        if time.time() - stattime >= 5:
+            logger.info('      ---: %s/%s analyzed, %s queued', analyzed, len(status), queued)
+            stattime = time.time()
         start_size = get_repo_size(fullpath)
         analyzed += 1
         # We do obstrepos separately below, as logic is different
@@ -808,7 +814,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                         grokmirror.fetch_objstore_repo(obstrepo, fullpath)
                     run_git_repack(fullpath, config, level=1, prune=m_prune)
                     space_saved += start_size - get_repo_size(fullpath)
-                    logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                     obst_roots[obstrepo] = grokmirror.get_repo_roots(obstrepo, force=True)
 
         elif not os.path.isdir(altdir):
@@ -834,8 +839,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                         pre_size = get_repo_size(altdir)
                         run_git_repack(altdir, config, level=1, prune=False)
                         space_saved += pre_size - get_repo_size(altdir)
-                        logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process),
-                                    len(status))
                     else:
                         logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                         obstrepo = None
@@ -857,7 +860,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     pre_size = get_repo_size(altdir)
                     run_git_repack(altdir, config, level=1, prune=False)
                     space_saved += pre_size - get_repo_size(altdir)
-                    logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
                 else:
                     logger.critical('Unsuccessful fetching %s into %s', altdir, os.path.basename(obstrepo))
                     obstrepo = None
@@ -873,8 +875,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                         set_precious_objects(fullpath, enabled=False)
                         run_git_repack(fullpath, config, level=1, prune=m_prune)
                         space_saved += start_size - get_repo_size(fullpath)
-                        logger.info('      ---: %s analyzed, %s queued, %s total',
-                                    analyzed, len(to_process), len(status))
                 else:
                     # Grab all the objects from the previous parent, since we can't simply
                     # fetch ourselves into the obstrepo (we're private).
@@ -961,18 +961,20 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                 repack_level = None
 
         if repack_level:
+            queued += 1
             to_process.add((fullpath, 'repack', repack_level))
             if repack_level > 1:
                 logger.info('   queued: %s (full repack)', fullpath)
             else:
                 logger.info('   queued: %s (repack)', fullpath)
-            logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif schedcheck <= today or force:
+            queued += 1
             to_process.add((fullpath, 'fsck', None))
             logger.info('   queued: %s (fsck)', fullpath)
-            logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
+
+    logger.info('     done: %s analyzed, %s queued', analyzed, queued)
 
     if obst_changes:
         # Refresh the alt repo map cache
@@ -984,10 +986,15 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False, flat=True)
 
     analyzed = 0
+    queued = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
     baselines = [x.strip() for x in config['fsck'].get('baselines', '').split('\n')]
     islandcores = [x.strip() for x in config['fsck'].get('islandcores', '').split('\n')]
+    stattime = time.time()
     for obstrepo in obstrepos:
+        if time.time() - stattime >= 5:
+            logger.info('      ---: %s/%s analyzed, %s queued', analyzed, len(obstrepos), queued)
+            stattime = time.time()
         analyzed += 1
         logger.debug('Processing objstore repo: %s', os.path.basename(obstrepo))
         my_roots = grokmirror.get_repo_roots(obstrepo)
@@ -1135,19 +1142,21 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             repack_level = 1
 
         if repack_level:
+            queued += 1
             to_process.add((obstrepo, 'repack', repack_level))
             if repack_level > 1:
                 logger.info('   queued: %s (full repack)', os.path.basename(obstrepo))
             else:
                 logger.info('   queued: %s (repack)', os.path.basename(obstrepo))
-            logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
         elif repack_only or repack_all_quick or repack_all_full:
             continue
         elif (nextcheck <= today or force) and not repack_only:
+            queued += 1
             status[obstrepo]['nextcheck'] = nextcheck.strftime('%F')
             to_process.add((obstrepo, 'fsck', None))
             logger.info('   queued: %s (fsck)', os.path.basename(obstrepo))
-            logger.info('      ---: %s analyzed, %s queued, %s total', analyzed, len(to_process), len(status))
+
+    logger.info('     done: %s analyzed, %s queued', analyzed, queued)
 
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed
@@ -1220,7 +1229,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             logger.info('     done: %ss, %s saved', elapsed, get_human_size(saved))
         else:
             logger.info('     done: %ss', elapsed)
-        logger.info('      ---: %s done, %s queued', total_checked, len(to_process)-total_checked)
+        if space_saved > 0:
+            logger.info('      ---: %s done, %s queued, %s saved', total_checked,
+                        len(to_process)-total_checked, get_human_size(space_saved))
+        else:
+            logger.info('      ---: %s done, %s queued', total_checked, len(to_process)-total_checked)
 
         # Write status file after each check, so if the process dies, we won't
         # have to recheck all the repos we've already checked
@@ -1228,7 +1241,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         with open(statusfile, 'w') as stfh:
             stfh.write(json.dumps(status, indent=2))
 
-    logger.info('Processed %s repos in %0.2fs, %s saved', total_checked, total_elapsed, get_human_size(space_saved))
+    logger.info('Processed %s repos in %0.2fs', total_checked, total_elapsed)
 
     with open(statusfile, 'w') as stfh:
         stfh.write(json.dumps(status, indent=2))
