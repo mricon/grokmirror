@@ -983,7 +983,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         grokmirror.manifest_lock(manifile)
         manifest = grokmirror.read_manifest(manifile)
 
-    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False, flat=True)
+    obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
 
     analyzed = 0
     queued = 0

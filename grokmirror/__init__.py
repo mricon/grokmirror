@@ -738,7 +738,7 @@ def is_obstrepo(fullpath, obstdir):
     return fullpath.find(obstdir) == 0
 
 
-def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True, flat=False):
+def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True):
     global _alt_repo_map
     if _alt_repo_map is None:
         _alt_repo_map = dict()
@@ -752,39 +752,44 @@ def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=Tr
     logger.info('   search: finding all repos in %s', toplevel)
     logger.debug('Ignore list: %s', ' '.join(ignore))
     gitdirs = set()
-    tp = pathlib.Path(toplevel)
-    if flat:
-        globpatt = '*.git'
-    else:
-        globpatt = '**/*.git'
-    for subp in tp.glob(globpatt):
-        # Should we ignore this dir?
-        ignored = False
-        for ignoreglob in ignore:
-            if subp.match(ignoreglob):
-                ignored = True
-                break
-        if ignored:
+    for root, dirs, files in os.walk(toplevel, topdown=True):
+        if not len(dirs):
             continue
-        fullpath = subp.resolve().as_posix()
-        if not is_bare_git_repo(fullpath):
-            continue
-        if exclude_objstore and os.path.exists(os.path.join(fullpath, 'grokmirror.objstore')):
-            continue
-        if normalize:
-            fullpath = os.path.realpath(fullpath)
 
-        logger.debug('Found %s', fullpath)
-        if fullpath not in gitdirs:
-            gitdirs.add(fullpath)
-
-        if build_amap:
-            altrepo = get_altrepo(fullpath)
-            if not altrepo:
+        torm = set()
+        for name in dirs:
+            fullpath = os.path.join(root, name)
+            # Should we ignore this dir?
+            ignored = False
+            for ignoredir in ignore:
+                if fnmatch.fnmatch(fullpath, ignoredir):
+                    torm.add(name)
+                    ignored = True
+                    break
+            if ignored:
                 continue
-            if altrepo not in _alt_repo_map:
-                _alt_repo_map[altrepo] = set()
-            _alt_repo_map[altrepo].add(fullpath)
+            if not is_bare_git_repo(fullpath):
+                continue
+            if exclude_objstore and os.path.exists(os.path.join(fullpath, 'grokmirror.objstore')):
+                continue
+            if normalize:
+                fullpath = os.path.realpath(fullpath)
+
+            logger.debug('Found %s', os.path.join(root, name))
+            gitdirs.add(fullpath)
+            torm.add(name)
+
+            if build_amap:
+                altrepo = get_altrepo(fullpath)
+                if not altrepo:
+                    continue
+                if altrepo not in _alt_repo_map:
+                    _alt_repo_map[altrepo] = set()
+                _alt_repo_map[altrepo].add(fullpath)
+
+        for name in torm:
+            # don't recurse into the found *.git dirs
+            dirs.remove(name)
 
     return gitdirs
 
