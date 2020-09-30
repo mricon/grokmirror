@@ -4,7 +4,7 @@
 %global userhome  %{_sharedstatedir}/grokmirror
 
 Name:           python-%{srcname}
-Version:        2.0.0
+Version:        2.0.1
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -85,5 +85,8 @@ exit 0
 %{_mandir}/*/*
 
 %changelog
+* Wed Sep 30 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.1-1
+- Update to 2.0.1
+
 * Mon Sep 21 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.0-1
 - Initial 2.0.0 packaging

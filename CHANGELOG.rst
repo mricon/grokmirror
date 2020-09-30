@@ -1,3 +1,13 @@
+v2.0.1 (2020-09-30)
+-------------------
+- fix potential corruption when migrating repositories with existing
+  alternates to new object storage format
+- improve grok-fsck console output to be less misleading for large repo
+  collections (was misreporting obstrepo/total repo numbers)
+- use a faster repo search algorithm that doesn't needlessly recurse
+  into git repos themselves, once found
+
+
 v2.0.0 (2020-09-21)
 -------------------
 Major rewrite to improve shared object storage and replication for VERY
