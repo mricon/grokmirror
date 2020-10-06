@@ -25,10 +25,10 @@ import time
 import gzip
 import json
 import fnmatch
-import subprocess
 import shutil
 import tempfile
 import signal
+import shlex
 
 import calendar
 import uuid
@@ -506,27 +506,32 @@ def set_agefile(toplevel, gitdir, last_modified):
     logger.debug('Wrote "%s" into %s', cgit_fmt, agefile)
 
 
-def run_post_update_hook(toplevel, gitdir, hookscript):
-    if not len(hookscript):
+def run_post_update_hook(toplevel, gitdir, hookscripts):
+    if not len(hookscripts):
         return
 
-    if not os.access(hookscript, os.X_OK):
-        logger.warning('post_update_hook %s is not executable', hookscript)
-        return
+    for hookscript in hookscripts.split('\n'):
+        hookscript = hookscript.strip()
+        sp = shlex.shlex(hookscript, posix=True)
+        sp.whitespace_split = True
+        args = list(sp)
 
-    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
-    args = [hookscript, fullpath]
-    logger.debug('Running: %s', ' '.join(args))
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        logger.info('     hook: %s', args[0])
+        if not os.access(args[0], os.X_OK):
+            logger.warning('post_update_hook %s is not executable', hookscript)
+            continue
 
-    error = error.decode().strip()
-    output = output.decode().strip()
-    if error:
-        # Put hook stderror into warning
-        logger.warning('Hook Stderr (%s): %s', gitdir, error)
-    if output:
-        # Put hook stdout into info
-        logger.info('Hook Stdout (%s): %s', gitdir, output)
+        fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+        args.append(fullpath)
+        logger.debug('Running: %s', ' '.join(args))
+        ecode, output, error = grokmirror.run_shell_command(args)
+
+        if error:
+            # Put hook stderror into warning
+            logger.warning('Hook Stderr (%s): %s', gitdir, error)
+        if output:
+            # Put hook stdout into info
+            logger.info('Hook Stdout (%s): %s', gitdir, output)
 
 
 def pull_repo(toplevel, gitdir, remotename):
