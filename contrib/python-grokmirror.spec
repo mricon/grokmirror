@@ -4,7 +4,7 @@
 %global userhome  %{_sharedstatedir}/grokmirror
 
 Name:           python-%{srcname}
-Version:        2.0.1
+Version:        2.0.2
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -59,6 +59,7 @@ Obsoletes:     python-%{srcname} < 2, python2-%{srcname} < 2
 %{__install} -m 0644 contrib/*.timer %{buildroot}/%{_unitdir}/
 %{__install} -m 0644 contrib/logrotate %{buildroot}/%{_sysconfdir}/logrotate.d/grokmirror
 %{__install} -m 0644 grokmirror.conf %{buildroot}/%{_sysconfdir}/%{srcname}/grokmirror.conf.example
+%{__install} -m 0755 contrib/pi-piper.py %{buildroot}/%{_bindir}/pi-piper
 
 echo "d /run/%{srcname} 0755 %{username} %{groupname}" > %{buildroot}/%{_tmpfilesdir}/%{srcname}.conf
 
@@ -71,7 +72,7 @@ exit 0
 
 %files -n python3-%{srcname}
 %license LICENSE.txt
-%doc README.rst grokmirror.conf
+%doc README.rst grokmirror.conf contrib/pi-piper.conf
 %dir %attr(0750, %{username}, %{groupname}) %{userhome}
 %dir %attr(0755, %{username}, %{groupname}) %{_localstatedir}/log/%{srcname}/
 %dir %attr(0755, %{username}, %{groupname}) /run/%{srcname}/
@@ -81,10 +82,14 @@ exit 0
 %{_unitdir}/*
 %{python3_sitelib}/%{srcname}-*.egg-info/
 %{python3_sitelib}/%{srcname}/
-%{_bindir}/grok-*
+%{_bindir}/*
 %{_mandir}/*/*
 
 %changelog
+* Tue Oct 06 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.2-1
+- Update to 2.0.2
+- Install pi-piper into bindir
+
 * Wed Sep 30 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.1-1
 - Update to 2.0.1
 
