@@ -26,11 +26,16 @@ config file. The simplest configuration for lore.kernel.org is::
     -----------------------
     [DEFAULT]
     pipe = /usr/bin/procmail
+    # Prune successfully processed messages
     shallow = yes
 
     ~/.procmailrc
     -------------
     DEFAULT=$HOME/Maildir/
+    
+    # Don't deliver cross-posted duplicates
+    :0 Wh: .msgid.lock
+    | formail -D 8192 .msgid.cache
 
     ~/.config/lore.conf
     -------------------
