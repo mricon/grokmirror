@@ -927,15 +927,22 @@ def load_config_file(cfgfile):
         sys.stderr.write('       Perhaps this is a grokmirror-1.x config file?\n')
         sys.exit(1)
 
-    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    toplevel = os.path.realpath(os.path.expanduser(config['core'].get('toplevel')))
     if not os.access(toplevel, os.W_OK):
         logger.critical('Toplevel %s does not exist or is not writable', toplevel)
         sys.exit(1)
+    # Just in case we did expanduser
+    config['core']['toplevel'] = toplevel
 
     obstdir = config['core'].get('objstore', None)
     if obstdir is None:
         obstdir = os.path.join(toplevel, 'objstore')
         config['core']['objstore'] = obstdir
+
+    # Handle some other defaults
+    manifile = config['core'].get('manifest')
+    if not manifile:
+        config['core']['manifest'] = os.path.join(toplevel, 'manifest.js.gz')
 
     fstat = os.stat(cfgfile)
     # stick last config file modification date into the config object,
@@ -1004,7 +1011,7 @@ def init_logger(subcommand, logfile, loglevel, verbose):
     logger.setLevel(logging.DEBUG)
 
     if logfile:
-        ch = logging.handlers.WatchedFileHandler(logfile)
+        ch = logging.handlers.WatchedFileHandler(os.path.expanduser(logfile))
         formatter = logging.Formatter(subcommand + '[%(process)d] %(asctime)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
         ch.setLevel(loglevel)

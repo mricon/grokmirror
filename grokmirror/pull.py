@@ -511,12 +511,12 @@ def run_post_update_hook(toplevel, gitdir, hookscripts):
         return
 
     for hookscript in hookscripts.split('\n'):
-        hookscript = hookscript.strip()
+        hookscript = os.path.expanduser(hookscript.strip())
         sp = shlex.shlex(hookscript, posix=True)
         sp.whitespace_split = True
         args = list(sp)
 
-        logger.info('     hook: %s', args[0])
+        logger.info('     hook: %s', ' '.join(args))
         if not os.access(args[0], os.X_OK):
             logger.warning('post_update_hook %s is not executable', hookscript)
             continue
@@ -1063,7 +1063,6 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     pull_threads = config['pull'].getint('pull_threads', 0)
     if pull_threads < 1:
         # take half of available CPUs by default
-        logger.info('pull_threads is not set, consider setting it')
         pull_threads = int(mp.cpu_count() / 2)
 
     busy = set()

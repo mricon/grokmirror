@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# This is a ready-made post_update_hook for mirroring public-inbox repositories.
-# updated via grokmirror to arbitrary commands.
+# This is a ready-made post_update_hook script for piping messages from
+# mirrored public-inbox repositories to arbitrary commands (e.g. procmail).
 #
 
 __author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
@@ -36,20 +36,9 @@ def git_get_new_revs(fullpath: str, pipelast: Optional[int] = None) -> list:
     if pipelast:
         rev_range = '-n %d' % pipelast
     else:
-        try:
-            with open(statf, 'r') as fh:
-                latest = fh.read().strip()
-                rev_range = f'{latest}..'
-        except FileNotFoundError:
-            logger.info('Initial run for %s', fullpath)
-            args = ['rev-list', '-n', '1', 'master']
-            ecode, out, err = grokmirror.run_git_command(fullpath, args)
-            if ecode > 0:
-                raise KeyError('Could not list revs in %s' % fullpath)
-            # Just write latest into the tracking file and return nothing
-            with open(statf, 'w') as fh:
-                fh.write(out.strip())
-                return list()
+        with open(statf, 'r') as fh:
+            latest = fh.read().strip()
+            rev_range = f'{latest}..'
 
     args = ['rev-list', '--pretty=oneline', '--reverse', rev_range, 'master']
     ecode, out, err = grokmirror.run_git_command(fullpath, args)
@@ -66,7 +55,33 @@ def git_get_new_revs(fullpath: str, pipelast: Optional[int] = None) -> list:
     return newrevs
 
 
-def run_pi_repo(repo, pipedef, dryrun=False, pipelast=None):
+def reshallow(repo: str, commit_id: str) -> int:
+    with open(os.path.join(repo, 'shallow'), 'w') as fh:
+        fh.write(commit_id)
+        fh.write('\n')
+    logger.info('   prune: %s ', repo)
+    ecode, out, err = grokmirror.run_git_command(repo, ['gc', '--prune=now'])
+    return ecode
+
+
+def init_piper_tracking(repo: str, shallow: bool) -> bool:
+    logger.info('Initial setup for %s', repo)
+    args = ['rev-list', '-n', '1', 'master']
+    ecode, out, err = grokmirror.run_git_command(repo, args)
+    if ecode > 0 or not out:
+        logger.info('Could not list revs in %s', repo)
+        return False
+    # Just write latest into the tracking file and return
+    latest = out.strip()
+    statf = os.path.join(repo, 'pi-piper.latest')
+    with open(statf, 'w') as fh:
+        fh.write(latest)
+    if shallow:
+        reshallow(repo, latest)
+
+
+def run_pi_repo(repo: str, pipedef: str, dryrun: bool = False, shallow: bool = False,
+                pipelast: Optional[int] = None) -> None:
     logger.info('Checking %s', repo)
     sp = shlex.shlex(pipedef, posix=True)
     sp.whitespace_split = True
@@ -76,6 +91,14 @@ def run_pi_repo(repo, pipedef, dryrun=False, pipelast=None):
         sys.exit(1)
 
     statf = os.path.join(repo, 'pi-piper.latest')
+    if not os.path.exists(statf):
+        if dryrun:
+            logger.info('Would have set up piper for %s [DRYRUN]', repo)
+            return
+        if not init_piper_tracking(repo, shallow):
+            logger.critical('Unable to set up piper for %s', repo)
+        return
+
     try:
         revlist = git_get_new_revs(repo, pipelast=pipelast)
     except KeyError:
@@ -88,8 +111,12 @@ def run_pi_repo(repo, pipedef, dryrun=False, pipelast=None):
         #      then going through history to find the new commit-id of that
         #      message. Unless, of course, that's the exact message that got
         #      deleted in the first place. :/
+        #      This also makes it hard with shallow repos, since we'd have
+        #      to unshallow them first in order to find that message.
         logger.critical('Assuming the repository got rebased, dropping all history.')
         os.unlink(statf)
+        if not dryrun:
+            init_piper_tracking(repo, shallow)
         revlist = git_get_new_revs(repo)
 
     if not revlist:
@@ -119,18 +146,20 @@ def run_pi_repo(repo, pipedef, dryrun=False, pipelast=None):
         with open(statf, 'w') as fh:
             fh.write(latest_good)
             logger.info('Wrote %s', statf)
+        if ecode == 0 and shallow:
+            reshallow(repo, latest_good)
 
     sys.exit(ecode)
 
 
-def main():
+def command():
     import argparse
     from configparser import ConfigParser, ExtendedInterpolation
 
     global logger
 
     # noinspection PyTypeChecker
-    op = argparse.ArgumentParser(prog='pi-piper',
+    op = argparse.ArgumentParser(prog='grok-pi-piper',
                                  description='Pipe new messages from public-inbox repositories to arbitrary commands',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     op.add_argument('-v', '--verbose', action='store_true',
@@ -149,11 +178,12 @@ def main():
 
     opts = op.parse_args()
 
-    if not os.path.exists(opts.config):
-        sys.stderr.write('ERORR: File does not exist: %s\n' % opts.config)
+    cfgfile = os.path.expanduser(opts.config)
+    if not cfgfile:
+        sys.stderr.write('ERORR: File does not exist: %s\n' % cfgfile)
         sys.exit(1)
     config = ConfigParser(interpolation=ExtendedInterpolation())
-    config.read(os.path.expanduser(opts.config))
+    config.read(os.path.expanduser(cfgfile))
 
     # Find out the section that we want from the config file
     section = 'DEFAULT'
@@ -166,16 +196,18 @@ def main():
         # Quick exit
         sys.exit(0)
 
-    logfile = os.path.expanduser(config[section].get('logfile'))
+    logfile = config[section].get('log')
     if config[section].get('loglevel') == 'debug':
         loglevel = logging.DEBUG
     else:
         loglevel = logging.INFO
 
+    shallow = config[section].getboolean('shallow', False) # noqa
+
     logger = grokmirror.init_logger('pull', logfile, loglevel, opts.verbose)
 
-    run_pi_repo(opts.repo, pipe, dryrun=opts.dryrun, pipelast=opts.pipelast)
+    run_pi_repo(opts.repo, pipe, dryrun=opts.dryrun, shallow=shallow, pipelast=opts.pipelast)
 
 
 if __name__ == '__main__':
-    main()
+    command()

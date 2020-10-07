@@ -59,7 +59,6 @@ Obsoletes:     python-%{srcname} < 2, python2-%{srcname} < 2
 %{__install} -m 0644 contrib/*.timer %{buildroot}/%{_unitdir}/
 %{__install} -m 0644 contrib/logrotate %{buildroot}/%{_sysconfdir}/logrotate.d/grokmirror
 %{__install} -m 0644 grokmirror.conf %{buildroot}/%{_sysconfdir}/%{srcname}/grokmirror.conf.example
-%{__install} -m 0755 contrib/pi-piper.py %{buildroot}/%{_bindir}/pi-piper
 
 echo "d /run/%{srcname} 0755 %{username} %{groupname}" > %{buildroot}/%{_tmpfilesdir}/%{srcname}.conf
 
@@ -72,7 +71,7 @@ exit 0
 
 %files -n python3-%{srcname}
 %license LICENSE.txt
-%doc README.rst grokmirror.conf contrib/pi-piper.conf
+%doc README.rst grokmirror.conf pi-piper.conf
 %dir %attr(0750, %{username}, %{groupname}) %{userhome}
 %dir %attr(0755, %{username}, %{groupname}) %{_localstatedir}/log/%{srcname}/
 %dir %attr(0755, %{username}, %{groupname}) /run/%{srcname}/

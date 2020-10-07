@@ -64,6 +64,7 @@ setup(
             "grok-fsck=grokmirror.fsck:command",
             "grok-manifest=grokmirror.manifest:command",
             "grok-bundle=grokmirror.bundle:command",
+            "grok-pi-piper=grokmirror.pi-piper:command",
         ]
     }
 )

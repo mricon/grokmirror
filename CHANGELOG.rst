@@ -1,7 +1,7 @@
 v2.0.2 (2020-10-06)
 - Provide pi-piper utility for piping new messages from public-inbox
   repositories. It can be specified as post_update_hook:
-  post_update_hook = /usr/bin/pi-piper -c ~/pi-piper.conf
+  post_update_hook = /usr/bin/grok-pi-piper -c ~/.config/pi-piper.conf
 - Add -r option to grok-manifest to ignore specific refs when calculating
   repository fingerprint. This is mostly useful for mirroring from gerrit.
 
