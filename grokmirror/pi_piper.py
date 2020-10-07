@@ -78,6 +78,7 @@ def init_piper_tracking(repo: str, shallow: bool) -> bool:
         fh.write(latest)
     if shallow:
         reshallow(repo, latest)
+    return True
 
 
 def run_pi_repo(repo: str, pipedef: str, dryrun: bool = False, shallow: bool = False,
