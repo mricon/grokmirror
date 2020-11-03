@@ -912,6 +912,13 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                     if fnmatch.fnmatch(gitdir, entry):
                         exclude = True
                         break
+                # Refuse to purge ffonly repos
+                for globpatt in set([x.strip() for x in config['pull'].get('ffonly', '').split('\n')]):
+                    if fnmatch.fnmatch(gitdir, globpatt):
+                        # Woah, these are not supposed to be deleted, ever
+                        logger.critical('Refusing to purge ffonly repo %s', gitdir)
+                        exclude = True
+                        break
                 if not exclude:
                     to_purge.add(gitdir)
 
