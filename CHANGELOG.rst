@@ -1,3 +1,8 @@
+v2.0.3 (2020-11-04)
+- Refuse to delete ffonly repos
+- Add new experimental bundle_preload feature for generating objstore
+  repo bundles and using them to preload objstores on the mirrors
+
 v2.0.2 (2020-10-06)
 - Provide pi-piper utility for piping new messages from public-inbox
   repositories. It can be specified as post_update_hook:
