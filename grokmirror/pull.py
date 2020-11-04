@@ -236,6 +236,43 @@ def spa_worker(config, q_spa, pauseonload):
         logger.info('      spa: %s (done: %s)', gitdir, ', '.join(done))
 
 
+def objstore_repo_preload(config, obstrepo):
+    bname = os.path.basename(obstrepo)[:-4]
+    obstdir = os.path.realpath(config['core'].get('objstore'))
+    purl = config['remote'].get('preload_bundle_url')
+    if not purl:
+        # wing it -- it only costs us a single http request check
+        site = config['remote'].get('site')
+        if site and site.startswith('http'):
+            purl = '%s/objstore/preload' % site.rstrip('/')
+        else:
+            return
+    burl = '%s/%s.bundle' % (purl.rstrip('/'), bname)
+    bfile = os.path.join(obstdir, '%s.bundle' % bname)
+    sess = grokmirror.get_requests_session()
+    resp = sess.get(burl, stream=True)
+    resp.raise_for_status()
+    logger.info(' objstore: getting preload bundle for %s', bname)
+    with open(bfile, 'wb') as fh:
+        for chunk in resp.iter_content(chunk_size=8192):
+            fh.write(chunk)
+    resp.close()
+
+    # Now we clone from it into the objstore repo
+    ecode, out, err = grokmirror.run_git_command(obstrepo, ['remote', 'add', '--mirror=fetch', '_preload', bfile])
+    if ecode == 0:
+        logger.info(' objstore: preloading %s from the bundle', bname)
+        args = ['remote', 'update', '_preload']
+        ecode, out, err = grokmirror.run_git_command(obstrepo, args)
+        if ecode > 0:
+            logger.info(' objstore: not able to preload, will clone repo-by-repo')
+        else:
+            logger.info(' objstore: successful preload')
+    # Regardless of what happened, we remove _preload and the bundle, then move on
+    grokmirror.run_git_command(obstrepo, ['remote', 'rm', '_preload'])
+    os.unlink(bfile)
+
+
 def pull_worker(config, q_pull, q_spa, q_done):
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     obstdir = os.path.realpath(config['core'].get('objstore'))
@@ -262,6 +299,11 @@ def pull_worker(config, q_pull, q_spa, q_done):
             time.sleep(5)
             q_pull.put((gitdir, repoinfo, action, q_action))
             continue
+
+        altrepo = grokmirror.get_altrepo(fullpath)
+        obstrepo = None
+        if altrepo and grokmirror.is_obstrepo(altrepo, obstdir):
+            obstrepo = altrepo
 
         if action == 'purge':
             # Is it a symlink?
@@ -308,6 +350,14 @@ def pull_worker(config, q_pull, q_spa, q_done):
         if action in ('pull', 'objstore_migrate'):
             r_fp = repoinfo.get('fingerprint')
             my_fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
+            if obstrepo:
+                o_obj_info = grokmirror.get_repo_obj_info(obstrepo)
+                if o_obj_info.get('count') == '0' and o_obj_info.get('in-pack') == '0' and not my_fp:
+                    # Try to preload the objstore repo directly
+                    try:
+                        objstore_repo_preload(config, obstrepo)
+                    except: # noqa
+                        pass
 
             if r_fp != my_fp:
                 # Make sure we have the remote set up
@@ -317,7 +367,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
                 logger.info('    fetch: %s', gitdir)
                 retries = 1
                 while True:
-                    success = pull_repo(toplevel, gitdir, remotename)
+                    success = pull_repo(fullpath, remotename)
                     if success:
                         break
                     retries += 1
@@ -534,8 +584,7 @@ def run_post_update_hook(toplevel, gitdir, hookscripts):
             logger.info('Hook Stdout (%s): %s', gitdir, output)
 
 
-def pull_repo(toplevel, gitdir, remotename):
-    fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
+def pull_repo(fullpath, remotename):
     args = ['remote', 'update', remotename, '--prune']
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
@@ -562,9 +611,9 @@ def pull_repo(toplevel, gitdir, remotename):
             else:
                 debug.append(line)
         if debug:
-            logger.debug('Stderr (%s): %s', gitdir, '\n'.join(debug))
+            logger.debug('Stderr (%s): %s', fullpath, '\n'.join(debug))
         if warn:
-            logger.warning('Stderr (%s): %s', gitdir, '\n'.join(warn))
+            logger.warning('Stderr (%s): %s', fullpath, '\n'.join(warn))
 
     return success
 

@@ -29,6 +29,8 @@ import fnmatch
 import io
 import smtplib
 
+from pathlib import Path
+
 from email.message import EmailMessage
 from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 
@@ -50,6 +52,15 @@ def log_errors(fullpath, cmdargs, lines):
                 logger.critical('\t [ %s more lines skipped ]', len(lines) - 10)
                 logger.critical('\t [ see %s/grokmirror.fsck.err ]', os.path.basename(fullpath))
                 break
+
+
+def gen_preload_bundle(fullpath, config):
+    outdir = config['fsck'].get('preload_bundle_outdir')
+    Path(outdir).mkdir(parents=True, exist_ok=True)
+    bname = '%s.bundle' % os.path.basename(fullpath)[:-4]
+    args = ['bundle', 'create', os.path.join(outdir, bname), '--all']
+    logger.info(' bundling: %s', bname)
+    grokmirror.run_git_command(fullpath, args)
 
 
 def get_blob_set(fullpath):
@@ -1043,6 +1054,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         set_baseline = False
         set_islandcore = False
         new_islandcore = False
+        valid_virtrefs = set()
         for virtref, childpath in my_remotes:
             # Is it still relevant?
             if childpath not in amap[obstrepo]:
@@ -1050,6 +1062,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                 grokmirror.remove_from_objstore(obstrepo, childpath)
                 logger.info('%s: removed remote %s (no longer used)', os.path.basename(obstrepo), childpath)
                 continue
+            valid_virtrefs.add(virtref)
 
             # Does it need fetching?
             fetch = True
@@ -1123,7 +1136,24 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         if os.path.exists(os.path.join(obstrepo, 'grokmirror.repack')):
             repack_requested = True
 
-        if obstrepo not in status or new_islandcore or repack_requested:
+        # Go through all our refs and find all stale virtrefs
+        args = ['for-each-ref', '--format=%(refname)', 'refs/virtual/']
+        trimmed_virtrefs = set()
+        ecode, out, err = grokmirror.run_git_command(obstrepo, args)
+        if ecode == 0 and out:
+            for line in out.split('\n'):
+                chunks = line.split('/')
+                if len(chunks) < 3:
+                    # Where did this come from?
+                    logger.debug('Weird ref %s in objstore repo %s', line, obstrepo)
+                    continue
+                virtref = chunks[2]
+                if virtref not in valid_virtrefs and virtref not in trimmed_virtrefs:
+                    logger.info('     trim: stale virtref %s', virtref)
+                    grokmirror.objstore_trim_virtref(obstrepo, virtref)
+                    trimmed_virtrefs.add(virtref)
+
+        if obstrepo not in status or new_islandcore or trimmed_virtrefs or repack_requested:
             # We don't use obstrepo fingerprints, so we set it to None
             status[obstrepo] = {
                 'lastcheck': 'never',
@@ -1200,6 +1230,9 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                     status[fullpath]['lastfullrepack'] = todayiso
                     status[fullpath]['lastcheck'] = todayiso
                     status[fullpath]['nextcheck'] = nextcheck.strftime('%F')
+                    # Do we need to generate a preload bundle?
+                    if config['fsck'].get('preload_bundle_outdir') and grokmirror.is_obstrepo(fullpath, obstdir):
+                        gen_preload_bundle(fullpath, config)
                     logger.info('     next: %s', status[fullpath]['nextcheck'])
             else:
                 logger.warning('Repacking %s was unsuccessful', fullpath)

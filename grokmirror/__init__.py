@@ -423,6 +423,15 @@ def objstore_virtref(fullpath):
     return vh.hexdigest()[:12]
 
 
+def objstore_trim_virtref(obstrepo, virtref):
+    args = ['for-each-ref', '--format', 'delete %(refname)', f'refs/virtual/{virtref}']
+    ecode, out, err = run_git_command(obstrepo, args)
+    if ecode == 0 and len(out):
+        out += '\n'
+        args = ['update-ref', '--stdin']
+        run_git_command(obstrepo, args, stdin=out.encode())
+
+
 def remove_from_objstore(obstrepo, fullpath):
     # is fullpath still using us?
     altrepo = get_altrepo(fullpath)
@@ -436,16 +445,7 @@ def remove_from_objstore(obstrepo, fullpath):
         os.unlink(os.path.join(fullpath, 'objects', 'info', 'alternates'))
 
     virtref = objstore_virtref(fullpath)
-    # Find all refs we have from this sibling
-    args = ['for-each-ref', '--format', 'delete %(refname)', 'refs/virtual/%s' % virtref]
-    ecode, out, err = run_git_command(obstrepo, args)
-    if ecode == 0 and len(out):
-        out += '\n'
-        args = ['update-ref', '--stdin']
-        ecode, out, err = run_git_command(obstrepo, args, stdin=out.encode())
-        # Remove the remote
-        if ecode > 0:
-            return False
+    objstore_trim_virtref(obstrepo, virtref)
 
     args = ['remote', 'remove', virtref]
     run_git_command(obstrepo, args)
