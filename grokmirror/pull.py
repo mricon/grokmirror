@@ -211,7 +211,9 @@ def spa_worker(config, q_spa, pauseonload):
             done.append(action)
             if action == 'objstore':
                 altrepo = grokmirror.get_altrepo(fullpath)
-                grokmirror.fetch_objstore_repo(altrepo, fullpath)
+                # Should we use plumbing for this?
+                use_plumbing = config['core'].getboolean('objstore_uses_plumbing', False)
+                grokmirror.fetch_objstore_repo(altrepo, fullpath, use_plumbing=use_plumbing)
 
             elif action == 'repack':
                 logger.debug('quick-repacking %s', fullpath)
@@ -237,16 +239,11 @@ def spa_worker(config, q_spa, pauseonload):
 
 
 def objstore_repo_preload(config, obstrepo):
-    bname = os.path.basename(obstrepo)[:-4]
-    obstdir = os.path.realpath(config['core'].get('objstore'))
     purl = config['remote'].get('preload_bundle_url')
     if not purl:
-        # wing it -- it only costs us a single http request check
-        site = config['remote'].get('site')
-        if site and site.startswith('http'):
-            purl = '%s/objstore/preload' % site.rstrip('/')
-        else:
-            return
+        return
+    bname = os.path.basename(obstrepo)[:-4]
+    obstdir = os.path.realpath(config['core'].get('objstore'))
     burl = '%s/%s.bundle' % (purl.rstrip('/'), bname)
     bfile = os.path.join(obstdir, '%s.bundle' % bname)
     sess = grokmirror.get_requests_session()
@@ -267,6 +264,10 @@ def objstore_repo_preload(config, obstrepo):
         if ecode > 0:
             logger.info(' objstore: not able to preload, will clone repo-by-repo')
         else:
+            # now pack refs and generate a commit graph
+            grokmirror.run_git_command(obstrepo, ['pack-refs', '--all'])
+            if grokmirror.git_newer_than('2.18.0'):
+                grokmirror.run_git_command(obstrepo, ['commit-graph', 'write'])
             logger.info(' objstore: successful preload')
     # Regardless of what happened, we remove _preload and the bundle, then move on
     grokmirror.run_git_command(obstrepo, ['remote', 'rm', '_preload'])
@@ -279,6 +280,8 @@ def pull_worker(config, q_pull, q_spa, q_done):
     maxretries = config['pull'].getint('retries', 3)
     site = config['remote'].get('site')
     remotename = config['pull'].get('remotename', '_grokmirror')
+    # Should we use plumbing for objstore operations?
+    objstore_uses_plumbing = config['core'].getboolean('objstore_uses_plumbing', False)
 
     while True:
         try:
@@ -388,12 +391,13 @@ def pull_worker(config, q_pull, q_spa, q_done):
                             if o_obj_info.get('count') == '0' and o_obj_info.get('in-pack') == '0':
                                 # We fetch right now, as other repos may be waiting on these objects
                                 logger.info(' objstore: %s', gitdir)
-                                grokmirror.fetch_objstore_repo(altrepo, fullpath)
-                                spa_actions.append('repack')
+                                grokmirror.fetch_objstore_repo(altrepo, fullpath, use_plumbing=objstore_uses_plumbing)
+                                if not objstore_uses_plumbing:
+                                    spa_actions.append('repack')
                             else:
                                 # We lazy-fetch in the spa
                                 spa_actions.append('objstore')
-                                if my_fp is None:
+                                if my_fp is None and not objstore_uses_plumbing:
                                     # Initial clone, trigger a repack after objstore
                                     spa_actions.append('repack')
 

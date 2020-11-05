@@ -38,7 +38,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 
-VERSION = '2.0.3'
+VERSION = '2.0.4-dev'
 MANIFEST_LOCKH = None
 REPO_LOCKH = dict()
 GITBIN = '/usr/bin/git'
@@ -508,7 +508,82 @@ def add_repo_to_objstore(obstrepo, fullpath):
     return True
 
 
-def fetch_objstore_repo(obstrepo, fullpath=None, pack_refs=False):
+def _fetch_objstore_repo_using_plumbing(srcrepo, obstrepo, virtref):
+    # Copies objects to objstore repos using direct git plumbing
+    # as opposed to using "fetch". See discussion here:
+    # http://lore.kernel.org/git/20200720173220.GB2045458@coredump.intra.peff.net
+    # First, hardlink all objects and packs
+    srcobj = os.path.join(srcrepo, 'objects')
+    dstobj = os.path.join(obstrepo, 'objects')
+    torm = set()
+    for root, dirs, files in os.walk(srcobj, topdown=True):
+        if 'info' in dirs:
+            dirs.remove('info')
+        subpath = root.replace(srcobj, '').lstrip('/')
+        for file in files:
+            srcpath = os.path.join(root, file)
+            if file.endswith('.bitmap'):
+                torm.add(srcpath)
+                continue
+            dstpath = os.path.join(dstobj, subpath, file)
+            if not os.path.exists(dstpath):
+                pathlib.Path(os.path.dirname(dstpath)).mkdir(parents=True, exist_ok=True)
+                os.link(srcpath, dstpath)
+                torm.add(srcpath)
+
+    # Now we generate a list of refs on both sides
+    srcargs = ['for-each-ref', f'--format=%(objectname) refs/virtual/{virtref}/%(refname:lstrip=1)']
+    ecode, out, err = run_git_command(srcrepo, srcargs)
+    if ecode > 0:
+        logger.debug('Could not for-each-ref %s: %s', srcrepo, err)
+        return False
+    srcset = set(out.strip().split('\n'))
+
+    dstargs = ['for-each-ref', f'--format=%(objectname) %(refname)', f'refs/virtual/{virtref}']
+    ecode, out, err = run_git_command(obstrepo, dstargs)
+    if ecode > 0:
+        logger.debug('Could not for-each-ref %s: %s', obstrepo, err)
+        return False
+    dstset = set(out.strip().split('\n'))
+
+    # Now we create a stdin list of commands for update-ref
+    mapping = dict()
+    newset = srcset.difference(dstset)
+    if newset:
+        for refline in newset:
+            obj, ref = refline.split(' ', 1)
+            mapping[ref] = obj
+
+    commands = ''
+    oldset = dstset.difference(srcset)
+    if oldset:
+        for refline in oldset:
+            if not len(refline):
+                continue
+            obj, ref = refline.split(' ', 1)
+            if ref in mapping:
+                commands += f'update {ref} {mapping[ref]} {obj}\n'
+                mapping.pop(ref)
+            else:
+                commands += f'delete {ref} {obj}\n'
+
+    for ref, obj in mapping.items():
+        commands += f'create {ref} {obj}\n'
+
+    logger.debug('stdin=%s', commands)
+    args = ['update-ref', '--stdin']
+    ecode, out, err = run_git_command(obstrepo, args, stdin=commands.encode())
+    if ecode > 0:
+        logger.debug('Could not update-ref %s: %s', obstrepo, err)
+        return False
+
+    for file in torm:
+        os.unlink(file)
+
+    return True
+
+
+def fetch_objstore_repo(obstrepo, fullpath=None, pack_refs=False, use_plumbing=False):
     my_remotes = list_repo_remotes(obstrepo, withurl=True)
     if fullpath:
         virtref = objstore_virtref(fullpath)
@@ -522,12 +597,15 @@ def fetch_objstore_repo(obstrepo, fullpath=None, pack_refs=False):
 
     success = True
     for (virtref, url) in remotes:
-        ecode, out, err = run_git_command(obstrepo, ['fetch', virtref, '--prune'])
-        r_fp = os.path.join(url, 'grokmirror.fingerprint')
-        if ecode > 0:
-            logger.critical('Could not fetch objects from %s to %s', url, obstrepo)
-            success = False
+        if use_plumbing:
+            success = _fetch_objstore_repo_using_plumbing(url, obstrepo, virtref)
         else:
+            ecode, out, err = run_git_command(obstrepo, ['fetch', virtref, '--prune'])
+            if ecode > 0:
+                success = False
+
+        if success:
+            r_fp = os.path.join(url, 'grokmirror.fingerprint')
             if os.path.exists(r_fp):
                 l_fp = os.path.join(obstrepo, 'grokmirror.%s.fingerprint' % virtref)
                 shutil.copy(r_fp, l_fp)
@@ -539,6 +617,9 @@ def fetch_objstore_repo(obstrepo, fullpath=None, pack_refs=False):
                 except IOError:
                     # Next run will take care of it
                     pass
+
+        else:
+            logger.info('Could not fetch objects from %s to %s', url, obstrepo)
 
     return success
 
