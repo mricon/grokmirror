@@ -360,6 +360,11 @@ def pull_worker(config, q_pull, q_spa, q_done):
                     try:
                         objstore_repo_preload(config, obstrepo)
                     except: # noqa
+                        logger.info(' objstore: not able to preload, will clone repo-by-repo')
+                        # Make sure we don't leave .bundle files trailing around
+                        bfile = obstrepo[:-4] + '.bundle'
+                        if os.path.exists(bfile):
+                            os.unlink(bfile)
                         pass
 
             if r_fp != my_fp:
