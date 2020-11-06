@@ -1246,7 +1246,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                                         return 0
                                     time.sleep(1)
                     # Don't run a hot loop waiting on results
-                    time.sleep(1)
+                    time.sleep(5)
                 continue
 
             if repoinfo is None:
@@ -1260,8 +1260,9 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                 if loopmark is None:
                     loopmark = gitdir
                 elif loopmark == gitdir:
-                    # sleep for a bit if we recognize that we've looped around all waiting repos
-                    time.sleep(0.5)
+                    # We've looped around all waiting repos, so back off and don't run
+                    # a hot waiting loop.
+                    time.sleep(5)
                 continue
 
             if gitdir == loopmark:
