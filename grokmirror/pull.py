@@ -250,7 +250,7 @@ def objstore_repo_preload(config, obstrepo):
         sess = grokmirror.get_requests_session()
         resp = sess.get(burl, stream=True)
         resp.raise_for_status()
-        logger.info(' objstore: getting preload bundle for %s', bname)
+        logger.info(' objstore: downloading %s.bundle', bname)
         with open(bfile, 'wb') as fh:
             for chunk in resp.iter_content(chunk_size=8192):
                 fh.write(chunk)
@@ -265,17 +265,17 @@ def objstore_repo_preload(config, obstrepo):
     # Now we clone from it into the objstore repo
     ecode, out, err = grokmirror.run_git_command(obstrepo, ['remote', 'add', '--mirror=fetch', '_preload', bfile])
     if ecode == 0:
-        logger.info(' objstore: preloading %s from the bundle', bname)
+        logger.info(' objstore: preloading %s.bundle', bname)
         args = ['remote', 'update', '_preload']
         ecode, out, err = grokmirror.run_git_command(obstrepo, args)
         if ecode > 0:
-            logger.info(' objstore: not able to preload, will clone repo-by-repo')
+            logger.info(' objstore: failed to preload from %s.bundle', bname)
         else:
             # now pack refs and generate a commit graph
             grokmirror.run_git_command(obstrepo, ['pack-refs', '--all'])
             if grokmirror.git_newer_than('2.18.0'):
                 grokmirror.run_git_command(obstrepo, ['commit-graph', 'write'])
-            logger.info(' objstore: successful preload')
+            logger.info(' objstore: successful preload from %s.bundle', bname)
     # Regardless of what happened, we remove _preload and the bundle, then move on
     grokmirror.run_git_command(obstrepo, ['remote', 'rm', '_preload'])
     os.unlink(bfile)
