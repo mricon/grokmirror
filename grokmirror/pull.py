@@ -246,14 +246,21 @@ def objstore_repo_preload(config, obstrepo):
     obstdir = os.path.realpath(config['core'].get('objstore'))
     burl = '%s/%s.bundle' % (purl.rstrip('/'), bname)
     bfile = os.path.join(obstdir, '%s.bundle' % bname)
-    sess = grokmirror.get_requests_session()
-    resp = sess.get(burl, stream=True)
-    resp.raise_for_status()
-    logger.info(' objstore: getting preload bundle for %s', bname)
-    with open(bfile, 'wb') as fh:
-        for chunk in resp.iter_content(chunk_size=8192):
-            fh.write(chunk)
-    resp.close()
+    try:
+        sess = grokmirror.get_requests_session()
+        resp = sess.get(burl, stream=True)
+        resp.raise_for_status()
+        logger.info(' objstore: getting preload bundle for %s', bname)
+        with open(bfile, 'wb') as fh:
+            for chunk in resp.iter_content(chunk_size=8192):
+                fh.write(chunk)
+        resp.close()
+    except: # noqa
+        # Make sure we don't leave .bundle files lying around
+        # Should we add logic to resume downloads here in the future?
+        if os.path.exists(bfile):
+            os.unlink(bfile)
+        return
 
     # Now we clone from it into the objstore repo
     ecode, out, err = grokmirror.run_git_command(obstrepo, ['remote', 'add', '--mirror=fetch', '_preload', bfile])
@@ -357,15 +364,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
                 o_obj_info = grokmirror.get_repo_obj_info(obstrepo)
                 if o_obj_info.get('count') == '0' and o_obj_info.get('in-pack') == '0' and not my_fp:
                     # Try to preload the objstore repo directly
-                    try:
-                        objstore_repo_preload(config, obstrepo)
-                    except: # noqa
-                        logger.info(' objstore: not able to preload, will clone repo-by-repo')
-                        # Make sure we don't leave .bundle files trailing around
-                        bfile = obstrepo[:-4] + '.bundle'
-                        if os.path.exists(bfile):
-                            os.unlink(bfile)
-                        pass
+                    objstore_repo_preload(config, obstrepo)
 
             if r_fp != my_fp:
                 # Make sure we have the remote set up
