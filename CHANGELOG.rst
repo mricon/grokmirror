@@ -1,9 +1,22 @@
+v2.0.4 (2020-11-06)
+-------------------
+- Add support to use git plumbing for objstore operations, via enabling
+  core.objstore_uses_plumbing. This allows to significantly speed up
+  fetching objects into objstore during pull operations. Fsck operations
+  will continue to use porcelain "git fetch", since speed is less important
+  in those cases and it's best to opt for maximum safety. As a benchmark,
+  with remote.preload_bundle_url and core.objstore_uses_plumbing settings
+  enabled, cloning a full replica of git.kernel.org takes less than an hour
+  as opposed to over a day.
+
 v2.0.3 (2020-11-04)
+-------------------
 - Refuse to delete ffonly repos
 - Add new experimental bundle_preload feature for generating objstore
   repo bundles and using them to preload objstores on the mirrors
 
 v2.0.2 (2020-10-06)
+-------------------
 - Provide pi-piper utility for piping new messages from public-inbox
   repositories. It can be specified as post_update_hook:
   post_update_hook = /usr/bin/grok-pi-piper -c ~/.config/pi-piper.conf
