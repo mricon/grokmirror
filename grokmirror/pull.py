@@ -1244,8 +1244,12 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                                             dw.join()
                                         return 0
                                     time.sleep(1)
-                    # Don't run a hot loop waiting on results
-                    time.sleep(5)
+                    if len(pws):
+                        # Don't run a hot loop waiting on results
+                        time.sleep(5)
+                    else:
+                        # Shorter sleep if everything is idle
+                        time.sleep(1)
                 continue
 
             if repoinfo is None:
