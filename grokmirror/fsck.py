@@ -726,6 +726,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     queued = 0
     logger.info('Analyzing %s (%s repos)', toplevel, len(status))
     stattime = time.time()
+    baselines = [x.strip() for x in config['fsck'].get('baselines', '').split('\n')]
     for fullpath in list(status):
         # Give me a status every 5 seconds
         if time.time() - stattime >= 5:
@@ -769,7 +770,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
         if not altdir and not os.path.exists(os.path.join(fullpath, 'grokmirror.do-not-objstore')):
             # Do we match any obstdir repos?
-            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots)
+            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots, toplevel, baselines)
             if obstrepo:
                 obst_changes = True
                 # Yes, set ourselves up to be using that obstdir
@@ -836,7 +837,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             # We have an alternates repo, but it's not an objstore repo
             # Probably left over from grokmirror-1.x
             # Do we have any matching obstrepos?
-            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots)
+            obstrepo = grokmirror.find_best_obstrepo(fullpath, obst_roots, toplevel, baselines)
             if obstrepo:
                 logger.info('%s: migrating to %s', gitdir, os.path.basename(obstrepo))
                 if altdir not in fetched_obstrepos:
@@ -999,7 +1000,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     analyzed = 0
     queued = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
-    baselines = [x.strip() for x in config['fsck'].get('baselines', '').split('\n')]
     islandcores = [x.strip() for x in config['fsck'].get('islandcores', '').split('\n')]
     stattime = time.time()
     for obstrepo in obstrepos:

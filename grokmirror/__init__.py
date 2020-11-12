@@ -659,7 +659,7 @@ def find_siblings(fullpath, my_roots, known_roots, exact=False):
     return siblings
 
 
-def find_best_obstrepo(mypath, obst_roots, minratio=0.2):
+def find_best_obstrepo(mypath, obst_roots, toplevel, baselines, minratio=0.2):
     # We want to find a repo with best intersect len to total roots len ratio,
     # but we'll ignore any repos where the ratio is too low, in order not to lump
     # together repositories that have very weak common histories.
@@ -672,6 +672,21 @@ def find_best_obstrepo(mypath, obst_roots, minratio=0.2):
         if path == mypath or not roots:
             continue
         icount = len(roots.intersection(myroots))
+        if icount == 0:
+            # No match at all
+            continue
+        # Baseline repos win over the ratio logic
+        if len(baselines):
+            # Any of its member siblings match baselines?
+            s_remotes = list_repo_remotes(path, withurl=True)
+            for virtref, childpath in s_remotes:
+                gitdir = '/' + os.path.relpath(childpath, toplevel)
+                for baseline in baselines:
+                    # Does this repo match a baseline
+                    if fnmatch.fnmatch(gitdir, baseline):
+                        # Use this one
+                        return path
+
         ratio = icount / len(roots)
         if ratio < minratio:
             continue
