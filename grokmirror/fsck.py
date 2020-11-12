@@ -1051,7 +1051,8 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         my_remotes = grokmirror.list_repo_remotes(obstrepo, withurl=True)
         # Use the first child repo as our "reference" entry in manifest
         refrepo = None
-        set_baseline = False
+        # Use for the alternateRefsPrefixes value
+        baseline_refs = set()
         set_islandcore = False
         new_islandcore = False
         valid_virtrefs = set()
@@ -1087,24 +1088,11 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
                 continue
 
             # Do we need to set any alternateRefsPrefixes?
-            if not set_baseline:
-                is_baseline = False
-                for baseline in baselines:
-                    # Does this repo match a baseline
-                    if fnmatch.fnmatch(gitdir, baseline):
-                        is_baseline = True
-                        break
-                if is_baseline:
-                    set_baseline = True
-                    refpref = 'refs/virtual/%s/heads/' % virtref
-                    # Go through all remotes and set their alternateRefsPrefixes
-                    for s_virtref, s_childpath in my_remotes:
-                        # is it already set to that?
-                        entries = grokmirror.get_config_from_git(s_childpath, r'core\.alternate*')
-                        if entries.get('alternaterefsprefixes') != refpref:
-                            s_gitdir = '/' + os.path.relpath(s_childpath, toplevel)
-                            logger.info(' reconfig: %s (baseline to %s)', s_gitdir, virtref)
-                            grokmirror.set_git_config(s_childpath, 'core.alternateRefsPrefixes', refpref)
+            for baseline in baselines:
+                # Does this repo match a baseline
+                if fnmatch.fnmatch(gitdir, baseline):
+                    baseline_refs.add('refs/virtual/%s/heads/' % virtref)
+                    break
 
             # Do we need to set islandCore?
             if not set_islandcore:
@@ -1132,6 +1120,19 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
             manifest[gitdir]['forkgroup'] = os.path.basename(obstrepo[:-4])
 
+        if len(baseline_refs):
+            # sort the list, so we have deterministic value
+            br = list(baseline_refs)
+            br.sort()
+            refpref = ' '.join(br)
+            # Go through all remotes and set their alternateRefsPrefixes
+            for s_virtref, s_childpath in my_remotes:
+                # is it already set to that?
+                entries = grokmirror.get_config_from_git(s_childpath, r'core\.alternate*')
+                if entries.get('alternaterefsprefixes') != refpref:
+                    s_gitdir = '/' + os.path.relpath(s_childpath, toplevel)
+                    logger.info(' reconfig: %s (baseline)', s_gitdir)
+                    grokmirror.set_git_config(s_childpath, 'core.alternateRefsPrefixes', refpref)
         repack_requested = False
         if os.path.exists(os.path.join(obstrepo, 'grokmirror.repack')):
             repack_requested = True
