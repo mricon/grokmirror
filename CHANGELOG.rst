@@ -1,3 +1,8 @@
+v2.0.5 (2020-11-25)
+-------------------
+- Prioritize baseline repositories when finding related objstore repos.
+- Minor fixes.
+
 v2.0.4 (2020-11-06)
 -------------------
 - Add support to use git plumbing for objstore operations, via enabling
