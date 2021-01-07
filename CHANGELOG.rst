@@ -1,3 +1,9 @@
+v2.0.6 (2021-01-07)
+-------------------
+- Use fsck.extra_repack_flags when doing quick post-clone repacks
+- Store objects in objstore after grok-dumb-pull call on a repo that uses
+  objstore repositories
+
 v2.0.5 (2020-11-25)
 -------------------
 - Prioritize baseline repositories when finding related objstore repos.

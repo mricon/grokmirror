@@ -38,7 +38,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 
-VERSION = '2.0.5'
+VERSION = '2.0.6'
 MANIFEST_LOCKH = None
 REPO_LOCKH = dict()
 GITBIN = '/usr/bin/git'
@@ -845,9 +845,12 @@ def is_alt_repo(toplevel, refrepo):
     return False
 
 
-def is_obstrepo(fullpath, obstdir):
-    # At this point, both should be normalized
-    return fullpath.find(obstdir) == 0
+def is_obstrepo(fullpath, obstdir=None):
+    if obstdir:
+        # At this point, both should be normalized
+        return fullpath.find(obstdir) == 0
+    # Just check if it has a grokmirror.objstore file in the repo
+    return os.path.exists(os.path.join(fullpath, 'grokmirror.objstore'))
 
 
 def find_all_gitdirs(toplevel, ignore=None, normalize=False, exclude_objstore=True):

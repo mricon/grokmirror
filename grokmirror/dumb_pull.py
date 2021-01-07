@@ -68,11 +68,6 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
     logger.debug('Will pull %s with following remotes: %s', gitdir, remotes)
     old_revs = git_rev_parse_all(gitdir)
 
-    if not old_revs:
-        logger.critical('Error opening %s.', gitdir)
-        logger.critical('Make sure it is a bare git repository.')
-        sys.exit(1)
-
     try:
         grokmirror.lock_repo(gitdir, nonblocking=True)
     except IOError:
@@ -114,14 +109,20 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
             if not remotefound:
                 logger.info('Could not find any remotes matching %s in %s', remote, gitdir)
 
-    grokmirror.unlock_repo(gitdir)
     new_revs = git_rev_parse_all(gitdir)
-
     if old_revs == new_revs:
         logger.debug('No new revs, no updates')
+        grokmirror.unlock_repo(gitdir)
         return False
 
     logger.debug('New revs found -- new content pulled')
+
+    # store any new objects, if it's using objstore
+    altrepo = grokmirror.get_altrepo(gitdir)
+    if grokmirror.is_obstrepo(altrepo):
+        logger.debug('Fetching into objstore')
+        grokmirror.fetch_objstore_repo(altrepo, gitdir)
+    grokmirror.unlock_repo(gitdir)
     return True
 
 
