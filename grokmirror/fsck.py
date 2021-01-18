@@ -1000,6 +1000,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     analyzed = 0
     queued = 0
     logger.info('Analyzing %s (%s repos)', obstdir, len(obstrepos))
+    objstore_uses_plumbing = config['core'].getboolean('objstore_uses_plumbing', False)
     islandcores = [x.strip() for x in config['fsck'].get('islandcores', '').split('\n')]
     stattime = time.time()
     for obstrepo in obstrepos:
@@ -1081,8 +1082,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
             gitdir = '/' + os.path.relpath(childpath, toplevel)
             if fetch:
+                grokmirror.lock_repo(obstrepo, nonblocking=False)
                 logger.info('    fetch: %s -> %s', gitdir, os.path.basename(obstrepo))
-                grokmirror.fetch_objstore_repo(obstrepo, childpath)
+                grokmirror.fetch_objstore_repo(obstrepo, childpath, use_plumbing=objstore_uses_plumbing)
+                grokmirror.unlock_repo(obstrepo)
 
             if gitdir not in manifest:
                 continue
