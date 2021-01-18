@@ -331,18 +331,18 @@ def pull_worker(config, q_pull, q_spa, q_done):
                     logger.info('    purge: %s', gitdir)
                     shutil.rmtree(fullpath)
 
+        if action == 'fix_params':
+            logger.info(' reconfig: %s', gitdir)
+            set_repo_params(fullpath, repoinfo)
+
         if action == 'fix_remotes':
             logger.info(' reorigin: %s', gitdir)
             success = fix_remotes(toplevel, gitdir, site, config)
             if success:
-                action = 'fix_params'
+                set_repo_params(fullpath, repoinfo)
+                action = 'pull'
             else:
                 success = False
-
-        if action == 'fix_params':
-            logger.info(' reconfig: %s', gitdir)
-            set_repo_params(fullpath, repoinfo)
-            action = 'pull'
 
         if action == 'reclone':
             logger.info('  reclone: %s', gitdir)
