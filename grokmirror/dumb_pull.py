@@ -109,19 +109,13 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
                 logger.info('Could not find any remotes matching %s in %s', remote, gitdir)
 
     new_revs = git_rev_parse_all(gitdir)
+    grokmirror.unlock_repo(gitdir)
+
     if old_revs == new_revs:
         logger.debug('No new revs, no updates')
-        grokmirror.unlock_repo(gitdir)
         return False
 
     logger.debug('New revs found -- new content pulled')
-
-    # store any new objects, if it's using objstore
-    altrepo = grokmirror.get_altrepo(gitdir)
-    if altrepo and grokmirror.is_obstrepo(altrepo):
-        logger.debug('Fetching into objstore')
-        grokmirror.fetch_objstore_repo(altrepo, gitdir)
-    grokmirror.unlock_repo(gitdir)
     return True
 
 
