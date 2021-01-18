@@ -287,10 +287,16 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
         altrepo = grokmirror.get_altrepo(gitdir)
         if altrepo in fetched:
             continue
-        fetched.add(altrepo)
-        if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
-            logger.info(' manifest: objstore %s->%s', gitdir, os.path.basename(altrepo))
-            grokmirror.fetch_objstore_repo(altrepo, gitdir, use_plumbing=objstore_uses_plumbing)
+        if altrepo and grokmirror.is_obstrepo(altrepo):
+            try:
+                grokmirror.lock_repo(altrepo, nonblocking=True)
+                logger.info(' manifest: objstore %s->%s', gitdir, os.path.basename(altrepo))
+                grokmirror.fetch_objstore_repo(altrepo, gitdir, use_plumbing=objstore_uses_plumbing)
+                grokmirror.unlock_repo(altrepo)
+                fetched.add(altrepo)
+            except IOError:
+                # grok-fsck will fetch this one, then
+                pass
 
     elapsed = datetime.datetime.now() - startt
     if len(gitdirs) > 1:
