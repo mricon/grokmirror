@@ -1084,7 +1084,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             if fetch:
                 grokmirror.lock_repo(obstrepo, nonblocking=False)
                 logger.info('    fetch: %s -> %s', gitdir, os.path.basename(obstrepo))
-                grokmirror.fetch_objstore_repo(obstrepo, childpath, use_plumbing=objstore_uses_plumbing)
+                success = grokmirror.fetch_objstore_repo(obstrepo, childpath, use_plumbing=objstore_uses_plumbing)
+                if not success and objstore_uses_plumbing:
+                    # Try using git porcelain
+                    grokmirror.fetch_objstore_repo(obstrepo, childpath)
                 grokmirror.unlock_repo(obstrepo)
 
             if gitdir not in manifest:
