@@ -23,6 +23,8 @@ import grokmirror
 
 logger = logging.getLogger(__name__)
 
+objstore_uses_plumbing = False
+
 
 def update_manifest(manifest, toplevel, fullpath, usenow, ignorerefs):
     logger.debug('Examining %s', fullpath)
@@ -107,6 +109,8 @@ def purge_manifest(manifest, toplevel, gitdirs):
 
 
 def parse_args():
+    global objstore_uses_plumbing
+
     import argparse
     # noinspection PyTypeChecker
     op = argparse.ArgumentParser(prog='grok-manifest',
@@ -166,6 +170,8 @@ def parse_args():
             opts.toplevel = os.path.realpath(config['core'].get('toplevel'))
         if not opts.logfile:
             opts.logfile = config['core'].get('logfile')
+
+        objstore_uses_plumbing = config['core'].getboolean('objstore_uses_plumbing', False)
 
         if 'manifest' in config:
             if not opts.ignore:
@@ -284,7 +290,7 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
         fetched.add(altrepo)
         if altrepo and os.path.exists(os.path.join(altrepo, 'grokmirror.objstore')):
             logger.info(' manifest: objstore %s->%s', gitdir, os.path.basename(altrepo))
-            grokmirror.fetch_objstore_repo(altrepo, gitdir)
+            grokmirror.fetch_objstore_repo(altrepo, gitdir, use_plumbing=objstore_uses_plumbing)
 
     elapsed = datetime.datetime.now() - startt
     if len(gitdirs) > 1:
