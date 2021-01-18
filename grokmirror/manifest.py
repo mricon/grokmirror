@@ -119,7 +119,7 @@ def parse_args():
 
     op.add_argument('--cfgfile', dest='cfgfile',
                     default=None,
-                    help='Path to grokmirror.conf containing a [manifest] section')
+                    help='Path to grokmirror.conf containing at least a [core] section')
     op.add_argument('-m', '--manifest', dest='manifile',
                     help='Location of manifest.js or manifest.js.gz')
     op.add_argument('-t', '--toplevel', dest='toplevel',
