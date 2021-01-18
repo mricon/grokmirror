@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import sys
 
 import grokmirror
 import logging
@@ -119,7 +118,7 @@ def dumb_pull_repo(gitdir, remotes, svn=False):
 
     # store any new objects, if it's using objstore
     altrepo = grokmirror.get_altrepo(gitdir)
-    if grokmirror.is_obstrepo(altrepo):
+    if altrepo and grokmirror.is_obstrepo(altrepo):
         logger.debug('Fetching into objstore')
         grokmirror.fetch_objstore_repo(altrepo, gitdir)
     grokmirror.unlock_repo(gitdir)
