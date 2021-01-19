@@ -290,7 +290,7 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
         if altrepo and grokmirror.is_obstrepo(altrepo):
             try:
                 grokmirror.lock_repo(altrepo, nonblocking=True)
-                logger.info(' manifest: objstore %s->%s', gitdir, os.path.basename(altrepo))
+                logger.info(' manifest: objstore %s -> %s', gitdir, os.path.basename(altrepo))
                 grokmirror.fetch_objstore_repo(altrepo, gitdir, use_plumbing=objstore_uses_plumbing)
                 grokmirror.unlock_repo(altrepo)
                 fetched.add(altrepo)
