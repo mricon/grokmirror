@@ -991,9 +991,6 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
     if obst_changes:
         # Refresh the alt repo map cache
         amap = grokmirror.get_altrepo_map(toplevel, refresh=True)
-        # Lock and re-read manifest, so we can update reference and forkgroup data
-        grokmirror.manifest_lock(manifile)
-        manifest = grokmirror.read_manifest(manifile)
 
     obstrepos = grokmirror.find_all_gitdirs(obstdir, normalize=True, exclude_objstore=False)
 
@@ -1197,7 +1194,18 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
 
     if obst_changes:
         # We keep the same mtime, because the repos themselves haven't changed
-        grokmirror.write_manifest(manifile, manifest, pretty=pretty)
+        grokmirror.manifest_lock(manifile)
+        # Re-read manifest, so we can update reference and forkgroup data
+        disk_manifest = grokmirror.read_manifest(manifile)
+        # Go through my manifest and update and changes in forkgroup data
+        for gitdir in manifest:
+            if gitdir not in disk_manifest:
+                # What happened here?
+                continue
+            disk_manifest[gitdir]['reference'] = manifest[gitdir]['reference']
+            disk_manifest[gitdir]['forkgroup'] = manifest[gitdir]['forkgroup']
+
+        grokmirror.write_manifest(manifile, disk_manifest, pretty=pretty)
         grokmirror.manifest_unlock(manifile)
 
     if not len(to_process):
