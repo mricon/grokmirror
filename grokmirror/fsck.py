@@ -1202,8 +1202,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             if gitdir not in disk_manifest:
                 # What happened here?
                 continue
-            disk_manifest[gitdir]['reference'] = manifest[gitdir]['reference']
-            disk_manifest[gitdir]['forkgroup'] = manifest[gitdir]['forkgroup']
+            if 'reference' in manifest[gitdir]:
+                disk_manifest[gitdir]['reference'] = manifest[gitdir]['reference']
+            if 'forkgroup' in manifest[gitdir]:
+                disk_manifest[gitdir]['forkgroup'] = manifest[gitdir]['forkgroup']
 
         grokmirror.write_manifest(manifile, disk_manifest, pretty=pretty)
         grokmirror.manifest_unlock(manifile)
