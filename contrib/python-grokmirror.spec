@@ -85,10 +85,13 @@ exit 0
 %{_mandir}/*/*
 
 %changelog
+* Tue Jan 19 2021 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.7-1
+- Update to 2.0.7 with improvements for very large repo collections
+
 * Thu Jan 07 2021 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.6-1
 - Update to 2.0.6 with minor new features
 
-* Tue Nov 25 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.5-1
+* Wed Nov 25 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.5-1
 - Update to 2.0.5 with minor new features
 
 * Wed Nov 04 2020 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.4-1

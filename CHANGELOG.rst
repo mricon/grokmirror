@@ -1,3 +1,8 @@
+v2.0.7 (2021-01-19)
+-------------------
+- A slew of small fixes improving performance on very large repository
+  collections (CAF internally is 32,500).
+
 v2.0.6 (2021-01-07)
 -------------------
 - Use fsck.extra_repack_flags when doing quick post-clone repacks
