@@ -4,7 +4,7 @@
 %global userhome  %{_sharedstatedir}/grokmirror
 
 Name:           python-%{srcname}
-Version:        2.0.6
+Version:        2.0.8
 Release:        1%{?dist}
 Summary:        Framework to smartly mirror git repositories
 
@@ -85,6 +85,9 @@ exit 0
 %{_mandir}/*/*
 
 %changelog
+* Thu Mar 11 2021 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.8-1
+- Update to 2.0.8 with fixes to symlink handling in manifests
+
 * Tue Jan 19 2021 Konstantin Ryabitsev <konstantin@linuxfoundation.org> - 2.0.7-1
 - Update to 2.0.7 with improvements for very large repo collections
 

@@ -1,3 +1,10 @@
+v2.0.8 (2021-03-11)
+-------------------
+- Fixes around symlink handling in manifest files. Adding and deleting
+  symlinks should properly work again.
+- Don't require [fsck] section in the config file (though you'd almost
+  always want it there).
+
 v2.0.7 (2021-01-19)
 -------------------
 - A slew of small fixes improving performance on very large repository
