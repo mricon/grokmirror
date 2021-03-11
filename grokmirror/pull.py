@@ -884,6 +884,14 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
             if r_desc != l_desc or r_owner != l_owner or r_head != l_head:
                 q_mani.put((gitdir, repoinfo, 'fix_params'))
 
+            if symlinks and isinstance(symlinks, list):
+                # Are all symlinks in place?
+                for symlink in symlinks:
+                    linkpath = os.path.join(toplevel, symlink.lstrip('/'))
+                    if not os.path.islink(linkpath) or os.path.realpath(linkpath) != fullpath:
+                        q_mani.put((gitdir, repoinfo, 'fix_params'))
+                        break
+
             my_fingerprint = grokmirror.get_repo_fingerprint(toplevel, gitdir)
             if my_fingerprint != l_manifest[gitdir].get('fingerprint'):
                 logger.debug('Fingerprint discrepancy, forcing a fetch')
@@ -980,6 +988,7 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                         exclude = True
                         break
                 if not exclude:
+                    logger.debug('Adding %s to to_purge', gitdir)
                     to_purge.add(gitdir)
 
         if len(to_purge):
@@ -1000,6 +1009,7 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
                 logger.critical('Set purgeprotect to a higher percentage, or override with --force-purge.')
             else:
                 for gitdir in to_purge:
+                    logger.debug('Queued %s for purging', gitdir)
                     q_mani.put((gitdir, None, 'purge'))
         else:
             logger.debug('No repositories need purging')
@@ -1120,7 +1130,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     # Run in the main thread if we have runonce
     if runonce:
         fill_todo_from_manifest(config, q_mani, nomtime=nomtime, forcepurge=forcepurge)
-        if q_mani.empty():
+        if not q_mani.qsize():
             return 0
     else:
         # force nomtime to True the first time

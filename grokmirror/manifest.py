@@ -77,18 +77,23 @@ def update_manifest(manifest, toplevel, fullpath, usenow, ignorerefs):
 def set_symlinks(manifest, toplevel, symlinks):
     for symlink in symlinks:
         target = os.path.realpath(symlink)
+        if not os.path.exists(target):
+            logger.critical(' manifest: symlink %s is broken, ignored', symlink)
+            continue
+        relative = '/' + os.path.relpath(symlink, toplevel)
         if target.find(toplevel) < 0:
-            logger.debug('Symlink %s points outside toplevel, ignored', symlink)
+            logger.critical(' manifest: symlink %s points outside toplevel, ignored', relative)
             continue
         tgtgitdir = '/' + os.path.relpath(target, toplevel)
         if tgtgitdir not in manifest:
-            logger.debug('Symlink %s points to %s, which we do not recognize', symlink, target)
+            logger.critical(' manifest: symlink %s points to %s, which we do not recognize', relative, tgtgitdir)
             continue
-        relative = '/' + os.path.relpath(symlink, toplevel)
         if 'symlinks' in manifest[tgtgitdir]:
             if relative not in manifest[tgtgitdir]['symlinks']:
                 logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
                 manifest[tgtgitdir]['symlinks'].append(relative)
+            else:
+                logger.info(' manifest: %s->%s is already in manifest', relative, tgtgitdir)
         else:
             manifest[tgtgitdir]['symlinks'] = [relative]
             logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
@@ -96,6 +101,10 @@ def set_symlinks(manifest, toplevel, symlinks):
         # Now go through all repos and fix any references pointing to the
         # symlinked location. We shouldn't need to do anything with forkgroups.
         for gitdir in manifest:
+            if manifest[gitdir] == relative:
+                logger.info(' manifest: removing %s (replaced by a symlink)', gitdir)
+                manifest.pop(gitdir)
+                continue
             if manifest[gitdir]['reference'] == relative:
                 logger.info(' manifest: symlinked %s->%s', relative, tgtgitdir)
                 manifest[gitdir]['reference'] = tgtgitdir
@@ -227,12 +236,20 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
                 manifest.pop(repo)
                 logger.info(' manifest: removed %s', repo)
             else:
-                logger.info(' manifest: %s not in manifest', repo)
+                # Is it in any of the symlinks?
+                found = False
+                for gitdir in manifest:
+                    if 'symlinks' in manifest[gitdir] and repo in manifest[gitdir]['symlinks']:
+                        found = True
+                        manifest[gitdir]['symlinks'].remove(repo)
+                        if not len(manifest[gitdir]['symlinks']):
+                            manifest[gitdir].pop('symlinks')
+                        logger.info(' manifest: removed symlink %s->%s', repo, gitdir)
+                if not found:
+                    logger.info(' manifest: %s not in manifest', repo)
 
         # XXX: need to add logic to make sure we don't break the world
         #      by removing a repository used as a reference for others
-        #      also make sure we clean up any dangling symlinks
-
         grokmirror.write_manifest(manifile, manifest, pretty=pretty)
         grokmirror.manifest_unlock(manifile)
         return 0
@@ -249,8 +266,12 @@ def grok_manifest(manifile, toplevel, paths=None, logfile=None, usenow=False,
         # limit ourselves to passed dirs only when there is something
         # in the manifest. This precaution makes sure we regenerate the
         # whole file when there is nothing in it or it can't be parsed.
-        gitdirs = [os.path.realpath(x) for x in paths]
-        # Don't draw a progress bar for a single repo
+        for apath in paths:
+            arealpath = os.path.realpath(apath)
+            if apath != arealpath and os.path.islink(apath):
+                gitdirs.append(apath)
+            else:
+                gitdirs.append(arealpath)
 
     symlinks = list()
     tofetch = set()
