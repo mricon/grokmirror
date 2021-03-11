@@ -218,9 +218,10 @@ def spa_worker(config, q_spa, pauseonload):
             elif action == 'repack':
                 logger.debug('quick-repacking %s', fullpath)
                 args = ['repack', '-Adlq']
-                extraflags = config['fsck'].get('extra_repack_flags', '').split()
-                if len(extraflags):
-                    args += extraflags
+                if 'fsck' in config:
+                    extraflags = config['fsck'].get('extra_repack_flags', '').split()
+                    if len(extraflags):
+                        args += extraflags
                 ecode, out, err = grokmirror.run_git_command(fullpath, args)
                 if ecode > 0:
                     logger.debug('Could not repack %s', fullpath)
