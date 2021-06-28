@@ -38,7 +38,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 
-VERSION = '2.0.8'
+VERSION = '2.0.9-dev'
 MANIFEST_LOCKH = None
 REPO_LOCKH = dict()
 GITBIN = '/usr/bin/git'

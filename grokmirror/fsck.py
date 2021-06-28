@@ -263,22 +263,7 @@ def run_git_prune(fullpath, config):
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
 
     if error:
-        # Put things we recognize as fairly benign into debug
-        debug = list()
-        warn = list()
-        ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
-        for line in error.split('\n'):
-            ignored = False
-            for estring in ierrors:
-                if line.find(estring) != -1:
-                    ignored = True
-                    debug.append(line)
-                    break
-            if not ignored:
-                warn.append(line)
-
-        if debug:
-            logger.debug('Stderr: %s', '\n'.join(debug))
+        warn = remove_ignored_errors(error, config)
         if warn:
             prune_ok = False
             log_errors(fullpath, args, warn)
@@ -313,13 +298,31 @@ def is_safe_to_prune(fullpath, config):
     return True
 
 
+def remove_ignored_errors(output, config):
+    ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
+    debug = list()
+    warn = list()
+    for line in output.split('\n'):
+        ignored = False
+        for estring in ierrors:
+            if line.find(estring) != -1:
+                ignored = True
+                debug.append(line)
+                break
+        if not ignored:
+            warn.append(line)
+    if debug:
+        logger.debug('Stderr: %s', '\n'.join(debug))
+
+    return warn
+
+
 def run_git_repack(fullpath, config, level=1, prune=True):
     # Returns false if we hit any errors on the way
     repack_ok = True
     obstdir = os.path.realpath(config['core'].get('objstore'))
     toplevel = os.path.realpath(config['core'].get('toplevel'))
     gitdir = '/' + os.path.relpath(fullpath, toplevel).lstrip('/')
-    ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
 
     if prune:
         # Make sure it's safe to do so
@@ -405,21 +408,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     # With newer versions of git, repack may return warnings that are safe to ignore
     # so use the same strategy to weed out things we aren't interested in seeing
     if error:
-        # Put things we recognize as fairly benign into debug
-        debug = list()
-        warn = list()
-        for line in error.split('\n'):
-            ignored = False
-            for estring in ierrors:
-                if line.find(estring) != -1:
-                    ignored = True
-                    debug.append(line)
-                    break
-            if not ignored:
-                warn.append(line)
-
-        if debug:
-            logger.debug('Stderr: %s', '\n'.join(debug))
+        warn = remove_ignored_errors(error, config)
         if warn:
             repack_ok = False
             log_errors(fullpath, args, warn)
@@ -447,21 +436,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     # pack-refs shouldn't return anything, but use the same ignore_errors block
     # to weed out any future potential benign warnings
     if error:
-        # Put things we recognize as fairly benign into debug
-        debug = list()
-        warn = list()
-        for line in error.split('\n'):
-            ignored = False
-            for estring in ierrors:
-                if line.find(estring) != -1:
-                    ignored = True
-                    debug.append(line)
-                    break
-            if not ignored:
-                warn.append(line)
-
-        if debug:
-            logger.debug('Stderr: %s', '\n'.join(debug))
+        warn = remove_ignored_errors(error, config)
         if warn:
             repack_ok = False
             log_errors(fullpath, args, warn)
@@ -491,26 +466,10 @@ def run_git_fsck(fullpath, config, conn_only=False):
         logger.info('     fsck: running full checks')
 
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
+    output = output + '\n' + error
 
-    if output or error:
-        # Put things we recognize as fairly benign into debug
-        debug = list()
-        warn = list()
-        ierrors = set([x.strip() for x in config['fsck'].get('ignore_errors', '').split('\n')])
-        for line in output.split('\n') + error.split('\n'):
-            if not len(line.strip()):
-                continue
-            ignored = False
-            for estring in ierrors:
-                if line.find(estring) != -1:
-                    ignored = True
-                    debug.append(line)
-                    break
-            if not ignored:
-                warn.append(line)
-
-        if debug:
-            logger.debug('Stderr: %s', '\n'.join(debug))
+    if output:
+        warn = remove_ignored_errors(output, config)
         if warn:
             log_errors(fullpath, args, warn)
             check_reclone_error(fullpath, config, warn)
@@ -542,43 +501,6 @@ def set_precious_objects(fullpath, enabled=True):
 
 def check_precious_objects(fullpath):
     return grokmirror.is_precious(fullpath)
-
-
-def get_repack_level(obj_info, max_loose_objects=1200, max_packs=20, pc_loose_objects=10, pc_loose_size=10):
-    # for now, hardcode the maximum loose objects and packs
-    # XXX: we can probably set this in git config values?
-    #      I don't think this makes sense as a global setting, because
-    #      optimal values will depend on the size of the repo as a whole
-    packs = int(obj_info['packs'])
-    count_loose = int(obj_info['count'])
-
-    needs_repack = 0
-
-    # first, compare against max values:
-    if packs >= max_packs:
-        logger.debug('Triggering full repack because packs > %s', max_packs)
-        needs_repack = 2
-    elif count_loose >= max_loose_objects:
-        logger.debug('Triggering quick repack because loose objects > %s', max_loose_objects)
-        needs_repack = 1
-    else:
-        # is the number of loose objects or their size more than 10% of
-        # the overall total?
-        in_pack = int(obj_info['in-pack'])
-        size_loose = int(obj_info['size'])
-        size_pack = int(obj_info['size-pack'])
-        total_obj = count_loose + in_pack
-        total_size = size_loose + size_pack
-        # set some arbitrary "worth bothering" limits so we don't
-        # continuously repack tiny repos.
-        if total_obj > 500 and count_loose / total_obj * 100 >= pc_loose_objects:
-            logger.debug('Triggering repack because loose objects > %s%% of total', pc_loose_objects)
-            needs_repack = 1
-        elif total_size > 1024 and size_loose / total_size * 100 >= pc_loose_size:
-            logger.debug('Triggering repack because loose size > %s%% of total', pc_loose_size)
-            needs_repack = 1
-
-    return needs_repack
 
 
 def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
@@ -938,7 +860,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             repack_level = 1
         elif status[fullpath].get('fingerprint') != grokmirror.get_repo_fingerprint(toplevel, gitdir):
             logger.debug('Checking repack level of %s', fullpath)
-            repack_level = get_repack_level(obj_info)
+            repack_level = grokmirror.get_repack_level(obj_info)
         else:
             repack_level = None
 
@@ -1168,7 +1090,7 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
             repack_level = 2
         else:
             obj_info = grokmirror.get_repo_obj_info(obstrepo)
-            repack_level = get_repack_level(obj_info)
+            repack_level = grokmirror.get_repack_level(obj_info)
 
         nextcheck = datetime.datetime.strptime(status[obstrepo]['nextcheck'], '%Y-%m-%d')
         if repack_level > 1 and nextcheck > today:
