@@ -568,6 +568,30 @@ def set_agefile(toplevel, gitdir, last_modified):
     logger.debug('Wrote "%s" into %s', cgit_fmt, agefile)
 
 
+def run_post_clone_complete_hook(config, clones):
+    toplevel = os.path.realpath(config['core'].get('toplevel'))
+    stdin = '\n'.join(clones).encode() + b'\n'
+    hookscripts = config['pull'].get('post_clone_complete_hook', '')
+    for hookscript in hookscripts.split('\n'):
+        hookscript = os.path.expanduser(hookscript.strip())
+        sp = shlex.shlex(hookscript, posix=True)
+        sp.whitespace_split = True
+        args = list(sp)
+        if not os.access(args[0], os.X_OK):
+            logger.warning('post_update_hook %s is not executable', hookscript)
+            continue
+        logger.info(' inithook: %s', ' '.join(args))
+        logger.debug('Running: %s', ' '.join(args))
+        args.append(toplevel)
+        ecode, output, error = grokmirror.run_shell_command(args, stdin=stdin)
+        if error:
+            # Put hook stderror into warning
+            logger.warning('Hook Stderr: %s', error)
+        if output:
+            # Put hook stdout into info
+            logger.info('Hook Stdout: %s', output)
+
+
 def run_post_update_hook(toplevel, gitdir, hookscripts):
     if not len(hookscripts):
         return
@@ -1145,9 +1169,11 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
 
     busy = set()
     done = list()
+    cloned = list()
     good = 0
     bad = 0
     loopmark = None
+    post_clone_hook = config['pull'].get('post_clone_complete_hook')
     with SignalHandler(config, sw, dws, pws, done):
         while True:
             for pw in pws:
@@ -1190,6 +1216,18 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                         actions.remove((gitdir, q_action))
                     except KeyError:
                         pass
+                    # Was it a clone, and are all other clones done?
+                    if post_clone_hook and q_action == 'init':
+                        cloned.append(gitdir)
+                        more_clones = False
+                        for qgd, qqa in actions:
+                            if qqa == 'init':
+                                more_clones = True
+                                break
+                        if not more_clones:
+                            # Fire the post_clone hook
+                            run_post_clone_complete_hook(config, cloned)
+                            cloned = list()
 
                     forkgroup = repoinfo.get('forkgroup')
                     if forkgroup and forkgroup in busy:
