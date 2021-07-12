@@ -232,11 +232,11 @@ def get_repo_defs(toplevel, gitdir, usenow=False, ignorerefs=None):
     description = None
     try:
         descfile = os.path.join(fullpath, 'description')
-        with open(descfile) as fh:
+        with open(descfile, 'rb') as fh:
             contents = fh.read().strip()
-            if len(contents) and contents.find('edit this file') < 0:
+            if len(contents) and contents.find(b'edit this file') < 0:
                 # We don't need to tell mirrors to edit this file
-                description = contents
+                description = contents.decode(errors='replace')
     except IOError:
         pass
 
