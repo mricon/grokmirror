@@ -1,3 +1,11 @@
+v2.0.9 (2021-07-13)
+-------------------
+- Add initial support for post_clone_complete_hook that fires only after
+  all new clones have been completed.
+- Fix grok-manifest traceback due to unicode errors in the repo
+  description file.
+- Minor code cleanups.
+
 v2.0.8 (2021-03-11)
 -------------------
 - Fixes around symlink handling in manifest files. Adding and deleting
