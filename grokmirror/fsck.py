@@ -303,6 +303,10 @@ def remove_ignored_errors(output, config):
     debug = list()
     warn = list()
     for line in output.split('\n'):
+        line = line.strip()
+        # ignore any blank linkes
+        if not len(line):
+            continue
         ignored = False
         for estring in ierrors:
             if line.find(estring) != -1:
