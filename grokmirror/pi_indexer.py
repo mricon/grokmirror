@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import re
+import shutil
 
 import grokmirror
 
@@ -88,6 +89,7 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             ('url', local_url),
             ('indexlevel', opts.indexlevel),
         ]
+        description = None
         addresses = list()
         for line in origins.split('\n'):
             line = line.strip()
@@ -99,6 +101,9 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
                 val = val.strip()
                 if opt == 'address':
                     addresses.append(val)
+                    continue
+                if opt == 'description':
+                    description = val
                     continue
                 if opt not in {'infourl', 'contact', 'listid', 'newsgroup'}:
                     continue
@@ -112,6 +117,8 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
 
         if not addresses:
             addresses = [f'{inboxname}@localhost']
+        if not description:
+            description = f'{inboxname} mirror'
 
         if success:
             for opt, val in addopts:
@@ -132,6 +139,10 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             except Exception as ex: # noqa
                 logger.critical('Unable to init public-inbox repo %s: %s', inboxdir, ex)
                 success = False
+
+        if success:
+            with open(os.path.join(inboxdir, 'description', 'w')) as fh:
+                fh.write(description)
 
     # Unlock all members
     for subrepo in pi_repos:
@@ -174,6 +185,8 @@ def command():
                     help='URL of the origin toplevel serving config files')
     op.add_argument('--indexlevel', default='full',
                     help='Indexlevel to use with public-inbox-init (full, medium, basic)')
+    op.add_argument('--force-init', dest='forceinit', action='store_true', default=False,
+                    help='Force (re-)initialization of the repo passed as argument')
     op.add_argument('repo', nargs='?',
                     help='Full path to foo/git/N.git public-inbox repository')
 
@@ -190,7 +203,11 @@ def command():
         # If we have a positional argument, then this is a post-update hook. We only
         # run the indexer if the inboxdir has already been initialized
         mode = 'update'
-        inboxdirs = get_inboxdirs([opts.repo])
+        if not opts.repo.endswith('.git'):
+            # Assume we're working with toplevel inboxdir
+            inboxdirs = [opts.repo]
+        else:
+            inboxdirs = get_inboxdirs([opts.repo])
     elif not sys.stdin.isatty():
         # This looks like a post_clone_complete_hook invocation
         mode = 'clone'
@@ -217,6 +234,17 @@ def command():
             if not init_pi_inbox(inboxdir, opts):
                 logger.critical('Could not init %s', inboxdir)
                 continue
+        elif opts.forceinit and mode == 'update':
+            # Delete msgmap and xap15 if present and reinitialize
+            if os.path.exists(msgmapdbf):
+                logger.critical('Reinitializing %s', inboxdir)
+                os.unlink(msgmapdbf)
+            if os.path.exists(os.path.join(inboxdir, 'xap15')):
+                shutil.rmtree(os.path.join(inboxdir, 'xap15'))
+            if not init_pi_inbox(inboxdir, opts):
+                logger.critical('Could not init %s', inboxdir)
+                continue
+
         logger.info('Indexing %s', inboxdir)
         if not index_pi_inbox(inboxdir, opts):
             logger.critical('Unable to index %s', inboxdir)
