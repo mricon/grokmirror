@@ -37,6 +37,8 @@ from fcntl import lockf, LOCK_EX, LOCK_UN, LOCK_NB
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
+from typing import Optional, Tuple, Union
+
 
 VERSION = '2.0.9'
 MANIFEST_LOCKH = None
@@ -97,17 +99,20 @@ def set_git_config(fullpath, param, value, operation='--replace-all'):
     return ecode
 
 
-def git_newer_than(minver):
+def git_newer_than(minver: str) -> bool:
     from packaging import version
     (retcode, output, error) = run_git_command(None, ['--version'])
     ver = output.split()[-1]
     return version.parse(ver) >= version.parse(minver)
 
 
-def run_shell_command(cmdargs, stdin=None, decode=True):
+def run_shell_command(cmdargs: list, stdin: Optional[bytes] = None, decode: bool = True,
+                      env: Optional[dict] = None) -> Tuple[int, Union[str, bytes], Union[str, bytes]]:
+    if not env:
+        env = dict()
     logger.debug('Running: %s', ' '.join(cmdargs))
 
-    child = subprocess.Popen(cmdargs, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    child = subprocess.Popen(cmdargs, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     output, error = child.communicate(input=stdin)
 
     if decode:
@@ -117,7 +122,8 @@ def run_shell_command(cmdargs, stdin=None, decode=True):
     return child.returncode, output, error
 
 
-def run_git_command(fullpath, args, stdin=None, decode=True):
+def run_git_command(fullpath: Optional[str], args: list, stdin: Optional[bytes] = None,
+                    decode: bool = True) -> Tuple[int, Union[str, bytes], Union[str, bytes]]:
     if 'GITBIN' in os.environ:
         _git = os.environ['GITBIN']
     else:

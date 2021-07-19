@@ -65,6 +65,7 @@ setup(
             "grok-manifest=grokmirror.manifest:command",
             "grok-bundle=grokmirror.bundle:command",
             "grok-pi-piper=grokmirror.pi_piper:command",
+            "grok-pi-indexer=grokmirror.pi_indexer:command",
         ]
     }
 )
