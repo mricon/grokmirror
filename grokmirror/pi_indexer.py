@@ -11,6 +11,8 @@ import shutil
 
 import grokmirror
 
+from fnmatch import fnmatch
+
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,11 @@ def index_pi_inbox(inboxdir: str, opts) -> bool:
 
 
 def init_pi_inbox(inboxdir: str, opts) -> bool:
+    # for boost values, we look at the number of entries
+    boosts = list()
+    if opts.listid_priority:
+        boosts = list(reversed(opts.listid_priority.split(',')))
+
     logger.info('Initializing inboxdir %s', inboxdir)
     # Lock all member repos so they don't get updated in the process
     pi_repos = get_pi_repos(inboxdir)
@@ -84,12 +91,9 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
         # Generate a config entry
         local_host = opts.local_host.rstrip('/')
         local_url = f'{local_host}/{inboxname}/'
-        addopts = [
-            ('inboxdir', inboxdir),
-            ('url', local_url),
-            ('indexlevel', opts.indexlevel),
-        ]
+        extraopts = list()
         description = None
+        newsgroup = None
         addresses = list()
         for line in origins.split('\n'):
             line = line.strip()
@@ -105,9 +109,19 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
                 if opt == 'description':
                     description = val
                     continue
-                if opt not in {'infourl', 'contact', 'listid', 'newsgroup'}:
+                if opt == 'newsgroup':
+                    newsgroup = val
                     continue
-                addopts.append((opt, val))
+                if opt == 'listid' and boosts:
+                    # Calculate the boost value
+                    for patt in boosts:
+                        if fnmatch(val, patt):
+                            extraopts.append(('boost', str(boosts.index(patt) + 1)))
+                            break
+
+                if opt not in {'infourl', 'listid'}:
+                    continue
+                extraopts.append((opt, val))
             except ValueError:
                 logger.critical('Invalid config line: %s', line)
                 success = False
@@ -121,15 +135,16 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             description = f'{inboxname} mirror'
 
         if success:
-            for opt, val in addopts:
-                gitargs = ['config', '-f', opts.piconfig, '--replace-all', f'publicinbox.{inboxname}.{opt}', val]
-                ec, out, err = grokmirror.run_git_command(None, gitargs)
-                if ec > 0:
-                    success = False
+            # Now we run public-inbox-init
+            piargs = ['public-inbox-init', '-V2', '-L', opts.indexlevel]
+            if newsgroup:
+                piargs += ['--ng', newsgroup]
+            for opt, val in extraopts:
+                piargs += ['-c', f'{opt}={val}']
+            piargs += [inboxname, inboxdir, local_url]
+            piargs += addresses
+            print(piargs)
 
-        if success:
-            # Now we run actual public-inbox-init
-            piargs = ['public-inbox-init', '-V2', inboxname, inboxdir, local_url] + addresses
             env = {'PI_CONFIG': opts.piconfig}
             try:
                 ec, out, err = grokmirror.run_shell_command(piargs, env=env)
@@ -183,6 +198,9 @@ def command():
     op.add_argument('--origin-hostname', dest='origin_host',
                     default='https://lore.kernel.org/',
                     help='URL of the origin toplevel serving config files')
+    op.add_argument('--listid-priority', dest='listid_priority',
+                    default='*.linux.dev,*.kernel.org',
+                    help='List-Ids priority order (comma-separated, can use shell globbing)')
     op.add_argument('--indexlevel', default='full',
                     help='Indexlevel to use with public-inbox-init (full, medium, basic)')
     op.add_argument('--force-init', dest='forceinit', action='store_true', default=False,
