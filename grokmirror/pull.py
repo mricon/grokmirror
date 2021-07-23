@@ -387,7 +387,7 @@ def pull_worker(config, q_pull, q_spa, q_done):
                     logger.info('  refetch: %s (try #%s)', gitdir, retries)
 
                 if success:
-                    run_post_update_hook(toplevel, gitdir, config['pull'].get('post_update_hook', ''))
+                    run_post_update_hook(config, fullpath)
                     post_pull_fp = grokmirror.get_repo_fingerprint(toplevel, gitdir, force=True)
                     repoinfo['fingerprint'] = post_pull_fp
                     altrepo = grokmirror.get_altrepo(fullpath)
@@ -568,56 +568,63 @@ def set_agefile(toplevel, gitdir, last_modified):
     logger.debug('Wrote "%s" into %s', cgit_fmt, agefile)
 
 
-def run_post_clone_complete_hook(config, clones):
-    toplevel = os.path.realpath(config['core'].get('toplevel'))
-    stdin = '\n'.join(clones).encode() + b'\n'
-    hookscripts = config['pull'].get('post_clone_complete_hook', '')
-    for hookscript in hookscripts.split('\n'):
+def get_hookscripts(config, hookname):
+    hookscripts = list()
+    # And sinker!
+    hookline = config['pull'].get(hookname, '')
+    for hookscript in hookline.split('\n'):
         hookscript = os.path.expanduser(hookscript.strip())
         sp = shlex.shlex(hookscript, posix=True)
         sp.whitespace_split = True
         args = list(sp)
-        if not os.access(args[0], os.X_OK):
-            logger.warning('post_update_hook %s is not executable', hookscript)
+        if not len(args):
             continue
+        if not os.access(args[0], os.X_OK):
+            logger.warning('hook not executable: %s', hookscript)
+            continue
+        hookscripts.append(args)
+    return hookscripts
+
+
+def run_post_clone_complete_hook(config, clones):
+    stdin = '\n'.join(clones) + '\n'
+    hookscripts = get_hookscripts(config, 'post_clone_complete_hook')
+    for args in hookscripts:
         logger.info(' inithook: %s', ' '.join(args))
         logger.debug('Running: %s', ' '.join(args))
-        args.append(toplevel)
-        ecode, output, error = grokmirror.run_shell_command(args, stdin=stdin)
+        logger.debug('Stdin: ---start---')
+        logger.debug(stdin)
+        logger.debug('Stdin: ---end---')
+        ecode, output, error = grokmirror.run_shell_command(args, stdin=stdin.encode())
         if error:
-            # Put hook stderror into warning
             logger.warning('Hook Stderr: %s', error)
         if output:
-            # Put hook stdout into info
             logger.info('Hook Stdout: %s', output)
 
 
-def run_post_update_hook(toplevel, gitdir, hookscripts):
-    if not len(hookscripts):
-        return
+def run_post_work_complete_hook(config):
+    hookscripts = get_hookscripts(config, 'post_work_complete_hook')
+    for args in hookscripts:
+        logger.info(' workhook: %s', ' '.join(args))
+        logger.debug('Running: %s', ' '.join(args))
+        ecode, output, error = grokmirror.run_shell_command(args)
+        if error:
+            logger.warning('Hook Stderr: %s', error)
+        if output:
+            logger.info('Hook Stdout: %s', output)
 
-    for hookscript in hookscripts.split('\n'):
-        hookscript = os.path.expanduser(hookscript.strip())
-        sp = shlex.shlex(hookscript, posix=True)
-        sp.whitespace_split = True
-        args = list(sp)
 
+def run_post_update_hook(config, fullpath):
+    hookscripts = get_hookscripts(config, 'post_update_hook')
+    for args in hookscripts:
         logger.info('     hook: %s', ' '.join(args))
-        if not os.access(args[0], os.X_OK):
-            logger.warning('post_update_hook %s is not executable', hookscript)
-            continue
-
-        fullpath = os.path.join(toplevel, gitdir.lstrip('/'))
         args.append(fullpath)
         logger.debug('Running: %s', ' '.join(args))
         ecode, output, error = grokmirror.run_shell_command(args)
-
         if error:
-            # Put hook stderror into warning
-            logger.warning('Hook Stderr (%s): %s', gitdir, error)
+            logger.warning('Hook Stderr (%s): %s', fullpath, error)
         if output:
-            # Put hook stdout into info
-            logger.info('Hook Stdout (%s): %s', gitdir, output)
+            logger.info('Hook Stdout (%s): %s', fullpath, output)
 
 
 def pull_repo(fullpath, remotename):
@@ -1176,6 +1183,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     bad = 0
     loopmark = None
     post_clone_hook = config['pull'].get('post_clone_complete_hook')
+    post_work_hook = config['pull'].get('post_work_complete_hook')
     with SignalHandler(config, sw, dws, pws, done):
         while True:
             for pw in pws:
@@ -1220,7 +1228,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                         pass
                     # Was it a clone, and are all other clones done?
                     if post_clone_hook and q_action == 'init':
-                        cloned.append(gitdir)
+                        cloned.append(os.path.join(toplevel, gitdir.lstrip('/')))
                         more_clones = False
                         for qgd, qqa in actions:
                             if qqa == 'init':
@@ -1290,6 +1298,8 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
                     if not len(pws):
                         if done:
                             update_manifest(config, done)
+                            if post_work_hook:
+                                run_post_work_complete_hook(config)
                             if runonce:
                                 # Wait till spa is done
                                 while True:
