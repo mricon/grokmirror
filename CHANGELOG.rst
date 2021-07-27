@@ -1,3 +1,10 @@
+v2.1.0 (TBD)
+------------
+- Add new hook post_work_complete_hook that fires after all work is
+  complete and grokmirror goes idle
+- Add new command grok-pi-indexer for indexing public-inbox mirrored
+  repositories
+
 v2.0.9 (2021-07-13)
 -------------------
 - Add initial support for post_clone_complete_hook that fires only after
