@@ -1,3 +1,18 @@
+v2.0.10 (2021-07-27)
+--------------------
+- Roll back new hook inclusion (will go into 2.1.0)
+- Roll back code cleanups (will go into 2.1.0)
+- Fix a grok-fsck regression introduced in 2.0.9
+- Fix pull_threads auto-detection on single-cpu systems
+
+v2.0.9 (2021-07-13)
+-------------------
+- Add initial support for post_clone_complete_hook that fires only after
+  all new clones have been completed.
+- Fix grok-manifest traceback due to unicode errors in the repo
+  description file.
+- Minor code cleanups.
+
 v2.0.8 (2021-03-11)
 -------------------
 - Fixes around symlink handling in manifest files. Adding and deleting
