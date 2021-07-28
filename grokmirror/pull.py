@@ -1282,6 +1282,8 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
             if not runonce and not len(mws) and q_todo.empty() and q_pull.empty() and time.time() - lastrun >= refresh:
                 if done:
                     update_manifest(config, done)
+                    if post_work_hook:
+                        run_post_work_complete_hook(config)
                 mw = mp.Process(target=manifest_worker, args=(config, q_mani, nomtime))
                 nomtime = False
                 mw.daemon = True
