@@ -8,6 +8,7 @@ import os
 import sys
 import re
 import shutil
+import shlex
 
 import grokmirror
 
@@ -39,7 +40,13 @@ def index_pi_inbox(inboxdir: str, opts) -> bool:
         logger.info('Inboxdir not initialized: %s', inboxdir)
         return False
 
-    piargs = ['public-inbox-index', '--no-update-extindex', inboxdir]
+    piargs = ['public-inbox-index', '--no-update-extindex']
+    if opts.pi_index_flags:
+        sp = shlex.shlex(opts.pi_index_flags, posix=True)
+        sp.whitespace_split = True
+        piargs += list(sp)
+
+    piargs.append(inboxdir)
 
     env = {
         'PI_CONFIG': opts.piconfig,
@@ -143,6 +150,10 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             piargs = ['public-inbox-init', '-V2', '-L', opts.indexlevel]
             if newsgroup:
                 piargs += ['--ng', newsgroup]
+            if opts.pi_init_flags:
+                sp = shlex.shlex(opts.pi_init_flags, posix=True)
+                sp.whitespace_split = True
+                piargs += list(sp)
             for opt, val in extraopts:
                 piargs += ['-c', f'{opt}={val}']
             piargs += [inboxname, inboxdir, local_url]
@@ -242,6 +253,10 @@ def cmd_extindex(opts):
     }
     logger.info('Running extindex --all')
     piargs = ['public-inbox-extindex', '--all']
+    if opts.pi_extindex_flags:
+        sp = shlex.shlex(opts.pi_extindex_flags, posix=True)
+        sp.whitespace_split = True
+        piargs += list(sp)
     try:
         ec, out, err = grokmirror.run_shell_command(piargs, env=env)
         if ec > 0:
@@ -284,6 +299,10 @@ def command():
                          help='Indexlevel to use with public-inbox-init (full, medium, basic)')
     sp_init.add_argument('--force-reinit', dest='forceinit', action='store_true', default=False,
                          help='Force a full (re-)init of an inboxdir')
+    sp_init.add_argument('--pi-init-flags', dest='pi_init_flags',
+                         help='Additional flags to pass verbatim to public-inbox-init')
+    sp_init.add_argument('--pi-index-flags', dest='pi_index_flags',
+                         help='Additional flags to pass verbatim to public-inbox-index')
     sp_init.add_argument('inboxdir', nargs='?',
                          help='Path to toplevel inboxdir (non-hook mode)')
     sp_init.set_defaults(func=cmd_init)
@@ -291,9 +310,13 @@ def command():
     sp_update = sp.add_parser('update', help='Run public-inbox-index on passed repository path')
     sp_update.add_argument('repo', nargs=1,
                            help='Full path to foo/git/N.git public-inbox repository')
+    sp_update.add_argument('--pi-index-flags', dest='pi_index_flags',
+                           help='Additional flags to pass verbatim to public-inbox-index')
     sp_update.set_defaults(func=cmd_update)
 
     sp_extindex = sp.add_parser('extindex', help='Run extindex on all inboxes')
+    sp_extindex.add_argument('--pi-extindex-flags', dest='pi_extindex_flags',
+                             help='Additional flags to pass verbatim to public-inbox-extindex')
     sp_extindex.set_defaults(func=cmd_extindex)
 
     opts = ap.parse_args()
