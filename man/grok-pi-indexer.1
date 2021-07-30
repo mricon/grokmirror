@@ -33,7 +33,12 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .SH SYNOPSIS
 .INDENT 0.0
 .INDENT 3.5
-grok\-pi\-indexer [\-h] [\-v] \-c PICONFIG [\-l LOGFILE] {init,update,extindex}
+.INDENT 0.0
+.TP
+.B grok\-pi\-indexer [\-h] [\-v] \-c PICONFIG [\-l LOGFILE] [\-L INDEXLEVEL]
+[\-j JOBS] [\-\-no\-fsync]
+{init,update,extindex} ...
+.UNINDENT
 .UNINDENT
 .UNINDENT
 .SH DESCRIPTION
@@ -67,10 +72,13 @@ include = /git/*
           /tools/*
 refresh = 60
 purge = no
-post_clone_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config init
+# If you have many CPUs and fast disks, you may want to raise \-j to a higher number
+# You can also set publicinbox.indexBatchSize to a higher number in PI_CONFIG if
+# you have lots of RAM, but probably not higher than 256m
+post_clone_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-j 2 \-\-no\-fsync init
 post_update_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config update
 # Uncomment if you\(aqve defined any [extindex] sections
-#post_work_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config extindex
+#post_work_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-j 2 \-\-no\-fsync extindex
 
 [fsck]
 frequency = 30
@@ -99,6 +107,15 @@ Location of the public\-inbox configuration file (default: None)
 .TP
 .BI \-l \ LOGFILE\fR,\fB \ \-\-logfile \ LOGFILE
 Log activity in this log file (default: None)
+.TP
+.BI \-L \ INDEXLEVEL\fR,\fB \ \-\-indexlevel \ INDEXLEVEL
+Indexlevel to use with public\-inbox (full, medium, basic) (default: full)
+.TP
+.BI \-j \ JOBS\fR,\fB \ \-\-jobs \ JOBS
+The \-\-jobs parameter to pass to public\-inbox (default: None)
+.TP
+.B \-\-no\-fsync
+Use \-\-no\-fsync when invoking public\-inbox (default: False)
 .UNINDENT
 .UNINDENT
 .UNINDENT
@@ -107,7 +124,11 @@ Log activity in this log file (default: None)
 .IP \(bu 2
 grok\-pull(1)
 .IP \(bu 2
-git(1)
+public\-inbox\-init(1)
+.IP \(bu 2
+public\-inbox\-index(1)
+.IP \(bu 2
+public\-inbox\-extindex(1)
 .UNINDENT
 .SH SUPPORT
 .sp
