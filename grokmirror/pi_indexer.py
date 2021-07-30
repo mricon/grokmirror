@@ -8,7 +8,6 @@ import os
 import sys
 import re
 import shutil
-import shlex
 
 import grokmirror
 
@@ -196,6 +195,8 @@ def process_inboxdirs(inboxdirs: list, opts, init: bool = False):
         logger.info('Nothing to do')
         sys.exit(0)
 
+    # Init all new repos first, and then index them one by one
+    toindex = set()
     for inboxdir in inboxdirs:
         # Check if msgmap.sqlite3 is there -- it can be a clone of a new epoch,
         # so no initialization is necessary
@@ -205,8 +206,11 @@ def process_inboxdirs(inboxdirs: list, opts, init: bool = False):
             if not init_pi_inbox(inboxdir, opts):
                 logger.critical('Could not init %s', inboxdir)
                 continue
+        if os.path.exists(msgmapdbf):
+            toindex.add(inboxdir)
 
-        if os.path.exists(msgmapdbf) and not index_pi_inbox(inboxdir, opts):
+    for inboxdir in toindex:
+        if not index_pi_inbox(inboxdir, opts):
             logger.critical('Unable to index %s', inboxdir)
 
 
