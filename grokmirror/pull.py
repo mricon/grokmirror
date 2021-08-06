@@ -1142,7 +1142,7 @@ def pull_mirror(config, nomtime=False, forcepurge=False, runonce=False):
     if pull_threads < 1 and mp.cpu_count() > 1:
         # take half of available CPUs by default
         pull_threads = int(mp.cpu_count() / 2)
-    else:
+    elif pull_threads < 1:
         pull_threads = 1
 
     busy = set()
