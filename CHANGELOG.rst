@@ -1,3 +1,8 @@
+v2.0.11 (2021-08-06)
+--------------------
+- Hotfix for pull_threads bug causing any config value to result in 1
+  thread.
+
 v2.0.10 (2021-07-27)
 --------------------
 - Roll back new hook inclusion (will go into 2.1.0)
