@@ -8,10 +8,12 @@ import os
 import sys
 import re
 import shutil
+import pathlib
 
 import grokmirror
 
 from fnmatch import fnmatch
+from typing import Tuple
 
 # default basic logger. We override it later.
 logger = logging.getLogger(__name__)
@@ -30,13 +32,14 @@ def get_pi_repos(inboxdir: str) -> list:
     return members
 
 
-def index_pi_inbox(inboxdir: str, opts) -> bool:
-    logger.info('pi-index %s', inboxdir)
+def index_pi_inbox(fullpath: str, opts) -> bool:
+    gdir, pdir = get_git_pi_dir(opts, fullpath)
+    logger.info('pi-index %s', gdir)
     success = True
     # Check that msgmap.sqlite3 is there
-    msgmapdbf = os.path.join(inboxdir, 'msgmap.sqlite3')
+    msgmapdbf = os.path.join(pdir, 'msgmap.sqlite3')
     if not os.path.exists(msgmapdbf):
-        logger.info('Inboxdir not initialized: %s', inboxdir)
+        logger.info('Inboxdir not initialized: %s', pdir)
         return False
 
     piargs = ['public-inbox-index', '--no-update-extindex']
@@ -45,7 +48,7 @@ def index_pi_inbox(inboxdir: str, opts) -> bool:
     if opts.nofsync:
         piargs += ['--no-fsync']
 
-    piargs.append(inboxdir)
+    piargs.append(pdir)
 
     env = {
         'PI_CONFIG': opts.piconfig,
@@ -54,24 +57,24 @@ def index_pi_inbox(inboxdir: str, opts) -> bool:
     try:
         ec, out, err = grokmirror.run_shell_command(piargs, env=env)
         if ec > 0:
-            logger.critical('Unable to index public-inbox repo %s: %s', inboxdir, err)
+            logger.critical('Unable to index public-inbox repo %s: %s', pdir, err)
             success = False
     except Exception as ex:  # noqa
-        logger.critical('Unable to index public-inbox repo %s: %s', inboxdir, ex)
+        logger.critical('Unable to index public-inbox repo %s: %s', pdir, ex)
         success = False
 
     return success
 
 
-def init_pi_inbox(inboxdir: str, opts) -> bool:
+def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
     # for boost values, we look at the number of entries
     boosts = list()
     if opts.listid_priority:
         boosts = list(reversed(opts.listid_priority.split(',')))
 
-    logger.info('pi-init  %s', inboxdir)
+    logger.info('pi-init  %s', gdir)
     # Lock all member repos so they don't get updated in the process
-    pi_repos = get_pi_repos(inboxdir)
+    pi_repos = get_pi_repos(gdir)
     origins = None
     gitargs = ['show', 'refs/meta/origins:i']
     # We reverse because we want to give priority to the latest origins info
@@ -82,7 +85,7 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             ec, out, err = grokmirror.run_git_command(subrepo, gitargs)
             if out:
                 origins = out
-    inboxname = os.path.basename(inboxdir)
+    inboxname = os.path.basename(gdir)
     if not origins and opts.origin_host:
         # Attempt to grab the config sample from remote
         origin_host = opts.origin_host.rstrip('/')
@@ -93,7 +96,7 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             res.raise_for_status()
             origins = res.text
         except: # noqa
-            logger.critical('ERROR: Not able to get origins info for %s, skipping', inboxdir)
+            logger.critical('ERROR: Not able to get origins info for %s, skipping', gdir)
             success = False
 
     if origins:
@@ -104,6 +107,7 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
         extraopts = list()
         description = None
         newsgroup = None
+        listid = None
         addresses = list()
         for line in origins.split('\n'):
             line = line.strip()
@@ -123,6 +127,7 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
                     newsgroup = val
                     continue
                 if opt == 'listid' and boosts:
+                    listid = val
                     # Calculate the boost value
                     for patt in boosts:
                         if fnmatch(val, patt):
@@ -142,16 +147,26 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
         if not addresses:
             addresses = [f'{inboxname}@localhost']
         if not description:
-            description = f'{inboxname} mirror'
+            if listid:
+                description = f'{listid} archive mirror'
+            else:
+                description = f'{inboxname} archive mirror'
 
         if success:
+            if gdir != pdir:
+                # public-inbox databases are separate from the main git trees
+                pathlib.Path(pdir).mkdir(parents=True, exist_ok=True)
+                # Symlink the git subpath
+                if not os.path.islink(os.path.join(pdir, 'git')):
+                    os.symlink(os.path.join(gdir, 'git'), os.path.join(pdir, 'git'))
+
             # Now we run public-inbox-init
             piargs = ['public-inbox-init', '-V2', '-L', opts.indexlevel]
             if newsgroup:
                 piargs += ['--ng', newsgroup]
             for opt, val in extraopts:
                 piargs += ['-c', f'{opt}={val}']
-            piargs += [inboxname, inboxdir, local_url]
+            piargs += [inboxname, pdir, local_url]
             piargs += addresses
             logger.debug('piargs=%s', piargs)
 
@@ -162,14 +177,14 @@ def init_pi_inbox(inboxdir: str, opts) -> bool:
             try:
                 ec, out, err = grokmirror.run_shell_command(piargs, env=env)
                 if ec > 0:
-                    logger.critical('Unable to init public-inbox repo %s: %s', inboxdir, err)
+                    logger.critical('Unable to init public-inbox repo %s: %s', pdir, err)
                     success = False
             except Exception as ex: # noqa
-                logger.critical('Unable to init public-inbox repo %s: %s', inboxdir, ex)
+                logger.critical('Unable to init public-inbox repo %s: %s', pdir, ex)
                 success = False
 
         if success:
-            with open(os.path.join(inboxdir, 'description'), 'w') as fh:
+            with open(os.path.join(pdir, 'description'), 'w') as fh:
                 fh.write(description)
 
     # Unlock all members
@@ -190,7 +205,7 @@ def get_inboxdirs(repos: list) -> set:
     return inboxdirs
 
 
-def process_inboxdirs(inboxdirs: list, opts, init: bool = False):
+def process_inboxdirs(inboxdirs: set, opts, init: bool = False):
     if not len(inboxdirs):
         logger.info('Nothing to do')
         sys.exit(0)
@@ -198,12 +213,13 @@ def process_inboxdirs(inboxdirs: list, opts, init: bool = False):
     # Init all new repos first, and then index them one by one
     toindex = set()
     for inboxdir in inboxdirs:
+        gdir, pdir = get_git_pi_dir(opts, inboxdir)
         # Check if msgmap.sqlite3 is there -- it can be a clone of a new epoch,
         # so no initialization is necessary
-        msgmapdbf = os.path.join(inboxdir, 'msgmap.sqlite3')
+        msgmapdbf = os.path.join(pdir, 'msgmap.sqlite3')
         if init and not os.path.exists(msgmapdbf):
             # Initialize this public-inbox repo
-            if not init_pi_inbox(inboxdir, opts):
+            if not init_pi_inbox(gdir, pdir, opts):
                 logger.critical('Could not init %s', inboxdir)
                 continue
         if os.path.exists(msgmapdbf):
@@ -214,35 +230,47 @@ def process_inboxdirs(inboxdirs: list, opts, init: bool = False):
             logger.critical('Unable to index %s', inboxdir)
 
 
+def get_git_pi_dir(opts, fullpath: str) -> Tuple[str, str]:
+    fullpath = os.path.realpath(fullpath)
+    if not opts.pitoplevel:
+        # Public-inbox is in the same dir
+        return fullpath, fullpath
+    # Public-inbox is in a separate dir
+    pitop = os.path.realpath(opts.pitoplevel)
+    groktop = os.path.realpath(opts.toplevel)
+    inboxname = os.path.relpath(fullpath, groktop)
+    return fullpath, os.path.join(pitop, inboxname)
+
+
 def cmd_init(opts):
-    inboxdirs = list()
     if opts.inboxdir:
+        inboxdirs = get_inboxdirs(opts.inboxdir)
         if opts.forceinit:
-            msgmapdbf = os.path.join(opts.inboxdir, 'msgmap.sqlite3')
+            inboxdir = inboxdirs.pop()
+            gdir, pdir = get_git_pi_dir(opts, inboxdir)
+            msgmapdbf = os.path.join(pdir, 'msgmap.sqlite3')
             # Delete msgmap and xap15 if present and reinitialize
             if os.path.exists(msgmapdbf):
                 logger.critical('Reinitializing %s', opts.inboxdir)
                 os.unlink(msgmapdbf)
-            if os.path.exists(os.path.join(opts.inboxdir, 'xap15')):
-                shutil.rmtree(os.path.join(opts.inboxdir, 'xap15'))
-        inboxdirs.append(opts.inboxdir)
-    if not sys.stdin.isatty():
+            if os.path.exists(os.path.join(pdir, 'xap15')):
+                shutil.rmtree(os.path.join(pdir, 'xap15'))
+    elif not sys.stdin.isatty():
         repos = list()
         for line in sys.stdin.read().split('\n'):
             if not line:
                 continue
             repos.append(line)
-        inboxdirs += get_inboxdirs(repos)
+        inboxdirs = get_inboxdirs(repos)
+    else:
+        logger.info('Nothing to do')
+        sys.exit(0)
 
     process_inboxdirs(inboxdirs, opts, init=True)
 
 
 def cmd_update(opts):
-    if not opts.repo[0].endswith('.git'):
-        # Assume we're working with toplevel inboxdir
-        inboxdirs = opts.repo
-    else:
-        inboxdirs = get_inboxdirs(opts.repo)
+    inboxdirs = get_inboxdirs(opts.repo)
     process_inboxdirs(inboxdirs, opts)
 
 
@@ -280,6 +308,10 @@ def command():
                     help='Be verbose and tell us what you are doing')
     ap.add_argument('-c', '--pi-config', dest='piconfig', required=True,
                     help='Location of the public-inbox configuration file')
+    ap.add_argument('-t', '--toplevel', dest='toplevel', required=True,
+                    help='Path to git repository mirror toplevel')
+    ap.add_argument('-p', '--pi-toplevel', dest='pitoplevel',
+                    help='Path to public-inbox toplevel, if separate')
     ap.add_argument('-l', '--logfile',
                     help='Log activity in this log file')
     ap.add_argument('-L', '--indexlevel', default='full',
@@ -326,7 +358,7 @@ def command():
     else:
         loglevel = logging.INFO
 
-    logger = grokmirror.init_logger('pull', logfile, loglevel, opts.verbose)
+    logger = grokmirror.init_logger('pi-indexer', logfile, loglevel, opts.verbose)
     opts.func(opts)
 
 
