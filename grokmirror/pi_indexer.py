@@ -129,10 +129,12 @@ def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
                 if opt == 'listid' and boosts:
                     listid = val
                     # Calculate the boost value
+                    boostval = 1
                     for patt in boosts:
                         if fnmatch(val, patt):
-                            extraopts.append(('boost', str(boosts.index(patt) + 1)))
+                            boostval = boosts.index(patt) + 10
                             break
+                    extraopts.append(('boost', str(boostval)))
 
                 if opt not in {'infourl', 'listid'}:
                     continue
