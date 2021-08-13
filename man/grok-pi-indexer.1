@@ -35,8 +35,8 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .INDENT 3.5
 .INDENT 0.0
 .TP
-.B grok\-pi\-indexer [\-h] [\-v] \-c PICONFIG [\-l LOGFILE] [\-L INDEXLEVEL]
-[\-j JOBS] [\-\-no\-fsync]
+.B grok\-pi\-indexer [\-h] [\-v] \-c PICONFIG \-t TOPLEVEL [\-p PITOPLEVEL]
+[\-l LOGFILE] [\-L INDEXLEVEL] [\-j JOBS] [\-\-no\-fsync]
 {init,update,extindex} ...
 .UNINDENT
 .UNINDENT
@@ -75,10 +75,10 @@ purge = no
 # If you have many CPUs and fast disks, you may want to raise \-j to a higher number
 # You can also set publicinbox.indexBatchSize to a higher number in PI_CONFIG if
 # you have lots of RAM, but probably not higher than 256m
-post_clone_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-j 2 \-\-no\-fsync init
-post_update_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config update
+post_clone_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-t ${core:toplevel} init
+post_update_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-t ${core:toplevel} update
 # Uncomment if you\(aqve defined any [extindex] sections
-#post_work_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-j 2 \-\-no\-fsync extindex
+#post_work_complete_hook = /usr/bin/grok\-pi\-indexer \-c /etc/public\-inbox/config \-t ${core:toplevel} extindex
 
 [fsck]
 frequency = 30
@@ -104,6 +104,12 @@ Be verbose and tell us what you are doing (default: False)
 .TP
 .BI \-c \ PICONFIG\fR,\fB \ \-\-pi\-config \ PICONFIG
 Location of the public\-inbox configuration file (default: None)
+.TP
+.BI \-t \ TOPLEVEL\fR,\fB \ \-\-toplevel \ TOPLEVEL
+Path to git repository mirror toplevel (default: None)
+.TP
+.BI \-p \ PITOPLEVEL\fR,\fB \ \-\-pi\-toplevel \ PITOPLEVEL
+Path to public\-inbox toplevel, if separate (default: None)
 .TP
 .BI \-l \ LOGFILE\fR,\fB \ \-\-logfile \ LOGFILE
 Log activity in this log file (default: None)

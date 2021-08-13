@@ -13,8 +13,8 @@ Hook script for indexing mirrored public-inbox repos
 
 SYNOPSIS
 --------
-    grok-pi-indexer [-h] [-v] -c PICONFIG [-l LOGFILE] [-L INDEXLEVEL]
-                    [-j JOBS] [--no-fsync]
+    grok-pi-indexer [-h] [-v] -c PICONFIG -t TOPLEVEL [-p PITOPLEVEL]
+                    [-l LOGFILE] [-L INDEXLEVEL] [-j JOBS] [--no-fsync]
                     {init,update,extindex} ...
 
 DESCRIPTION
@@ -47,10 +47,10 @@ the following grokmirror configuration file to mirror lore.kernel.org::
     # If you have many CPUs and fast disks, you may want to raise -j to a higher number
     # You can also set publicinbox.indexBatchSize to a higher number in PI_CONFIG if
     # you have lots of RAM, but probably not higher than 256m
-    post_clone_complete_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config -j 2 --no-fsync init
-    post_update_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config update
+    post_clone_complete_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config -t ${core:toplevel} init
+    post_update_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config -t ${core:toplevel} update
     # Uncomment if you've defined any [extindex] sections
-    #post_work_complete_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config -j 2 --no-fsync extindex
+    #post_work_complete_hook = /usr/bin/grok-pi-indexer -c /etc/public-inbox/config -t ${core:toplevel} extindex
 
     [fsck]
     frequency = 30
@@ -68,6 +68,10 @@ OPTIONS
   -v, --verbose         Be verbose and tell us what you are doing (default: False)
   -c PICONFIG, --pi-config PICONFIG
                         Location of the public-inbox configuration file (default: None)
+  -t TOPLEVEL, --toplevel TOPLEVEL
+                        Path to git repository mirror toplevel (default: None)
+  -p PITOPLEVEL, --pi-toplevel PITOPLEVEL
+                        Path to public-inbox toplevel, if separate (default: None)
   -l LOGFILE, --logfile LOGFILE
                         Log activity in this log file (default: None)
   -L INDEXLEVEL, --indexlevel INDEXLEVEL
