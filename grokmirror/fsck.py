@@ -667,7 +667,10 @@ def fsck_mirror(config, force=False, repack_only=False, conn_only=False,
         if not os.path.isdir(fullpath):
             # Remove it from manifest and status
             manifest.pop(gitdir)
-            status.pop(fullpath)
+            try:
+                status.pop(fullpath)
+            except KeyError:
+                pass
             changed = True
             continue
 
