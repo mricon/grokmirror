@@ -102,8 +102,11 @@ def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
     if origins:
         # Okay, let's process it
         # Generate a config entry
-        local_host = opts.local_host.rstrip('/')
-        local_url = f'{local_host}/{inboxname}/'
+        if opts.local_toplevel:
+            local_toplevel = opts.local_toplevel.rstrip('/')
+            local_url = f'{local_toplevel}/{inboxname}'
+        else:
+            local_url = inboxname
         extraopts = list()
         description = None
         newsgroup = None
@@ -136,7 +139,8 @@ def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
                             break
                     extraopts.append(('boost', str(boostval)))
 
-                if opt not in {'infourl', 'listid'}:
+                # Can add other options later
+                if opt not in {'listid'}:
                     continue
                 extraopts.append((opt, val))
             except ValueError:
@@ -326,9 +330,8 @@ def command():
     sp = ap.add_subparsers(help='sub-command help', dest='subcmd')
     sp_init = sp.add_parser('init', help='Run public-inbox-init+index on repositories passed via stdin')
 
-    sp_init.add_argument('--local-hostname', dest='local_host',
-                         default='http://localhost/',
-                         help='URL of the local mirror toplevel')
+    sp_init.add_argument('--local-toplevel', dest='local_toplevel', default='',
+                         help='URL of the local mirror toplevel (omit if serving from /)')
     sp_init.add_argument('--origin-hostname', dest='origin_host',
                          default='https://lore.kernel.org/',
                          help='URL of the origin toplevel serving config files')
