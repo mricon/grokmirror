@@ -128,8 +128,8 @@ def run_pi_repo(repo: str, pipedef: str, dryrun: bool = False, shallow: bool = F
     latest_good = None
     ecode = 0
     for commit_id, subject in revlist:
-        msgbytes = git_get_message_from_pi(repo, commit_id)
-        if msgbytes:
+        try:
+            msgbytes = git_get_message_from_pi(repo, commit_id)
             if dryrun:
                 logger.info('  piping: %s (%s b) [DRYRUN]', commit_id, len(msgbytes))
                 logger.debug(' subject: %s', subject)
@@ -142,6 +142,8 @@ def run_pi_repo(repo: str, pipedef: str, dryrun: bool = False, shallow: bool = F
                     logger.info(err)
                     break
                 latest_good = commit_id
+        except KeyError:
+            logger.info('Skipping %s', commit_id)
 
     if latest_good and not dryrun:
         with open(statf, 'w') as fh:
