@@ -20,7 +20,7 @@ DESCRIPTION
 Grok-pull is the main tool for replicating repository updates from the
 grokmirror primary server to the mirrors.
 
-Grok-pull has two modes of operation -- onetime and continous
+Grok-pull has two modes of operation -- onetime and continuous
 (daemonized). In one-time operation mode, it downloads the latest
 manifest and applies any outstanding updates. If there are new
 repositories or changes in the existing repositories, grok-pull will
