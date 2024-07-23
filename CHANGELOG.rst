@@ -1,3 +1,7 @@
+v2.0.12 (2024-07-23)
+--------------------
+- A couple of long-outstanding fixes that need a released version.
+
 v2.0.11 (2021-08-06)
 --------------------
 - Hotfix for pull_threads bug causing any config value to result in 1
