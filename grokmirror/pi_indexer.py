@@ -108,6 +108,9 @@ def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
         else:
             local_url = inboxname
         extraopts = list()
+        acceptopts = {'listid'}
+        if opts.extra_cfgopts:
+            acceptopts.update(opts.extra_cfgopts.split(','))
         description = None
         newsgroup = None
         listid = None
@@ -139,10 +142,10 @@ def init_pi_inbox(gdir: str, pdir: str, opts) -> bool:
                             break
                     extraopts.append(('boost', str(boostval)))
 
-                # Can add other options later
-                if opt not in {'listid'}:
-                    continue
-                extraopts.append((opt, val))
+                if opt in acceptopts:
+                    logger.debug('Accepting extra opt %s=%s', opt, val)
+                    extraopts.append((opt, val))
+
             except ValueError:
                 logger.critical('Invalid config line: %s', line)
                 success = False
@@ -338,6 +341,9 @@ def command():
     sp_init.add_argument('--listid-priority', dest='listid_priority',
                          default='*.linux.dev,*.kernel.org',
                          help='List-Ids priority order (comma-separated, can use shell globbing)')
+    sp_init.add_argument('--extra-cfgopts', dest='extra_cfgopts',
+                         default='indexheader,replyto',
+                         help='Extra config options to accept from remote (comma-separated)')
     sp_init.add_argument('--force-reinit', dest='forceinit', action='store_true', default=False,
                          help='Force a full (re-)init of an inboxdir')
     sp_init.add_argument('inboxdir', nargs='?',
