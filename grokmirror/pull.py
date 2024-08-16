@@ -716,11 +716,13 @@ def fill_todo_from_manifest(config, q_mani, nomtime=False, forcepurge=False):
     r_mani_cmd = config['remote'].get('manifest_command')
 
     if r_mani_cmd:
-        if not os.access(r_mani_cmd, os.X_OK):
-            logger.critical('Remote manifest command is not executable: %s', r_mani_cmd)
+        sp = shlex.shlex(r_mani_cmd, posix=True)
+        sp.whitespace_split = True
+        cmdargs = list(sp)
+        if not os.access(cmdargs[0], os.X_OK):
+            logger.critical('Remote manifest command is not executable: %s', cmdargs[0])
             sys.exit(1)
         logger.info(' manifest: executing %s', r_mani_cmd)
-        cmdargs = [r_mani_cmd]
         if nomtime:
             cmdargs += ['--force']
         (ecode, output, error) = grokmirror.run_shell_command(cmdargs)
