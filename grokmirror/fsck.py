@@ -340,7 +340,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
         set_precious_objects(fullpath, enabled=False)
 
     set_precious_after = False
-    gen_commitgraph = True
+    commitgraph_flags = ['--reachable']
 
     # Figure out what our repack flags should be.
     repack_flags = list()
@@ -362,7 +362,7 @@ def run_git_repack(fullpath, config, level=1, prune=True):
     elif grokmirror.is_alt_repo(toplevel, gitdir):
         set_precious_after = True
         if grokmirror.get_altrepo(fullpath):
-            gen_commitgraph = False
+            commitgraph_flags = []
             logger.warning(' warning : has alternates and is used by others for alternates')
             logger.warning('         : this can cause grandchild corruption')
             repack_flags.append('-A')
@@ -375,7 +375,6 @@ def run_git_repack(fullpath, config, level=1, prune=True):
 
     elif grokmirror.get_altrepo(fullpath):
         # we are a "child repo"
-        gen_commitgraph = False
         repack_flags.append('-l')
         repack_flags.append('-A')
         if prune:
@@ -424,9 +423,9 @@ def run_git_repack(fullpath, config, level=1, prune=True):
             set_precious_objects(fullpath, enabled=True)
         return False
 
-    if gen_commitgraph and config['fsck'].get('commitgraph', 'yes') == 'yes':
+    if config['fsck'].get('commitgraph', 'yes') == 'yes':
         grokmirror.set_git_config(fullpath, 'core.commitgraph', 'true')
-        run_git_commit_graph(fullpath)
+        run_git_commit_graph(fullpath, commitgraph_flags)
 
     # repacking refs requires a separate command, so run it now
     args = ['pack-refs']
@@ -479,12 +478,14 @@ def run_git_fsck(fullpath, config, conn_only=False):
             check_reclone_error(fullpath, config, warn)
 
 
-def run_git_commit_graph(fullpath):
+def run_git_commit_graph(fullpath, extraflags=None):
     # Does our version of git support commit-graph?
     if not grokmirror.git_newer_than('2.18.0'):
         logger.debug('Git version too old, not generating commit-graph')
     logger.info('    graph: generating commit-graph')
     args = ['commit-graph', 'write']
+    if extraflags:
+        args += extraflags
     retcode, output, error = grokmirror.run_git_command(fullpath, args)
     if retcode == 0:
         return True
