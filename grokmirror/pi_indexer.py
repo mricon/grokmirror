@@ -255,7 +255,7 @@ def cmd_init(opts):
     if opts.inboxdir:
         inboxdirs = get_inboxdirs(opts.inboxdir)
         if opts.forceinit:
-            inboxdir = inboxdirs.pop()
+            inboxdir = list(inboxdirs)[0] # get first element from the set
             gdir, pdir = get_git_pi_dir(opts, inboxdir)
             msgmapdbf = os.path.join(pdir, 'msgmap.sqlite3')
             # Delete msgmap and xap15 if present and reinitialize
