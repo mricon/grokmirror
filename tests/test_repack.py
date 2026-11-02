@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import random
+import struct
 from pathlib import Path
 
 import pytest
@@ -168,11 +169,23 @@ def test_fork_group_repack(tree: GrokTree) -> None:
     assert grokmirror.is_precious(str(obstrepo))
 
 
+def alternates_chain(tree: GrokTree) -> tuple[Path, Path, Path]:
+    """Build the pre-objstore grandchild arrangement and return its three repos.
+
+    grandma lends objects to mommy, and mommy lends objects to child. The
+    three histories are unrelated, so sibling detection has no reason to
+    migrate anybody into an objstore repository.
+    """
+    grandma = tree.add_repo('test/grandma.git', source='gsource')
+    mommy = tree.add_repo('test/mommy.git', source='msource')
+    child = tree.add_repo('test/child.git', source='csource')
+    (mommy / 'objects' / 'info' / 'alternates').write_text(f'{grandma / "objects"}\n')
+    (child / 'objects' / 'info' / 'alternates').write_text(f'{mommy / "objects"}\n')
+    return grandma, mommy, child
+
+
 def test_alt_parent_and_grandchild_repack(tree: GrokTree) -> None:
-    # A pre-objstore arrangement grok-fsck must maintain but not convert:
-    # grandma lends objects to mommy, and mommy lends objects to child. The
-    # three histories are unrelated, so sibling detection has no reason to
-    # migrate anybody into an objstore repository.
+    # A pre-objstore arrangement grok-fsck must maintain but not convert.
     #
     # grandma is used by others: unreachable objects may be reachable from a
     # borrower, so nothing may ever be dropped -- which a geometric repack
@@ -184,11 +197,7 @@ def test_alt_parent_and_grandchild_repack(tree: GrokTree) -> None:
     # in the log.
     #
     # child only borrows, so she geometrically repacks her own objects.
-    grandma = tree.add_repo('test/grandma.git', source='gsource')
-    mommy = tree.add_repo('test/mommy.git', source='msource')
-    child = tree.add_repo('test/child.git', source='csource')
-    (mommy / 'objects' / 'info' / 'alternates').write_text(f'{grandma / "objects"}\n')
-    (child / 'objects' / 'info' / 'alternates').write_text(f'{mommy / "objects"}\n')
+    grandma, mommy, child = alternates_chain(tree)
     heads = {repo: git('rev-parse', 'HEAD', cwd=repo).strip() for repo in (grandma, mommy, child)}
     tree.run_manifest()
     # No ignore_errors: repacks with alternates pass --no-write-bitmap-index,
@@ -204,6 +213,56 @@ def test_alt_parent_and_grandchild_repack(tree: GrokTree) -> None:
     assert_clean(grandma, mommy, child)
     for repo, head in heads.items():
         assert git('cat-file', '-e', head, cwd=repo) == ''
+
+
+def graph_commits(repo: Path) -> set[str]:
+    """Return the ids of the commits listed in repo's own commit-graph file.
+
+    Read from the OID lookup chunk directly: git has no porcelain that lists a
+    graph's contents.
+    """
+    data = (repo / 'objects' / 'info' / 'commit-graph').read_bytes()
+    assert data[:4] == b'CGPH'
+    hashlen = {1: 20, 2: 32}[data[5]]
+    chunks = {}
+    for i in range(data[6] + 1):
+        cid, off = struct.unpack('>4sQ', data[8 + 12 * i : 20 + 12 * i])
+        chunks[cid] = off
+    start = chunks[b'OIDL']
+    end = min(off for off in chunks.values() if off > start)
+    return {data[p : p + hashlen].hex() for p in range(start, end, hashlen)}
+
+
+def test_commit_graphs_list_only_reachable_commits(tree: GrokTree, monkeypatch: pytest.MonkeyPatch) -> None:
+    # cgit's object reachability check trusts a repository's own commit-graph
+    # as the list of commits its refs reach, so every repository class must
+    # write it with --reachable. A graph written from packs would also list
+    # commits that only a reflog still keeps packed, such as the old side of a
+    # force-push, and cgit would go on serving them.
+    grandma, mommy, child = alternates_chain(tree)
+    # Reflog entries are dated by the committer clock, which the suite pins far
+    # in the past, and grok-fsck would expire them before repacking.
+    monkeypatch.delenv('GIT_COMMITTER_DATE')
+    pushed = {}
+    for repo in (grandma, mommy, child):
+        head = git('rev-parse', 'HEAD', cwd=repo).strip()
+        treeish = git('rev-parse', 'HEAD^{tree}', cwd=repo).strip()
+        old = git('commit-tree', treeish, '-p', head, '-m', 'old', cwd=repo).strip()
+        new = git('commit-tree', treeish, '-p', head, '-m', 'new', cwd=repo).strip()
+        git('-c', 'core.logAllRefUpdates=always', 'update-ref', 'refs/heads/topic', old, cwd=repo)
+        # An earlier repack packed it while it was still published.
+        git('repack', '-a', '-d', '-l', '-q', cwd=repo)
+        git('-c', 'core.logAllRefUpdates=always', 'update-ref', 'refs/heads/topic', new, cwd=repo)
+        pushed[repo] = (new, old)
+    tree.run_manifest()
+    tree.write_config()
+
+    repacked(tree, '--repack-all-quick')
+
+    for repo, (new, old) in pushed.items():
+        listed = graph_commits(repo)
+        assert new in listed, repo
+        assert old not in listed, repo
 
 
 def test_full_repack_moves_unreachables_into_a_cruft_pack(tree: GrokTree) -> None:

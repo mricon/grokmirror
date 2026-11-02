@@ -63,6 +63,11 @@ v3.0 (TBD)
   of lines (and, before the fix above, hundreds of reclone requests).
   The graph is now thrown away and rewritten, and only the errors that
   are not about the commit-graph are reported
+- grok-fsck now writes every commit-graph with ``--reachable``. A
+  repository that both borrows from and lends to others used to get a
+  graph built from its packs, which with reflogs present went on listing
+  the old side of a force-push. cgit's object reachability check trusts
+  a repository's own graph to list only commits its refs reach
 - grok-manifest now reads the log file location from ``[core]log``, the
   same setting every other command uses. It used to look for
   ``[core]logfile``, which nothing writes and the sample config has

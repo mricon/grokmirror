@@ -333,7 +333,7 @@ def objstore_repo_preload(ses: grokmirror.GrokSession, config: grokmirror.GrokCo
             # now pack refs and generate a commit graph
             grokmirror.run_git_command(obstrepo, ['pack-refs', '--all'])
             if grokmirror.git_newer_than('2.18.0'):
-                grokmirror.run_git_command(obstrepo, ['commit-graph', 'write'])
+                grokmirror.run_git_command(obstrepo, ['commit-graph', 'write', '--reachable'])
             logger.info(' objstore: successful preload from %s.bundle', bname)
     # Regardless of what happened, we remove _preload and the bundle, then move on
     grokmirror.run_git_command(obstrepo, ['remote', 'rm', '_preload'])

@@ -462,7 +462,6 @@ def run_git_repack(
         set_precious_objects(fullpath, enabled=False)
 
     set_precious_after = False
-    commitgraph_flags = ['--reachable']
 
     # Figure out what our repack flags should be.
     repack_flags = []
@@ -528,7 +527,6 @@ def run_git_repack(
     elif ses.is_alt_repo(toplevel, gitdir):
         set_precious_after = True
         if grokmirror.get_altrepo(fullpath):
-            commitgraph_flags = []
             logger.warning(' warning : has alternates and is used by others for alternates')
             logger.warning('         : this can cause grandchild corruption')
             repack_flags.append('-A')
@@ -629,7 +627,10 @@ def run_git_repack(
 
     if config.get_bool('fsck', 'commitgraph', True):
         grokmirror.set_git_config(fullpath, 'core.commitgraph', 'true')
-        run_git_commit_graph(fullpath, commitgraph_flags)
+        # --reachable makes the graph list exactly the commits the refs
+        # reach, which cgit's reachability check relies on. A graph built
+        # from packs would also list commits only a reflog keeps.
+        run_git_commit_graph(fullpath, ['--reachable'])
 
     # repacking refs requires a separate command, so run it now
     args = ['pack-refs']
