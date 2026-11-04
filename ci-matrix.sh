@@ -2,18 +2,22 @@
 
 set -eu
 
-# Run an import smoke check and pytest under every interpreter version in the
-# supported range (see `requires-python` in pyproject.toml). This is not part
-# of ci.sh because materialising a venv per version is slow; invoke this
-# before releases and after changes that could depend on version-specific
-# runtime behaviour (import-time annotations, stdlib APIs, etc.).
+# Run an import smoke check and pytest under a spread of interpreter versions
+# across the supported range (see `requires-python` in pyproject.toml). This
+# is not part of ci.sh because materialising a venv per version is slow;
+# invoke this before releases and after changes that could depend on
+# version-specific runtime behaviour (import-time annotations, stdlib APIs,
+# etc.).
 #
 # Missing interpreters are pulled automatically from uv's managed Python
 # cache (python-build-standalone), so no system packages or sudo are needed.
 #
-# Override the version list: PYTHONS="3.9 3.14" ./ci-matrix.sh
+# Override the version list: PYTHONS="3.9 3.15" ./ci-matrix.sh
 
-PYTHONS="${PYTHONS:-3.9 3.10 3.11 3.12 3.13 3.14}"
+# The versions servers actually run, not every release in between: 3.9 is
+# AlmaLinux 9's python3, 3.12 is AlmaLinux 10's, and the newest release
+# catches breakage early.
+PYTHONS="${PYTHONS:-3.9 3.12 3.15}"
 
 # Install any requested interpreters that are missing. This is an explicit
 # step because a dev may have set UV_PYTHON_DOWNLOADS=manual globally to
