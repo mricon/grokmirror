@@ -20,7 +20,7 @@ import grokmirror
 import grokmirror.fsck
 from grokmirror.fsck import refresh_obst_roots
 
-from support import GrokTree, git
+from support import GrokTree, bloom_filters, git
 
 pytestmark = pytest.mark.slow
 
@@ -122,14 +122,17 @@ def stale_commit_graph(repo: Path) -> str:
     return doomed
 
 
-def test_stale_commit_graph_is_rebuilt_instead_of_reported(tree: GrokTree) -> None:
+@pytest.mark.parametrize('changedpaths', ['no', 'yes'])
+def test_stale_commit_graph_is_rebuilt_instead_of_reported(tree: GrokTree, changedpaths: str) -> None:
     # git fsck verifies the commit-graph, and a graph that has fallen behind the
     # object database makes it shout about every commit that is gone. Nothing is
     # damaged and nobody needs to look at it: rebuild the graph and move on.
+    # The rebuild starts from scratch, so it has to ask for filters itself
+    # rather than inherit them from the graph it replaces.
     repo = tree.add_repo('test/one.git')
     doomed = stale_commit_graph(repo)
     tree.run_manifest()
-    tree.write_config()
+    tree.write_config({'fsck': {'changedpaths': changedpaths}})
 
     res = tree.run_fsck('-f')
 
@@ -141,6 +144,7 @@ def test_stale_commit_graph_is_rebuilt_instead_of_reported(tree: GrokTree) -> No
     # The graph is back, and now agrees with the object database.
     assert (repo / 'objects' / 'info' / 'commit-graph').exists()
     assert git('fsck', '--no-progress', '--no-dangling', '--no-reflogs', cwd=repo, check=False) == ''
+    assert (bloom_filters(repo) is not None) == (changedpaths == 'yes')
 
 
 def test_stale_commit_graph_is_removed_when_graphs_are_disabled(tree: GrokTree) -> None:

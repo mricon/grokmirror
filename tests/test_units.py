@@ -24,10 +24,13 @@ from pathlib import Path
 from typing import IO, ClassVar
 
 import pytest
+from packaging.version import Version
 
 import grokmirror
 import grokmirror.fsck
 import grokmirror.pull
+
+from support import GrokTree
 
 KIB = 1
 MIB = 1024
@@ -544,6 +547,57 @@ class TestCommitGraphErrors:
         graph, rest = grokmirror.fsck.split_commit_graph_errors(errors)
         assert graph == []
         assert rest == errors
+
+
+class TestCommitGraphArgs:
+    """commit_graph_args() asks git for only the filter features it has.
+
+    The suite's own git has all of them, so the version gates can only be
+    reached by pretending to be an older git.
+    """
+
+    BASE: ClassVar[list[str]] = ['commit-graph', 'write', '--reachable']
+
+    @pytest.mark.parametrize(
+        ('gitver', 'expected'),
+        [
+            ('2.27.0', [*BASE, '--changed-paths']),
+            ('2.30.0', [*BASE, '--changed-paths', '--max-new-filters=-1']),
+            # v2 has no command-line flag, only config.
+            (
+                '2.46.0',
+                ['-c', 'commitGraph.changedPathsVersion=2', *BASE, '--changed-paths', '--max-new-filters=-1'],
+            ),
+        ],
+    )
+    def test_filter_flags_follow_the_git_version(
+        self, tree: GrokTree, monkeypatch: pytest.MonkeyPatch, gitver: str, expected: list[str]
+    ) -> None:
+        monkeypatch.setattr(grokmirror, 'git_newer_than', lambda minver: Version(gitver) >= Version(minver))
+        config = tree.load_config({'fsck': {'changedpaths': 'yes'}})
+        repo = str(tree.toplevel / 'test' / 'one.git')
+
+        assert grokmirror.fsck.commit_graph_args(repo, config) == expected
+
+    def test_off_by_default(self, tree: GrokTree) -> None:
+        config = tree.load_config()
+        repo = str(tree.toplevel / 'test' / 'one.git')
+
+        assert grokmirror.fsck.commit_graph_args(repo, config) == self.BASE
+
+    def test_cap_is_passed_through(self, tree: GrokTree) -> None:
+        config = tree.load_config({'fsck': {'changedpaths': 'yes', 'max_new_filters': '200000'}})
+        repo = str(tree.toplevel / 'test' / 'one.git')
+
+        assert '--max-new-filters=200000' in grokmirror.fsck.commit_graph_args(repo, config)
+
+    def test_objstore_repos_get_no_filters(self, tree: GrokTree) -> None:
+        # A fork reads its own graph and never the objstore repo's, so filters
+        # there would cost the most CPU of any graph and never be used.
+        config = tree.load_config({'fsck': {'changedpaths': 'yes'}})
+        obstrepo = os.path.realpath(tree.objstore / 'abcdef.git')
+
+        assert grokmirror.fsck.commit_graph_args(obstrepo, config) == self.BASE
 
 
 class TestCompileGlobs:

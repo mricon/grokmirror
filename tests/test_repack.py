@@ -25,7 +25,7 @@ import pytest
 
 import grokmirror
 
-from support import GrokTree, git
+from support import GrokTree, commit_graph_chunks, git
 
 pytestmark = pytest.mark.slow
 
@@ -216,21 +216,13 @@ def test_alt_parent_and_grandchild_repack(tree: GrokTree) -> None:
 
 
 def graph_commits(repo: Path) -> set[str]:
-    """Return the ids of the commits listed in repo's own commit-graph file.
-
-    Read from the OID lookup chunk directly: git has no porcelain that lists a
-    graph's contents.
-    """
-    data = (repo / 'objects' / 'info' / 'commit-graph').read_bytes()
-    assert data[:4] == b'CGPH'
-    hashlen = {1: 20, 2: 32}[data[5]]
-    chunks = {}
-    for i in range(data[6] + 1):
-        cid, off = struct.unpack('>4sQ', data[8 + 12 * i : 20 + 12 * i])
-        chunks[cid] = off
-    start = chunks[b'OIDL']
-    end = min(off for off in chunks.values() if off > start)
-    return {data[p : p + hashlen].hex() for p in range(start, end, hashlen)}
+    """Return the ids of the commits listed in repo's own commit-graph file."""
+    chunks = commit_graph_chunks(repo)
+    oidl = chunks[b'OIDL']
+    # The last fanout entry is the commit count, which gives the hash length
+    # without caring whether the repository uses SHA-1 or SHA-256.
+    hashlen = len(oidl) // struct.unpack('>I', chunks[b'OIDF'][-4:])[0]
+    return {oidl[p : p + hashlen].hex() for p in range(0, len(oidl), hashlen)}
 
 
 def test_commit_graphs_list_only_reachable_commits(tree: GrokTree, monkeypatch: pytest.MonkeyPatch) -> None:

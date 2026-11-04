@@ -17,7 +17,7 @@ import pytest
 
 from grokmirror import configopts
 
-from support import GrokTree
+from support import GrokTree, bloom_filters
 
 
 def test_manifest_honours_core_log(tree: GrokTree) -> None:
@@ -61,6 +61,32 @@ def test_fsck_commitgraph_accepts_every_false_spelling(tree: GrokTree, value: st
     tree.run_fsck('-f', '--repack-all-full')
 
     assert not (repo / 'objects' / 'info' / 'commit-graph').exists()
+
+
+@pytest.mark.parametrize(
+    ('fsck', 'expected'),
+    [
+        # Opt-in: the first write is several times slower and the graph grows.
+        ({}, None),
+        # The test git is new enough for v2, and one commit gets one filter.
+        ({'changedpaths': 'yes'}, (2, True)),
+        # 0 is git's own "compute no new filters": the chunks are written but
+        # stay empty, which shows the cap reached git and was not just accepted.
+        ({'changedpaths': 'yes', 'max_new_filters': '0'}, (2, False)),
+    ],
+    ids=['default', 'changedpaths', 'capped'],
+)
+def test_fsck_changedpaths_writes_bloom_filters(
+    tree: GrokTree, fsck: dict[str, str], expected: tuple[int, bool] | None
+) -> None:
+    repo = tree.add_repo('test/one.git')
+    tree.run_manifest()
+    tree.write_config({'fsck': fsck})
+
+    tree.run_fsck('-f', '--repack-all-full')
+
+    filters = bloom_filters(repo)
+    assert (None if filters is None else (filters[0], filters[1] > 0)) == expected
 
 
 @pytest.mark.parametrize('value', ['yes', 'true', 'on', '1'])

@@ -256,7 +256,8 @@ def test_every_registered_default_is_the_right_shape() -> None:
                 continue
             where = f'[{section}] {option.name}'
             if option.kind == 'int':
-                assert option.default.isdigit(), f'{where}: default {option.default!r} is not an integer'
+                # A leading minus is fine: git spells "no limit" as -1.
+                assert option.default.lstrip('-').isdigit(), f'{where}: default {option.default!r} is not an integer'
             elif option.kind == 'bool':
                 assert option.default.lower() in {'yes', 'no', 'true', 'false', 'on', 'off', '1', '0'}, (
                     f'{where}: default {option.default!r} is not a boolean'

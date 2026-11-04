@@ -31,6 +31,7 @@ import gzip
 import http.server
 import json
 import os
+import struct
 import subprocess
 import threading
 from collections.abc import Iterator
@@ -63,6 +64,34 @@ def git(*args: str, cwd: Path | str | None = None, check: bool = True) -> str:
     if check and res.returncode != 0:
         raise AssertionError(f'git {" ".join(args)} failed with {res.returncode}:\n{res.stdout}\n{res.stderr}')
     return res.stdout
+
+
+def commit_graph_chunks(repo: Path) -> dict[bytes, bytes]:
+    """Return the chunks of repo's own commit-graph file, keyed by chunk id.
+
+    Read from the file directly: git has no porcelain that shows what a graph
+    holds, and the chunk format is stable on disk.
+    """
+    data = (repo / 'objects' / 'info' / 'commit-graph').read_bytes()
+    assert data[:4] == b'CGPH'
+    # The table of contents ends with a terminating entry, whose offset is
+    # where the last real chunk ends.
+    toc = [struct.unpack('>4sQ', data[8 + 12 * i : 20 + 12 * i]) for i in range(data[6] + 1)]
+    return {toc[i][0]: data[toc[i][1] : toc[i + 1][1]] for i in range(len(toc) - 1)}
+
+
+def bloom_filters(repo: Path) -> tuple[int, int] | None:
+    """Return the version of repo's changed-path filters and the bytes they use.
+
+    None means the graph has no filters at all. The data chunk opens with a
+    12-byte header (version, hash count, bits per entry), so a size of 0 means
+    the chunk is there but git computed no filters into it.
+    """
+    chunks = commit_graph_chunks(repo)
+    if b'BDAT' not in chunks:
+        return None
+    bdat = chunks[b'BDAT']
+    return struct.unpack('>I', bdat[:4])[0], len(bdat) - 12
 
 
 def make_decoy_repo(path: Path) -> Path:

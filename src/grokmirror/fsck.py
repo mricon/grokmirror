@@ -627,10 +627,7 @@ def run_git_repack(
 
     if config.get_bool('fsck', 'commitgraph', True):
         grokmirror.set_git_config(fullpath, 'core.commitgraph', 'true')
-        # --reachable makes the graph list exactly the commits the refs
-        # reach, which cgit's reachability check relies on. A graph built
-        # from packs would also list commits only a reflog keeps.
-        run_git_commit_graph(fullpath, ['--reachable'])
+        run_git_commit_graph(fullpath, config)
 
     # repacking refs requires a separate command, so run it now
     args = ['pack-refs']
@@ -728,7 +725,7 @@ def repair_commit_graph(fullpath: str, config: grokmirror.GrokConfigParser, erro
         # Graphs are turned off, so a missing one is the correct end state.
         return rest
 
-    if not run_git_commit_graph(fullpath, ['--reachable']):
+    if not run_git_commit_graph(fullpath, config):
         logger.critical('%s: could not rebuild the commit-graph', fullpath)
 
     return rest
@@ -792,16 +789,43 @@ def run_git_fsck(
             check_reclone_error(ses, fullpath, config, warn)
 
 
-def run_git_commit_graph(fullpath: str, extraflags: list[str] | None = None) -> bool:
+def commit_graph_args(fullpath: str, config: grokmirror.GrokConfigParser) -> list[str]:
+    """Return the git arguments that write fullpath's commit-graph."""
+    # --reachable makes the graph list exactly the commits the refs reach,
+    # which cgit's reachability check relies on. A graph built from packs
+    # would also list commits only a reflog keeps.
+    write = ['commit-graph', 'write', '--reachable']
+    if not config.get_bool('fsck', 'changedpaths', False):
+        # Leave existing filters alone: without --no-changed-paths, git keeps
+        # writing filters into a graph that already has them.
+        return write
+    obstdir = os.path.realpath(config['core']['objstore'])
+    if grokmirror.is_obstrepo(fullpath, obstdir):
+        # Forks read their own graph and never this one, so filters here
+        # would only cost CPU and disk.
+        return write
+
+    write.append('--changed-paths')
+    if grokmirror.git_newer_than('2.30.0'):
+        # Always passed, so grokmirror's config decides and not whatever
+        # commitGraph.maxNewFilters says.
+        cap = config.get_int('fsck', 'max_new_filters', -1)
+        write.append(f'--max-new-filters={cap}')
+    if grokmirror.git_newer_than('2.46.0'):
+        # v1 hashes paths with non-ASCII bytes wrongly. We assume no git that
+        # reads our graphs is older than the one that writes them, so every
+        # reader understands v2.
+        return ['-c', 'commitGraph.changedPathsVersion=2', *write]
+    return write
+
+
+def run_git_commit_graph(fullpath: str, config: grokmirror.GrokConfigParser) -> bool:
     # Does our version of git support commit-graph?
     if not grokmirror.git_newer_than('2.18.0'):
         logger.debug('Git version too old, not generating commit-graph')
         return False
     logger.info('    graph: generating commit-graph')
-    args = ['commit-graph', 'write']
-    if extraflags:
-        args += extraflags
-    retcode, _output, _error = grokmirror.run_git_command(fullpath, args)
+    retcode, _output, _error = grokmirror.run_git_command(fullpath, commit_graph_args(fullpath, config))
     return retcode == 0
 
 
@@ -1038,6 +1062,10 @@ def fsck_mirror(config: grokmirror.GrokConfigParser, options: FsckOptions) -> in
         if commitgraph and not grokmirror.git_newer_than('2.18.0'):
             logger.info('Git version too old to support commit graphs, disabling')
             config['fsck']['commitgraph'] = 'no'
+
+        if config.get_bool('fsck', 'changedpaths', False) and not grokmirror.git_newer_than('2.27.0'):
+            logger.info('Git version too old to write changed-path filters, writing graphs without them')
+            config['fsck']['changedpaths'] = 'no'
 
         # Go through the manifest and compare with status
         toplevel = os.path.realpath(config['core']['toplevel'])

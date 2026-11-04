@@ -175,6 +175,9 @@ KNOWN: dict[str, dict[str, Option]] = {
         Option('extra_repack_flags', 'args', default=''),
         Option('extra_repack_flags_full', 'args', default=''),
         Option('commitgraph', 'bool', default='yes'),
+        Option('changedpaths', 'bool', default='no'),
+        # -1 is git's own "no limit".
+        Option('max_new_filters', 'int', default='-1'),
         Option('prune', 'bool', default='yes'),
         # Not a boolean: "always" means precious even when grokmirror would
         # rather repack, which is a third answer and not a louder "yes".

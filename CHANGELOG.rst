@@ -68,6 +68,14 @@ v3.0 (TBD)
   graph built from its packs, which with reflogs present went on listing
   the old side of a force-push. cgit's object reachability check trusts
   a repository's own graph to list only commits its refs reach
+- New ``[fsck] changedpaths`` option, off by default, which makes
+  grok-fsck write changed-path Bloom filters into commit-graphs. They
+  make path-limited logs, such as cgit's ``log/<path>`` pages, several
+  times faster on large repositories, at the cost of a much slower first
+  graph write and a graph about a fifth larger. ``max_new_filters``
+  spreads that first-write cost over several runs. Objstore repos never
+  get filters, since forks never read their graphs. With git 2.46 or
+  newer the filters are version 2
 - grok-manifest now reads the log file location from ``[core]log``, the
   same setting every other command uses. It used to look for
   ``[core]logfile``, which nothing writes and the sample config has
